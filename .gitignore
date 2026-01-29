@@ -1,0 +1,8 @@
+# Build/output artifacts
+out/
+
+# Local data cache
+/data/
+
+# OS/editor files
+.DS_Store
