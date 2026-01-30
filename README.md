@@ -2,6 +2,17 @@
 
 Offline-first job scouting pipeline with configurable matching rules and reporting.
 
+## Project status
+- **Done:** Sprint 1 — Minimal runnable pipeline; Sprint 2 — Real sources + matching rules.
+- **Next:** Phase 3 — Decision Engine.
+- **Planned:** Phase 4 — Scoring & Ranking; Phase 5 — Reliability & Extensibility.
+- **Optional:** Phase 6 — Automation & Notifications.
+
+Project docs:
+- [ROADMAP.md](ROADMAP.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ## Requirements
 - Python 3.11
 - Dependencies in `requirements.txt`
@@ -60,6 +71,7 @@ python -m job_scout sources --test remotive --since-days 7
 - **Role:** only manager/lead/head titles are accepted.
 - **Salary:** minimum 52,000 EUR; missing salary is flagged unless strict mode rejects it.
 - **Remote:** remote level is normalized and reported; non-remote roles are not rejected by default.
+  `prefer_full_remote` is a preference flag in config and is not enforced today.
 
 ## Outputs
 The pipeline writes reports to `out/`:

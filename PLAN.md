@@ -18,12 +18,6 @@
 - Added pytest coverage for model serialization, writers, and CLI smoke tests.
 - Updated README with local setup and run instructions.
 
-### 2) Data source integration (future)
-**Acceptance Criteria**
-- Source connectors listed in config are implemented.
-- Each connector respects access restrictions (no scraping behind logins).
-- Source runs produce normalized job records.
-
 ### Sprint 2: Real sources + matching rules (complete)
 **Status:** ✅ Done
 
@@ -34,19 +28,38 @@
 - Extended CLI flags for strict mode, missing-salary override, and source selection.
 - Added matcher, pipeline filtering, and connector tests.
 
-### 3) Matching rules engine (future)
+### Phase 3 — Decision Engine (next)
+**Status:** ⏳ Planned
 **Acceptance Criteria**
-- Location filters enforce EU/Italy/New York and exclude UK.
-- Role targeting enforces manager/lead titles.
-- Salary filter enforces 52,000 EUR minimum, with missing salary flagged.
-- Remote preference applied without excluding non-remote roles by default.
+- Hard constraints and soft preferences are separated in decision logic.
+- Structured decision reasons are produced for accept/reject/preference.
+- Deterministic ordering for decision reasons and report rows.
+- Reports remain compatible with existing CSV/Markdown formats.
+- Unit tests cover decision rationale structure and determinism.
+- Documentation updated to reflect the decision engine contract.
 
-### 4) Notification pipeline (future)
+### Phase 4 — Scoring & Ranking
+**Status:** ⏳ Planned
 **Acceptance Criteria**
-- Notifications can be sent through configured channels (e.g., Telegram).
-- Notifications include match rationale and any missing-salary flags.
+- Deterministic scoring function with documented inputs.
+- Configurable weights for preference signals (no ML).
+- Report ordering reflects score plus deterministic tie-breaks.
+- Scores are included in CSV/Markdown outputs.
+- Unit tests cover scoring edge cases and tie-break rules.
 
-### 5) Scheduling & observability (future)
+### Phase 5 — Reliability & Extensibility
+**Status:** ⏳ Planned
 **Acceptance Criteria**
-- Scheduled daily run with logs for source fetch, match, and notify.
-- Failures reported with actionable error summaries.
+- Snapshot/golden tests validate end-to-end pipeline outputs.
+- Source normalization contract is documented and enforced.
+- Region/country mapping is externalized from hard-coded lists.
+- Network source errors are handled with clear error messages.
+- Docs updated with source contract and failure modes.
+
+### Phase 6 — Automation & Notifications (optional)
+**Status:** 💤 Optional
+**Acceptance Criteria**
+- Scheduled runs are supported (e.g., cron or CI schedule).
+- Notification digests are opt-in and deterministic.
+- Notify only when new or high-scoring items appear.
+- Notification tests use fixtures or dry-run mode.
