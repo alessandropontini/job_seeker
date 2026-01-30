@@ -3,8 +3,11 @@
 Offline-first job scouting pipeline with configurable matching rules and reporting.
 
 ## Project status
-- **Done:** Sprint 1 — Minimal runnable pipeline; Sprint 2 — Real sources + matching rules; Phase 3 — Decision Engine.
-- **Next:** Phase 4 — Scoring & Ranking.
+- **Done:** Sprint 1 — Minimal runnable pipeline; Sprint 2 — Real sources + matching rules.
+- **Done:** Phase 1 — Rule Definition & Enforcement.
+- **Done:** Phase 2 — Decision Transparency & Explainability.
+- **Done:** Phase 3 — Hard vs Soft Rules Separation.
+- **Done:** Phase 4 — Scoring & Ranking.
 - **Planned:** Phase 5 — Reliability & Extensibility.
 - **Optional:** Phase 6 — Automation & Notifications.
 
@@ -34,6 +37,9 @@ Key sections:
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
 - `salary_rules.currency_rates`: approximate rates used for conversion (EUR=1.0, USD=0.92, GBP=1.17).
+- `scoring.base_score`: starting score for accepted postings.
+- `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
+- `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
@@ -73,16 +79,23 @@ python -m job_scout sources --test remotive --since-days 7
 - **Remote:** remote level is normalized and reported; non-remote roles are not rejected by default.
   `prefer_full_remote` is treated as a soft preference and records a penalty when not met.
 
+## Scoring & ranking
+- Scores apply only to **accepted** postings.
+- Score = `scoring.base_score` + bonuses − penalties (all weights configured in `scoring`).
+- Reports order accepted postings by score (desc), then by newest `posted_at`.
+
 ## Outputs
 The pipeline writes reports to `out/`:
 - `out/report.csv` includes matcher fields:
   - `matches_all`, `decision`, `hard_reject_reasons`, `penalties`,
     `missing_fields`, `reject_reasons`, `missing_salary`, `remote_level`,
-    `salary_min_eur`, `salary_max_eur`.
+    `salary_min_eur`, `salary_max_eur`, `score`, `score_penalties`,
+    `score_bonuses`.
 - `out/report.md` has sections:
   - `## Matches`
   - `## Missing Salary (allowed)`
   - `## Rejected`
+  - Accepted postings include a score line and score adjustments.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -92,3 +105,4 @@ The pipeline writes reports to `out/`:
 ## Notes
 - Prefer full-remote roles when available, but do not exclude non-remote roles by default.
 - Missing salaries are tagged with `missing_salary` unless strict mode is enabled.
+- Scores are deterministic and derived from configured preference weights.

@@ -39,7 +39,7 @@
 - Updated tests and documentation to reflect the decision engine contract.
 
 ### Phase 4 — Scoring & Ranking
-**Status:** ⏳ Planned
+**Status:** ✅ Done
 **Acceptance Criteria**
 - Deterministic scoring function with documented inputs.
 - Configurable weights for preference signals (no ML).

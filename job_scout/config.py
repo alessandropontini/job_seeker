@@ -23,6 +23,16 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "allow_missing_salary": True,
         "currency_rates": {"EUR": 1.0, "USD": 0.92, "GBP": 1.17},
     },
+    "scoring": {
+        "base_score": 100,
+        "penalty_weights": {
+            "prefer_full_remote": 15,
+            "missing_salary": 10,
+        },
+        "bonus_weights": {
+            "full_remote": 5,
+        },
+    },
     "notifications": {
         "telegram": {
             "enabled": False,

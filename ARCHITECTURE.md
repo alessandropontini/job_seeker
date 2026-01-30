@@ -7,6 +7,7 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 - `job_scout.sources`: source registry (`dummy`, `remotive`).
 - `job_scout.pipeline`: orchestration (fetch, match, group, write).
 - `job_scout.matcher`: matching rules + match metadata.
+- `job_scout.scoring`: deterministic scoring and ranking metadata.
 - `job_scout.writers`: CSV/Markdown report writers.
 - `job_scout.models`: `JobPosting` data model.
 
@@ -14,8 +15,9 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 1. CLI reads config (`job_scout.config.load_config`) and resolves sources (`job_scout.pipeline.run_pipeline`).
 2. Each source fetcher returns `JobPosting` items (`job_scout.sources`).
 3. `job_scout.matcher.match_posting` evaluates rules and annotates match metadata.
-4. `job_scout.pipeline.run_pipeline` groups rows into Matches / Missing Salary / Rejected.
-5. `job_scout.writers.write_reports` writes `out/report.csv` and `out/report.md`.
+4. `job_scout.scoring.apply_scoring` computes scores for accepted postings.
+5. `job_scout.pipeline.run_pipeline` groups rows into Matches / Missing Salary / Rejected.
+6. `job_scout.writers.write_reports` writes `out/report.csv` and `out/report.md`.
 
 ## Key Decision Points (Current)
 - Config loading & merge (`job_scout.config.load_config`).
@@ -54,6 +56,9 @@ Config keys and semantics:
 - `salary_rules.minimum_eur` — minimum salary threshold (EUR).
 - `salary_rules.allow_missing_salary` — keep missing salary postings.
 - `salary_rules.currency_rates` — conversion map.
+- `scoring.base_score` — starting score for accepted postings.
+- `scoring.penalty_weights` — per-penalty deductions.
+- `scoring.bonus_weights` — per-bonus additions.
 - `notifications.telegram` — **PLANNED / NOT ENFORCED YET** (disabled by default).
 
 **USED TODAY**: all keys above except `notifications.telegram`.
@@ -69,10 +74,11 @@ Config keys and semantics:
 - `matches_all` is derived from `decision == "accepted"` for compatibility.
 - Deterministic evaluation order and outputs.
 
-### Scoring Contract (Phase 4 planned)
+### Scoring Contract (Phase 4 implemented)
 - Deterministic score function based on configured weights.
-- Stable tie-break rules (e.g., newest `posted_at`).
-- Scores included in reports and applied consistently.
+- Only soft-preference signals influence score; hard rejections are unchanged.
+- Stable tie-break rules: score (desc), `posted_at` (desc), then `id`.
+- Scores and applied adjustments are included in reports.
 
 ## Testing Strategy (Current + Planned)
 Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Planned in Phase 5: snapshot/golden tests to validate full pipeline outputs across sources and config permutations.

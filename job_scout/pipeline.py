@@ -9,6 +9,7 @@ from typing import Iterable, Mapping
 from job_scout.matcher import MatchResult, match_posting
 from job_scout.models import JobPosting
 from job_scout.sources import AVAILABLE_SOURCES
+from job_scout.scoring import apply_scoring
 from job_scout.writers import ReportRow, write_reports
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,10 @@ def run_pipeline(
             updated_posting, match = match_posting(
                 posting, config, strict, allow_missing_salary
             )
-            all_rows.append(ReportRow(posting=updated_posting, match=match))
+            scored_match = apply_scoring(match, config)
+            all_rows.append(
+                ReportRow(posting=updated_posting, match=scored_match)
+            )
 
     matches: list[ReportRow] = []
     missing_salary_allowed: list[ReportRow] = []

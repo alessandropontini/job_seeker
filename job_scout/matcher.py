@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from typing import Iterable, Mapping
 
@@ -59,6 +59,9 @@ class MatchResult:
     salary_min_eur: int | None
     salary_max_eur: int | None
     remote_level: str
+    score: int | None = None
+    score_penalties: list[str] = field(default_factory=list)
+    score_bonuses: list[str] = field(default_factory=list)
 
 
 def normalize_remote_level(remote_type: str) -> str:
