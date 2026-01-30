@@ -4,12 +4,17 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ## Run Tests
 ```bash
 pytest -q
+```
+
+Run offline tests with network guardrails enabled:
+```bash
+NO_NETWORK=1 pytest -q
 ```
 
 Run optional integration tests (network required):
@@ -46,12 +51,13 @@ python -m job_scout run --source remotive --since-days 7
 - Golden outputs live in `tests/golden/` and are compared in offline tests.
 - Regenerate goldens intentionally with:
   ```bash
-  JOB_SCOUT_FIXTURE_DIR=tests/fixtures python tools/update_goldens.py
+  python tools/update_goldens.py
   ```
 
 ## Integration Tests
 - Mark live-network tests with `@pytest.mark.integration`.
 - Gate them behind `JOB_SCOUT_RUN_INTEGRATION=1` so offline runs stay deterministic.
+- Use `NO_NETWORK=1` for extra safety when validating offline determinism.
 
 ## Coding Standards
 - Prefer small, typed functions and clear return values.

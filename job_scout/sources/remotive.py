@@ -30,6 +30,10 @@ def _fetch_remotive_payload() -> dict:
     fixture_payload = _load_fixture_payload()
     if fixture_payload is not None:
         return fixture_payload
+    if os.getenv("NO_NETWORK") == "1":
+        raise RemotiveSourceError(
+            "Network disabled (NO_NETWORK=1); use fixtures or integration tests."
+        )
     try:
         with urllib.request.urlopen(
             REMOTIVE_API_URL, timeout=30

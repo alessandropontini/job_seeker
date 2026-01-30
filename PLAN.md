@@ -54,6 +54,8 @@
 - Enforced a source normalization contract with centralized normalization helpers.
 - Externalized region/country mapping to `config/regions.json`.
 - Added network source error handling + source status reporting.
+- Added offline CI coverage with network disabled and integration tests gated.
+- Added explicit no-network guardrails for offline testing and documentation updates.
 - Updated documentation for contracts, tests, and failure modes.
 
 ### Phase 6 — Automation & Notifications (optional)
