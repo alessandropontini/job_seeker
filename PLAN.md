@@ -48,13 +48,13 @@
 - Unit tests cover scoring edge cases and tie-break rules.
 
 ### Phase 5 — Reliability & Extensibility
-**Status:** ⏳ Planned
-**Acceptance Criteria**
-- Snapshot/golden tests validate end-to-end pipeline outputs.
-- Source normalization contract is documented and enforced.
-- Region/country mapping is externalized from hard-coded lists.
-- Network source errors are handled with clear error messages.
-- Docs updated with source contract and failure modes.
+**Status:** ✅ Done
+**Completed scope**
+- Added deterministic golden tests for end-to-end pipeline outputs.
+- Enforced a source normalization contract with centralized normalization helpers.
+- Externalized region/country mapping to `config/regions.json`.
+- Added network source error handling + source status reporting.
+- Updated documentation for contracts, tests, and failure modes.
 
 ### Phase 6 — Automation & Notifications (optional)
 **Status:** 💤 Optional

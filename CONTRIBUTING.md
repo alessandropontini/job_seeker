@@ -9,7 +9,12 @@ pip install -r requirements.txt
 
 ## Run Tests
 ```bash
-pytest
+pytest -q
+```
+
+Run optional integration tests (network required):
+```bash
+JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
 ```
 
 ## Run the Pipeline
@@ -25,15 +30,28 @@ python -m job_scout run --source remotive --since-days 7
 
 ## Adding a New Source
 1. Create a new module in `job_scout/sources/` (e.g., `acme.py`).
-2. Implement `fetch_acme(since_days: int) -> list[JobPosting]`.
-3. Register it in `job_scout/sources/__init__.py` under `AVAILABLE_SOURCES`.
-4. Add fixtures and tests to `tests/` for payload parsing.
+2. Implement `fetch_acme(since_days: int) -> list[SourceJob]`.
+3. Populate required fields for the normalization contract (see `job_scout/normalize.py`).
+4. Register it in `job_scout/sources/__init__.py` under `AVAILABLE_SOURCES`.
+5. Add fixtures and tests to `tests/` for payload parsing.
 
 ## Determinism & Truthfulness Rules
 - No hidden network calls in tests; use fixtures for external payloads.
 - Sort outputs explicitly when ordering matters.
 - Avoid non-deterministic data in tests (timestamps should be fixed or mocked).
 - Never claim a feature exists unless backed by code/tests.
+
+## Fixtures & Golden Files
+- Store source fixtures in `tests/fixtures/`.
+- Golden outputs live in `tests/golden/` and are compared in offline tests.
+- Regenerate goldens intentionally with:
+  ```bash
+  JOB_SCOUT_FIXTURE_DIR=tests/fixtures python tools/update_goldens.py
+  ```
+
+## Integration Tests
+- Mark live-network tests with `@pytest.mark.integration`.
+- Gate them behind `JOB_SCOUT_RUN_INTEGRATION=1` so offline runs stay deterministic.
 
 ## Coding Standards
 - Prefer small, typed functions and clear return values.

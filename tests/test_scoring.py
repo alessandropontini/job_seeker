@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from job_scout.config import DEFAULT_CONFIG
 from job_scout.matcher import match_posting
 from job_scout.models import JobPosting
+from job_scout.regions import load_region_data
 from job_scout.scoring import apply_scoring
 
 
@@ -30,8 +31,13 @@ def _posting(**overrides) -> JobPosting:
 def test_scoring_applies_penalties_and_bonuses():
     config = deepcopy(DEFAULT_CONFIG)
     posting = _posting()
+    region_data = load_region_data("config/regions.json")
     _, match = match_posting(
-        posting, config, strict=False, allow_missing_salary=True
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
     )
     scored = apply_scoring(match, config)
 
@@ -43,8 +49,13 @@ def test_scoring_applies_penalties_and_bonuses():
 def test_scoring_skips_rejected_postings():
     config = deepcopy(DEFAULT_CONFIG)
     posting = _posting(title="Senior Engineer")
+    region_data = load_region_data("config/regions.json")
     _, match = match_posting(
-        posting, config, strict=False, allow_missing_salary=True
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
     )
     scored = apply_scoring(match, config)
 

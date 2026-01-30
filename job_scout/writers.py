@@ -48,6 +48,16 @@ class ReportRow:
     match: MatchResult
 
 
+@dataclass(frozen=True)
+class SourceStatus:
+    """Status summary for a pipeline source."""
+
+    name: str
+    ok: bool
+    count: int = 0
+    error: str | None = None
+
+
 def _serialize_for_csv(row: ReportRow) -> dict:
     data = row.posting.to_dict()
     data["tags"] = ";".join(row.posting.tags)
@@ -72,6 +82,7 @@ def write_reports(
     missing_salary_allowed: Iterable[ReportRow],
     rejected: Iterable[ReportRow],
     output_dir: Path,
+    source_statuses: Iterable[SourceStatus] | None = None,
 ) -> None:
     """Write CSV and Markdown reports to the output directory."""
 
@@ -92,6 +103,8 @@ def write_reports(
 
     with md_path.open("w", encoding="utf-8") as handle:
         handle.write("# Job Scout Report\n\n")
+        if source_statuses:
+            _write_source_status(handle, source_statuses)
         if not all_rows:
             handle.write("No postings found.\n")
             return
@@ -160,6 +173,27 @@ def _write_section(
         if posting.description_snippet:
             handle.write(f"  - Note: {posting.description_snippet}\n")
         handle.write("\n")
+
+
+def _write_source_status(
+    handle, statuses: Iterable[SourceStatus]
+) -> None:
+    handle.write("## Source Status\n\n")
+    status_list = sorted(statuses, key=lambda s: s.name)
+    if not status_list:
+        handle.write("No sources configured.\n\n")
+        return
+    for status in status_list:
+        if status.ok:
+            handle.write(
+                f"- {status.name}: ok ({status.count} postings)\n"
+            )
+        else:
+            error = status.error or "unknown error"
+            handle.write(
+                f"- {status.name}: error ({error})\n"
+            )
+    handle.write("\n")
 
 
 def _sort_rows(rows: Iterable[ReportRow]) -> list[ReportRow]:
