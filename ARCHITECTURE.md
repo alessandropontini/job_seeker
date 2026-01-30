@@ -49,19 +49,24 @@ Config keys and semantics:
 - `location_rules.include_countries` — country allowlist (e.g., `Italy`).
 - `location_rules.include_cities` — city allowlist (e.g., `New York`).
 - `location_rules.exclude_countries` — country denylist (must include `UK`).
-- `location_rules.prefer_full_remote` — **PLANNED / NOT ENFORCED YET**.
+- `location_rules.prefer_full_remote` — soft preference (penalty when not full-remote).
 - `role_targeting.include_titles` — required title keywords.
 - `salary_rules.minimum_eur` — minimum salary threshold (EUR).
 - `salary_rules.allow_missing_salary` — keep missing salary postings.
 - `salary_rules.currency_rates` — conversion map.
 - `notifications.telegram` — **PLANNED / NOT ENFORCED YET** (disabled by default).
 
-**USED TODAY**: all keys above except `prefer_full_remote` and `notifications.telegram`.
+**USED TODAY**: all keys above except `notifications.telegram`.
 
-### Decision Engine Contract (Phase 3 planned)
-- Hard constraints: failing any hard constraint must reject the posting.
-- Soft preferences: recorded as structured preferences (no scoring yet).
-- Must produce structured rationale fields: accepted/rejected/preference.
+### Decision Engine Contract (Phase 3 implemented)
+- Hard constraints: failing any hard constraint rejects the posting.
+- Soft preferences: recorded as penalties without rejecting.
+- Structured rationale fields per posting:
+  - `decision` (`accepted` or `rejected`)
+  - `hard_reject_reasons` (list)
+  - `penalties` (list)
+  - `missing_fields` (list)
+- `matches_all` is derived from `decision == "accepted"` for compatibility.
 - Deterministic evaluation order and outputs.
 
 ### Scoring Contract (Phase 4 planned)

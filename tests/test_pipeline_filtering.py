@@ -22,6 +22,10 @@ def test_pipeline_groups_and_reports(tmp_path):
 
     csv_header = csv_path.read_text(encoding="utf-8").splitlines()[0]
     assert "matches_all" in csv_header
+    assert "decision" in csv_header
+    assert "hard_reject_reasons" in csv_header
+    assert "penalties" in csv_header
+    assert "missing_fields" in csv_header
     assert "reject_reasons" in csv_header
     assert "missing_salary" in csv_header
 
@@ -29,10 +33,11 @@ def test_pipeline_groups_and_reports(tmp_path):
     assert "## Matches" in md_content
     assert "## Missing Salary (allowed)" in md_content
     assert "## Rejected" in md_content
+    assert "Penalties:" in md_content
 
     rejected = [row for row in rows if not row.match.matches_all]
     assert rejected
-    assert any(row.match.reject_reasons for row in rejected)
+    assert any(row.match.hard_reject_reasons for row in rejected)
 
     missing_salary = [
         row for row in rows if row.match.missing_salary and row.match.matches_all

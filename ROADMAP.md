@@ -1,15 +1,15 @@
 # Job Scout — Project Roadmap
 
-## Where We Are Now (Post Sprint 2)
+## Where We Are Now (Post Phase 3)
 - Runnable CLI pipeline that loads config, fetches sources, matches, and writes reports.
 - Sources implemented today: `dummy` (offline) and `remotive` (public API).
 - Location rules are enforced: EU + Italy + New York are allowed; UK is explicitly rejected.
 - Role targeting is enforced: only manager/lead/head titles pass.
 - Salary minimum is enforced at 52,000 EUR (with currency conversion when possible).
 - Missing salary handling is enforced by strict/allow-missing-salary modes.
-- Remote level is normalized and reported, but **full-remote preference is not enforced**.
+- Remote level is normalized and reported; **full-remote preference is recorded as a soft penalty**.
 - Outputs are `out/report.csv` and `out/report.md` with Matches / Missing Salary / Rejected.
-- Matching results include reject reasons for traceability.
+- Matching results include hard reject reasons, penalties, missing fields, and decision status.
 
 ## Target Vision (in one paragraph)
 Job Scout evolves into a deterministic decision engine for job opportunities: it ingests multiple sources, applies explicit hard constraints and soft preferences, produces explainable decisions, and (later) ranks results using transparent scoring—without ML or opaque heuristics.
@@ -25,7 +25,7 @@ Sources (dummy, remotive) [today]
   -> Notify (future) [Phase 6]
 ```
 
-## Phase 3 — Decision Engine (NEXT)
+## Phase 3 — Decision Engine (DONE)
 ### Objective
 Formalize the decision layer by splitting hard constraints from soft preferences and producing structured, explainable outcomes without introducing scoring.
 
@@ -33,12 +33,12 @@ Formalize the decision layer by splitting hard constraints from soft preferences
 Introduce a clear internal contract for decision reasons (accept, reject, preference), while preserving existing reports and CLI behavior.
 
 ### Definition of Done (5–8 checkboxes)
-- [ ] Explicit separation of hard constraints vs soft preferences in decision logic.
-- [ ] Structured rationale fields for accept/reject/preference outcomes.
-- [ ] Reports can surface structured reasons without changing report formats.
-- [ ] Deterministic ordering of reasons and output rows.
-- [ ] Unit tests validate rationale structure and determinism.
-- [ ] Documentation updated to reflect decision engine contract.
+- [x] Explicit separation of hard constraints vs soft preferences in decision logic.
+- [x] Structured rationale fields for accept/reject/preference outcomes.
+- [x] Reports can surface structured reasons without changing report formats.
+- [x] Deterministic ordering of reasons and output rows.
+- [x] Unit tests validate rationale structure and determinism.
+- [x] Documentation updated to reflect decision engine contract.
 
 ### Risks addressed (3–5 bullets)
 - Ambiguous or inconsistent rejection reasons.

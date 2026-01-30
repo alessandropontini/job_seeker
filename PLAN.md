@@ -28,15 +28,15 @@
 - Extended CLI flags for strict mode, missing-salary override, and source selection.
 - Added matcher, pipeline filtering, and connector tests.
 
-### Phase 3 — Decision Engine (next)
-**Status:** ⏳ Planned
-**Acceptance Criteria**
-- Hard constraints and soft preferences are separated in decision logic.
-- Structured decision reasons are produced for accept/reject/preference.
-- Deterministic ordering for decision reasons and report rows.
-- Reports remain compatible with existing CSV/Markdown formats.
-- Unit tests cover decision rationale structure and determinism.
-- Documentation updated to reflect the decision engine contract.
+### Phase 3 — Decision Engine (complete)
+**Status:** ✅ Done
+
+**Shipped scope**
+- Split hard constraints from soft preferences in matcher flow.
+- Added structured decision rationale fields (decision, hard reject reasons, penalties, missing fields).
+- Preserved report formats while adding rationale columns and markdown notes.
+- Ensured deterministic ordering for rationale lists and outputs.
+- Updated tests and documentation to reflect the decision engine contract.
 
 ### Phase 4 — Scoring & Ranking
 **Status:** ⏳ Planned

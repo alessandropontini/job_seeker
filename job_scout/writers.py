@@ -25,6 +25,10 @@ CSV_FIELDS = [
     "tags",
     "description_snippet",
     "matches_all",
+    "decision",
+    "hard_reject_reasons",
+    "penalties",
+    "missing_fields",
     "reject_reasons",
     "missing_salary",
     "remote_level",
@@ -45,6 +49,10 @@ def _serialize_for_csv(row: ReportRow) -> dict:
     data = row.posting.to_dict()
     data["tags"] = ";".join(row.posting.tags)
     data["matches_all"] = row.match.matches_all
+    data["decision"] = row.match.decision
+    data["hard_reject_reasons"] = ";".join(row.match.hard_reject_reasons)
+    data["penalties"] = ";".join(row.match.penalties)
+    data["missing_fields"] = ";".join(row.match.missing_fields)
     data["reject_reasons"] = ";".join(row.match.reject_reasons)
     data["missing_salary"] = row.match.missing_salary
     data["remote_level"] = row.match.remote_level
@@ -116,10 +124,17 @@ def _write_section(
             handle.write(f"  - Remote level: {row.match.remote_level}\n")
         if posting.tags:
             handle.write(f"  - Tags: {', '.join(posting.tags)}\n")
-        if row.match.reject_reasons:
+        if row.match.penalties and row.match.decision == "accepted":
+            handle.write(
+                "  - Penalties: "
+                f"{', '.join(row.match.penalties)}\n"
+            )
+        if row.match.decision == "rejected":
+            handle.write("  - Decision: rejected\n")
+        if row.match.hard_reject_reasons:
             handle.write(
                 "  - Reject reasons: "
-                f"{', '.join(row.match.reject_reasons)}\n"
+                f"{', '.join(row.match.hard_reject_reasons)}\n"
             )
         handle.write(f"  - Link: {posting.url}\n")
         if posting.description_snippet:

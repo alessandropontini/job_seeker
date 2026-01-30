@@ -50,6 +50,10 @@ class MatchResult:
     """Outcome of applying matching rules to a posting."""
 
     matches_all: bool
+    decision: str
+    hard_reject_reasons: list[str]
+    penalties: list[str]
+    missing_fields: list[str]
     reject_reasons: list[str]
     missing_salary: bool
     salary_min_eur: int | None
@@ -82,7 +86,61 @@ def match_posting(
 ) -> tuple[JobPosting, MatchResult]:
     """Return a posting copy with match metadata based on configured rules."""
 
-    reject_reasons: list[str] = []
+    (
+        hard_reject_reasons,
+        missing_fields,
+        salary_min_eur,
+        salary_max_eur,
+        missing_salary,
+        remote_level,
+    ) = evaluate_hard_constraints(posting, config, strict, allow_missing_salary)
+    decision = "rejected" if hard_reject_reasons else "accepted"
+    missing_salary_allowed = (
+        missing_salary and allow_missing_salary and not strict
+    )
+    penalties = evaluate_soft_preferences(
+        posting, config, missing_salary_allowed, remote_level
+    )
+    matches_all = decision == "accepted"
+
+    updated_posting = posting
+    if missing_salary_allowed:
+        updated_posting = posting.with_tags(["missing_salary"])
+
+    return (
+        updated_posting,
+        MatchResult(
+            matches_all=matches_all,
+            decision=decision,
+            hard_reject_reasons=list(hard_reject_reasons),
+            penalties=penalties,
+            missing_fields=missing_fields,
+            reject_reasons=list(hard_reject_reasons),
+            missing_salary=missing_salary,
+            salary_min_eur=salary_min_eur,
+            salary_max_eur=salary_max_eur,
+            remote_level=remote_level,
+        ),
+    )
+
+
+def evaluate_hard_constraints(
+    posting: JobPosting,
+    config: Mapping[str, object],
+    strict: bool,
+    allow_missing_salary: bool,
+) -> tuple[
+    list[str],
+    list[str],
+    int | None,
+    int | None,
+    bool,
+    str,
+]:
+    """Evaluate hard constraints and return reasons plus derived metadata."""
+
+    hard_reject_reasons: list[str] = []
+    missing_fields: list[str] = []
     location_rules = config.get("location_rules", {})
     role_rules = config.get("role_targeting", {})
     salary_rules = config.get("salary_rules", {})
@@ -114,10 +172,12 @@ def match_posting(
     location_country_lower = location_country.lower()
     location_text_lower = location_text.lower()
 
+    if not location_country_lower and not location_text_lower:
+        missing_fields.append("location")
     if location_country_lower in exclude_countries:
-        reject_reasons.append("excluded_country")
+        hard_reject_reasons.append("excluded_country")
     if "uk" in location_text_lower or "united kingdom" in location_text_lower:
-        reject_reasons.append("excluded_country_text")
+        hard_reject_reasons.append("excluded_country_text")
 
     location_allowed = False
     if location_country_lower in include_countries:
@@ -129,13 +189,13 @@ def match_posting(
 
     if not location_allowed:
         if strict and not location_country_lower and not location_text_lower:
-            reject_reasons.append("location_missing_strict")
+            hard_reject_reasons.append("location_missing_strict")
         else:
-            reject_reasons.append("location_not_allowed")
+            hard_reject_reasons.append("location_not_allowed")
 
     title_lower = posting.title.lower()
     if not any(target in title_lower for target in include_titles):
-        reject_reasons.append("title_not_targeted")
+        hard_reject_reasons.append("title_not_targeted")
 
     salary_min_eur = None
     salary_max_eur = None
@@ -151,32 +211,43 @@ def match_posting(
         salary_min_eur = _convert_to_eur(salary_min, currency, currency_rates)
         salary_max_eur = _convert_to_eur(salary_max, currency, currency_rates)
         if salary_max_eur < minimum_eur:
-            reject_reasons.append("salary_below_minimum")
+            hard_reject_reasons.append("salary_below_minimum")
 
     if missing_salary:
+        missing_fields.append("salary")
         if strict:
-            reject_reasons.append("missing_salary_strict")
+            hard_reject_reasons.append("missing_salary_strict")
         elif not allow_missing_salary:
-            reject_reasons.append("missing_salary_disallowed")
+            hard_reject_reasons.append("missing_salary_disallowed")
 
-    matches_all = len(reject_reasons) == 0
     remote_level = normalize_remote_level(posting.remote_type)
 
-    updated_posting = posting
-    if missing_salary and allow_missing_salary and not strict:
-        updated_posting = posting.with_tags(["missing_salary"])
-
     return (
-        updated_posting,
-        MatchResult(
-            matches_all=matches_all,
-            reject_reasons=reject_reasons,
-            missing_salary=missing_salary,
-            salary_min_eur=salary_min_eur,
-            salary_max_eur=salary_max_eur,
-            remote_level=remote_level,
-        ),
+        hard_reject_reasons,
+        missing_fields,
+        salary_min_eur,
+        salary_max_eur,
+        missing_salary,
+        remote_level,
     )
+
+
+def evaluate_soft_preferences(
+    posting: JobPosting,
+    config: Mapping[str, object],
+    missing_salary_allowed: bool,
+    remote_level: str,
+) -> list[str]:
+    """Evaluate soft preferences, returning deterministic penalty labels."""
+
+    penalties: list[str] = []
+    location_rules = config.get("location_rules", {})
+    prefer_full_remote = bool(location_rules.get("prefer_full_remote", False))
+    if prefer_full_remote and remote_level != "full-remote":
+        penalties.append("prefer_full_remote")
+    if missing_salary_allowed:
+        penalties.append("missing_salary")
+    return penalties
 
 
 def _merge_currency_rates(rates: object) -> dict[str, float]:
