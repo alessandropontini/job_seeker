@@ -28,12 +28,14 @@ def test_pipeline_groups_and_reports(tmp_path):
     assert "missing_fields" in csv_header
     assert "reject_reasons" in csv_header
     assert "missing_salary" in csv_header
+    assert "score" in csv_header
 
     md_content = md_path.read_text(encoding="utf-8")
     assert "## Matches" in md_content
     assert "## Missing Salary (allowed)" in md_content
     assert "## Rejected" in md_content
     assert "Penalties:" in md_content
+    assert "Score:" in md_content
 
     rejected = [row for row in rows if not row.match.matches_all]
     assert rejected

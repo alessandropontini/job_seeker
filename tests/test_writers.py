@@ -35,6 +35,9 @@ def test_write_reports_creates_files(tmp_path):
             salary_min_eur=None,
             salary_max_eur=None,
             remote_level="full-remote",
+            score=95,
+            score_penalties=["missing_salary"],
+            score_bonuses=["full_remote"],
         ),
     )
 
@@ -52,4 +55,86 @@ def test_write_reports_creates_files(tmp_path):
     assert "Product Lead" in md_content
     assert "Salary: Missing" in md_content
     assert "Penalties: missing_salary" in md_content
+    assert "Score: 95" in md_content
     assert "## Matches" in md_content
+
+
+def test_write_reports_orders_by_score(tmp_path):
+    first_posting = JobPosting(
+        id="unit-a",
+        source="dummy",
+        company="Score High",
+        title="Product Lead",
+        location_text="Milan, Italy",
+        location_country="Italy",
+        remote_type="full-remote",
+        url="https://example.com/high",
+        posted_at=datetime(2024, 2, 3, tzinfo=timezone.utc),
+        salary_text="€90k",
+        currency="EUR",
+        tags=[],
+        description_snippet="High score.",
+    )
+    second_posting = JobPosting(
+        id="unit-b",
+        source="dummy",
+        company="Score Low",
+        title="Product Lead",
+        location_text="Milan, Italy",
+        location_country="Italy",
+        remote_type="hybrid",
+        url="https://example.com/low",
+        posted_at=datetime(2024, 2, 4, tzinfo=timezone.utc),
+        salary_text="€90k",
+        currency="EUR",
+        tags=[],
+        description_snippet="Low score.",
+    )
+
+    high_row = ReportRow(
+        posting=first_posting,
+        match=MatchResult(
+            matches_all=True,
+            decision="accepted",
+            hard_reject_reasons=[],
+            penalties=[],
+            missing_fields=[],
+            reject_reasons=[],
+            missing_salary=False,
+            salary_min_eur=90000,
+            salary_max_eur=90000,
+            remote_level="full-remote",
+            score=110,
+            score_penalties=[],
+            score_bonuses=["full_remote"],
+        ),
+    )
+    low_row = ReportRow(
+        posting=second_posting,
+        match=MatchResult(
+            matches_all=True,
+            decision="accepted",
+            hard_reject_reasons=[],
+            penalties=["prefer_full_remote"],
+            missing_fields=[],
+            reject_reasons=[],
+            missing_salary=False,
+            salary_min_eur=90000,
+            salary_max_eur=90000,
+            remote_level="hybrid",
+            score=85,
+            score_penalties=["prefer_full_remote"],
+            score_bonuses=[],
+        ),
+    )
+
+    write_reports([low_row, high_row], [], [], tmp_path)
+
+    md_path = tmp_path / "report.md"
+    md_content = md_path.read_text(encoding="utf-8")
+
+    first_index = md_content.find("Score High")
+    second_index = md_content.find("Score Low")
+    assert first_index != -1
+    assert second_index != -1
+    assert first_index < second_index
