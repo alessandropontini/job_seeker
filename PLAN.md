@@ -24,12 +24,15 @@
 - Each connector respects access restrictions (no scraping behind logins).
 - Source runs produce normalized job records.
 
-### Sprint 2: Real sources + matching rules (next)
-**Planned scope**
-- Add first real source connector (non-authenticated, no paywall).
-- Implement location/role/salary filtering based on config rules.
-- Expand reporting with match rationale and missing salary flags.
-- Add source-specific unit tests and regression fixtures.
+### Sprint 2: Real sources + matching rules (complete)
+**Status:** ✅ Done
+
+**Shipped scope**
+- Added Remotive public API connector with fixtures and parser tests.
+- Implemented matcher engine for location, role, salary, and remote annotations.
+- Expanded pipeline filtering and reporting (CSV columns + Markdown sections).
+- Extended CLI flags for strict mode, missing-salary override, and source selection.
+- Added matcher, pipeline filtering, and connector tests.
 
 ### 3) Matching rules engine (future)
 **Acceptance Criteria**

@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
+from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
-from job_scout.writers import write_reports
+from job_scout.writers import ReportRow, write_reports
 
 
 def test_write_reports_creates_files(tmp_path):
@@ -21,7 +22,19 @@ def test_write_reports_creates_files(tmp_path):
         description_snippet="Test posting.",
     )
 
-    write_reports([posting], tmp_path)
+    row = ReportRow(
+        posting=posting,
+        match=MatchResult(
+            matches_all=True,
+            reject_reasons=[],
+            missing_salary=True,
+            salary_min_eur=None,
+            salary_max_eur=None,
+            remote_level="full-remote",
+        ),
+    )
+
+    write_reports([row], [], [], tmp_path)
 
     csv_path = tmp_path / "report.csv"
     md_path = tmp_path / "report.md"
@@ -34,3 +47,4 @@ def test_write_reports_creates_files(tmp_path):
     assert "unit-2" in csv_content
     assert "Product Lead" in md_content
     assert "Salary: Missing" in md_content
+    assert "## Matches" in md_content

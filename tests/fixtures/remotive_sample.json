@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "id": 101,
+      "url": "https://remotive.com/remote-jobs/engineering/engineering-manager-101",
+      "title": "Engineering Manager",
+      "company_name": "Remote Corp",
+      "candidate_required_location": "New York, USA",
+      "publication_date": "2024-02-01T10:00:00Z",
+      "salary": "$140k-$165k",
+      "tags": ["management", "backend"],
+      "description": "Lead the platform team building scalable services."
+    },
+    {
+      "id": 202,
+      "url": "https://remotive.com/remote-jobs/product/product-lead-202",
+      "title": "Product Lead",
+      "company_name": "Europa Labs",
+      "candidate_required_location": "Italy",
+      "publication_date": "2024-02-02T12:30:00Z",
+      "salary": "€80k-€95k",
+      "tags": ["product"],
+      "description": "Drive product strategy across EU markets."
+    }
+  ]
+}

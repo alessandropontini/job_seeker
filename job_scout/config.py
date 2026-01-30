@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 import importlib.util
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "sources": {"placeholders": []},
+    "sources": {"enabled": ["dummy"], "placeholders": []},
     "location_rules": {
         "include_regions": ["EU"],
         "include_countries": ["Italy"],
@@ -17,8 +17,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "exclude_countries": ["UK"],
         "prefer_full_remote": True,
     },
-    "role_targeting": {"include_titles": ["manager", "lead"]},
-    "salary_rules": {"minimum_eur": 52000, "flag_missing_salary": True},
+    "role_targeting": {"include_titles": ["manager", "lead", "head"]},
+    "salary_rules": {
+        "minimum_eur": 52000,
+        "allow_missing_salary": True,
+        "currency_rates": {"EUR": 1.0, "USD": 0.92, "GBP": 1.17},
+    },
     "notifications": {
         "telegram": {
             "enabled": False,
