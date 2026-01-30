@@ -8,7 +8,7 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 2 — Decision Transparency & Explainability.
 - **Done:** Phase 3 — Hard vs Soft Rules Separation.
 - **Done:** Phase 4 — Scoring & Ranking.
-- **Planned:** Phase 5 — Reliability & Extensibility.
+- **Done:** Phase 5 — Reliability & Extensibility.
 - **Optional:** Phase 6 — Automation & Notifications.
 
 Project docs:
@@ -32,6 +32,7 @@ Edit `config/config.yaml` to adjust defaults. Missing fields fall back to defaul
 
 Key sections:
 - `sources.enabled`: list of source names to run (`dummy`, `remotive`).
+- `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
 - `role_targeting.include_titles`: manager/lead/head keywords to match.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
@@ -72,6 +73,12 @@ python -m job_scout sources --test
 python -m job_scout sources --test remotive --since-days 7
 ```
 
+## Phase 5 — Reliability & Extensibility (overview)
+- Added golden snapshot tests to validate deterministic CSV/Markdown outputs offline.
+- Introduced a source normalization contract and centralized salary/remote normalization.
+- Externalized region/country mappings into `config/regions.json`.
+- Added source failure reporting in `out/report.md` under **Source Status**.
+
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
 - **Role:** only manager/lead/head titles are accepted.
@@ -92,6 +99,7 @@ The pipeline writes reports to `out/`:
     `salary_min_eur`, `salary_max_eur`, `score`, `score_penalties`,
     `score_bonuses`.
 - `out/report.md` has sections:
+  - `## Source Status`
   - `## Matches`
   - `## Missing Salary (allowed)`
   - `## Rejected`
@@ -106,3 +114,24 @@ The pipeline writes reports to `out/`:
 - Prefer full-remote roles when available, but do not exclude non-remote roles by default.
 - Missing salaries are tagged with `missing_salary` unless strict mode is enabled.
 - Scores are deterministic and derived from configured preference weights.
+
+## Testing
+Run offline tests (default, deterministic):
+```bash
+pytest -q
+```
+
+Run optional online integration tests (requires network access):
+```bash
+JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
+```
+
+### Golden tests vs online integration tests
+- Golden tests are offline and compare pipeline outputs against committed fixtures.
+- Integration tests are opt-in, hit real APIs, and are skipped by default.
+
+### Regenerating golden outputs
+When intentional output changes are expected, regenerate goldens with fixtures:
+```bash
+JOB_SCOUT_FIXTURE_DIR=tests/fixtures python tools/update_goldens.py
+```

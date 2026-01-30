@@ -5,6 +5,8 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 - `job_scout.__main__`: CLI entry points and argument parsing.
 - `job_scout.config`: config loader and defaults.
 - `job_scout.sources`: source registry (`dummy`, `remotive`).
+- `job_scout.normalize`: source contract models + normalization helpers.
+- `job_scout.regions`: region/country mapping loader and validation.
 - `job_scout.pipeline`: orchestration (fetch, match, group, write).
 - `job_scout.matcher`: matching rules + match metadata.
 - `job_scout.scoring`: deterministic scoring and ranking metadata.
@@ -13,11 +15,13 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 
 ## Pipeline Flow
 1. CLI reads config (`job_scout.config.load_config`) and resolves sources (`job_scout.pipeline.run_pipeline`).
-2. Each source fetcher returns `JobPosting` items (`job_scout.sources`).
-3. `job_scout.matcher.match_posting` evaluates rules and annotates match metadata.
-4. `job_scout.scoring.apply_scoring` computes scores for accepted postings.
-5. `job_scout.pipeline.run_pipeline` groups rows into Matches / Missing Salary / Rejected.
-6. `job_scout.writers.write_reports` writes `out/report.csv` and `out/report.md`.
+2. Region metadata loads from `config/regions.json` (`job_scout.regions.load_region_data`).
+3. Each source fetcher returns `SourceJob` items (`job_scout.sources`).
+4. `job_scout.normalize.normalize_source_job` enforces the normalization contract.
+5. `job_scout.matcher.match_posting` evaluates rules and annotates match metadata.
+6. `job_scout.scoring.apply_scoring` computes scores for accepted postings.
+7. `job_scout.pipeline.run_pipeline` groups rows into Matches / Missing Salary / Rejected.
+8. `job_scout.writers.write_reports` writes `out/report.csv` and `out/report.md`.
 
 ## Key Decision Points (Current)
 - Config loading & merge (`job_scout.config.load_config`).
@@ -29,16 +33,24 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 ## Contracts
 ### Source Contract
 A source must provide a callable with signature:
-- `fetch_source(since_days: int) -> list[JobPosting]`
+- `fetch_source(since_days: int) -> list[SourceJob]`
 
-Required `JobPosting` fields:
+Required `SourceJob` fields:
 - `id`, `source`, `company`, `title`, `location_text`, `location_country`,
-  `remote_type`, `url`, `posted_at`, `salary_text`, `currency`, `tags`.
+  `location_city`, `remote_type`, `url`, `posted_at`, `salary_text`, `currency`, `tags`.
+
+Normalized contract (`NormalizedJob`):
+- `id`, `source`, `company`, `title`
+- `location_text`, `location_country`, `location_city`
+- `posted_at` normalized to UTC
+- `remote_level` (canonical)
+- `salary_text`, `salary_min`, `salary_max`, `currency`
 
 Normalization expectations:
 - `posted_at` must be timezone-aware (`datetime` with tzinfo).
-- `location_country` should be a normalized country label when possible.
-- `remote_type` should be a raw string; normalization happens in matcher.
+- `location_country` should use alias-normalized country labels.
+- `remote_level` is centralized in `job_scout.normalize`.
+- Salary parsing and currency conversion use `job_scout.normalize`.
 
 Allowed / forbidden:
 - Allowed: public APIs and offline fixtures.
@@ -56,6 +68,7 @@ Config keys and semantics:
 - `salary_rules.minimum_eur` — minimum salary threshold (EUR).
 - `salary_rules.allow_missing_salary` — keep missing salary postings.
 - `salary_rules.currency_rates` — conversion map.
+- `regions_path` — path to region/country mapping data.
 - `scoring.base_score` — starting score for accepted postings.
 - `scoring.penalty_weights` — per-penalty deductions.
 - `scoring.bonus_weights` — per-bonus additions.
@@ -81,4 +94,13 @@ Config keys and semantics:
 - Scores and applied adjustments are included in reports.
 
 ## Testing Strategy (Current + Planned)
-Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Planned in Phase 5: snapshot/golden tests to validate full pipeline outputs across sources and config permutations.
+Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 adds golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests.
+
+## Region Mapping Design
+- Region data lives in `config/regions.json`.
+- `job_scout.regions.load_region_data` validates the file at runtime and fails fast if missing or malformed.
+- Country aliases are applied consistently in normalization and matching.
+
+## Source Failure Propagation
+- Source fetch errors raise explicit exceptions and are surfaced in `out/report.md`.
+- The pipeline continues running remaining sources and records a **Source Status** section summarizing counts or errors.

@@ -31,6 +31,7 @@ def test_pipeline_groups_and_reports(tmp_path):
     assert "score" in csv_header
 
     md_content = md_path.read_text(encoding="utf-8")
+    assert "## Source Status" in md_content
     assert "## Matches" in md_content
     assert "## Missing Salary (allowed)" in md_content
     assert "## Rejected" in md_content

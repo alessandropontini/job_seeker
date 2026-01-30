@@ -110,7 +110,7 @@ Introduce scoring based on weighted preferences and deterministic tie-breaks, wi
 - No notification system changes.
 - No new matching constraints beyond current config.
 
-## Phase 5 — Reliability & Extensibility (PLANNED)
+## Phase 5 — Reliability & Extensibility (DONE)
 ### Objective
 Improve reliability through snapshot testing and make source integration more robust and maintainable.
 
@@ -118,11 +118,11 @@ Improve reliability through snapshot testing and make source integration more ro
 Add golden output tests and refine source abstractions without changing matching semantics.
 
 ### Definition of Done (5–8 checkboxes)
-- [ ] Snapshot/golden tests for full pipeline outputs.
-- [ ] Better source abstraction with consistent normalization rules.
-- [ ] Externalized region/country mapping (not hard-coded lists).
-- [ ] Error handling for network sources with clear failures.
-- [ ] Documentation of source contract and normalization rules.
+- [x] Snapshot/golden tests for full pipeline outputs.
+- [x] Better source abstraction with consistent normalization rules.
+- [x] Externalized region/country mapping (not hard-coded lists).
+- [x] Error handling for network sources with clear failures.
+- [x] Documentation of source contract and normalization rules.
 
 ### Risks addressed (3–5 bullets)
 - Undetected regressions in outputs.

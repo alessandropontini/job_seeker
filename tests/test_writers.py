@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
-from job_scout.writers import ReportRow, write_reports
+from job_scout.writers import ReportRow, SourceStatus, write_reports
 
 
 def test_write_reports_creates_files(tmp_path):
@@ -41,7 +41,13 @@ def test_write_reports_creates_files(tmp_path):
         ),
     )
 
-    write_reports([row], [], [], tmp_path)
+    write_reports(
+        [row],
+        [],
+        [],
+        tmp_path,
+        source_statuses=[SourceStatus(name="dummy", ok=True, count=1)],
+    )
 
     csv_path = tmp_path / "report.csv"
     md_path = tmp_path / "report.md"
@@ -57,6 +63,7 @@ def test_write_reports_creates_files(tmp_path):
     assert "Penalties: missing_salary" in md_content
     assert "Score: 95" in md_content
     assert "## Matches" in md_content
+    assert "## Source Status" in md_content
 
 
 def test_write_reports_orders_by_score(tmp_path):

@@ -1,0 +1,42 @@
+{
+  "eu_countries": [
+    "Austria",
+    "Belgium",
+    "Bulgaria",
+    "Croatia",
+    "Cyprus",
+    "Czech Republic",
+    "Denmark",
+    "Estonia",
+    "Finland",
+    "France",
+    "Germany",
+    "Greece",
+    "Hungary",
+    "Ireland",
+    "Italy",
+    "Latvia",
+    "Lithuania",
+    "Luxembourg",
+    "Malta",
+    "Netherlands",
+    "Poland",
+    "Portugal",
+    "Romania",
+    "Slovakia",
+    "Slovenia",
+    "Spain",
+    "Sweden"
+  ],
+  "country_aliases": {
+    "czechia": "Czech Republic",
+    "u.k.": "UK",
+    "uk": "UK",
+    "united kingdom": "UK",
+    "u.s.": "US",
+    "us": "US",
+    "u.s.a.": "USA",
+    "usa": "USA",
+    "united states": "USA"
+  }
+}

@@ -10,6 +10,7 @@ import importlib.util
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "sources": {"enabled": ["dummy"], "placeholders": []},
+    "regions_path": "config/regions.json",
     "location_rules": {
         "include_regions": ["EU"],
         "include_countries": ["Italy"],

@@ -9,6 +9,8 @@ sources:
     - dummy
   placeholders: []
 
+regions_path: config/regions.json
+
 location_rules:
   include_regions:
     - EU
