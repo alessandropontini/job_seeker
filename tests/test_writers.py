@@ -26,6 +26,10 @@ def test_write_reports_creates_files(tmp_path):
         posting=posting,
         match=MatchResult(
             matches_all=True,
+            decision="accepted",
+            hard_reject_reasons=[],
+            penalties=["missing_salary"],
+            missing_fields=["salary"],
             reject_reasons=[],
             missing_salary=True,
             salary_min_eur=None,
@@ -47,4 +51,5 @@ def test_write_reports_creates_files(tmp_path):
     assert "unit-2" in csv_content
     assert "Product Lead" in md_content
     assert "Salary: Missing" in md_content
+    assert "Penalties: missing_salary" in md_content
     assert "## Matches" in md_content
