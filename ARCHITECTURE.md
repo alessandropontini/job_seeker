@@ -51,6 +51,8 @@ Normalization expectations:
 - `location_country` should use alias-normalized country labels.
 - `remote_level` is centralized in `job_scout.normalize`.
 - Salary parsing and currency conversion use `job_scout.normalize`.
+- Network access is explicitly disabled when `NO_NETWORK=1`; sources should fail fast
+  with clear errors or use fixtures.
 
 Allowed / forbidden:
 - Allowed: public APIs and offline fixtures.
@@ -94,7 +96,7 @@ Config keys and semantics:
 - Scores and applied adjustments are included in reports.
 
 ## Testing Strategy (Current + Planned)
-Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 adds golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests.
+Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 adds golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests. Offline runs can set `NO_NETWORK=1` to enforce deterministic, no-network behavior.
 
 ## Region Mapping Design
 - Region data lives in `config/regions.json`.
@@ -104,3 +106,4 @@ Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsi
 ## Source Failure Propagation
 - Source fetch errors raise explicit exceptions and are surfaced in `out/report.md`.
 - The pipeline continues running remaining sources and records a **Source Status** section summarizing counts or errors.
+- Live integration tests are opt-in via `JOB_SCOUT_RUN_INTEGRATION=1` and marked with `integration`.

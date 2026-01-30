@@ -121,8 +121,9 @@ Add golden output tests and refine source abstractions without changing matching
 - [x] Snapshot/golden tests for full pipeline outputs.
 - [x] Better source abstraction with consistent normalization rules.
 - [x] Externalized region/country mapping (not hard-coded lists).
-- [x] Error handling for network sources with clear failures.
+- [x] Error handling for network sources with clear failures and no-network guardrails.
 - [x] Documentation of source contract and normalization rules.
+- [x] Offline CI run with network disabled; integration tests are opt-in.
 
 ### Risks addressed (3–5 bullets)
 - Undetected regressions in outputs.

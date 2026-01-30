@@ -18,13 +18,19 @@ Project docs:
 
 ## Requirements
 - Python 3.11
-- Dependencies in `requirements.txt`
+- Runtime dependencies in `requirements.txt`
+- Test/dev dependencies in `requirements-dev.txt`
 
 ## Setup
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Install test/dev tooling:
+```bash
+pip install -r requirements-dev.txt
 ```
 
 ## Configuration
@@ -121,6 +127,11 @@ Run offline tests (default, deterministic):
 pytest -q
 ```
 
+Run offline tests with network guardrails enabled:
+```bash
+NO_NETWORK=1 pytest -q
+```
+
 Run optional online integration tests (requires network access):
 ```bash
 JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
@@ -133,5 +144,11 @@ JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
 ### Regenerating golden outputs
 When intentional output changes are expected, regenerate goldens with fixtures:
 ```bash
-JOB_SCOUT_FIXTURE_DIR=tests/fixtures python tools/update_goldens.py
+python tools/update_goldens.py
 ```
+
+### Environment variables & markers
+- `NO_NETWORK=1`: disable HTTP calls during tests (raises controlled errors).
+- `JOB_SCOUT_RUN_INTEGRATION=1`: opt-in to live API integration tests.
+- `JOB_SCOUT_FIXTURE_DIR=tests/fixtures`: use fixture payloads instead of live APIs.
+- Pytest marker: `integration` for live-network tests.

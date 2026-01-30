@@ -38,3 +38,10 @@ def test_remotive_invalid_json(monkeypatch):
     monkeypatch.setattr(remotive.urllib.request, "urlopen", _fake_response)
     with pytest.raises(remotive.RemotiveSourceError):
         remotive.fetch_remotive(7)
+
+
+def test_remotive_no_network_guard(monkeypatch):
+    monkeypatch.delenv("JOB_SCOUT_FIXTURE_DIR", raising=False)
+    monkeypatch.setenv("NO_NETWORK", "1")
+    with pytest.raises(remotive.RemotiveSourceError):
+        remotive.fetch_remotive(1)
