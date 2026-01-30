@@ -2,10 +2,11 @@
 
 sources:
   # List of job sources to ingest from (no scraping behind logins)
-  # - name: example_source
-  #   type: api | rss | html
-  #   endpoint: https://example.com/jobs
-  #   enabled: false
+  # Example:
+  #   enabled:
+  #     - remotive
+  enabled:
+    - dummy
   placeholders: []
 
 location_rules:
@@ -23,10 +24,16 @@ role_targeting:
   include_titles:
     - manager
     - lead
+    - head
 
 salary_rules:
   minimum_eur: 52000
-  flag_missing_salary: true
+  allow_missing_salary: true
+  # Approximate exchange rates for normalization to EUR.
+  currency_rates:
+    EUR: 1.0
+    USD: 0.92
+    GBP: 1.17
 
 notifications:
   telegram:

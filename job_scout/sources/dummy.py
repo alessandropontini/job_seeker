@@ -102,6 +102,21 @@ def fetch_dummy(since_days: int) -> list[JobPosting]:
             tags=["cloud"],
             description_snippet="Lead the platform team modernizing infra tooling.",
         ),
+        JobPosting(
+            id="dummy-uk-007",
+            source="dummy",
+            company="Thames Fintech",
+            title="Engineering Manager",
+            location_text="London, UK",
+            location_country="UK",
+            remote_type="onsite",
+            url="https://example.com/jobs/thames-fintech-manager",
+            posted_at=now - timedelta(days=2, hours=1),
+            salary_text="£90k-£110k",
+            currency="GBP",
+            tags=["fintech"],
+            description_snippet="Own delivery for the payments platform team.",
+        ),
     ]
 
     cutoff = now - timedelta(days=since_days)

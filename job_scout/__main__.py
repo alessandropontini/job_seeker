@@ -35,12 +35,33 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("out"),
     )
+    run_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Reject postings with missing mandatory data.",
+    )
+    run_parser.add_argument(
+        "--allow-missing-salary",
+        action="store_true",
+        default=None,
+        help="Override config to allow missing salary postings.",
+    )
+    run_parser.add_argument(
+        "--source",
+        action="append",
+        help="Source name(s), repeatable or comma-separated.",
+    )
 
     sources_parser = subparsers.add_parser(
         "sources", help="Inspect available sources"
     )
     sources_parser.add_argument("--list", action="store_true")
-    sources_parser.add_argument("--test", action="store_true")
+    sources_parser.add_argument(
+        "--test",
+        nargs="?",
+        const="dummy",
+        help="Test a source by name (default: dummy).",
+    )
     sources_parser.add_argument("--since-days", type=int, default=1)
 
     return parser
@@ -57,17 +78,30 @@ def main(argv: List[str] | None = None) -> int:
                 print(name)
             return 0
         if args.test:
-            fetcher = AVAILABLE_SOURCES["dummy"]
+            fetcher = AVAILABLE_SOURCES.get(args.test)
+            if not fetcher:
+                parser.error(f"unknown source: {args.test}")
             postings = fetcher(args.since_days)
-            print(f"dummy: {len(postings)} postings")
+            print(f"{args.test}: {len(postings)} postings")
             return 0
         parser.error("sources requires --list or --test")
 
     if args.command == "run":
         config = load_config(args.config)
         salary_rules = config.get("salary_rules", {})
-        flag_missing_salary = bool(salary_rules.get("flag_missing_salary", True))
-        run_pipeline(args.since_days, args.output_dir, flag_missing_salary)
+        allow_missing_salary = salary_rules.get("allow_missing_salary")
+        if allow_missing_salary is None:
+            allow_missing_salary = salary_rules.get("flag_missing_salary", True)
+        if args.allow_missing_salary is not None:
+            allow_missing_salary = True
+        run_pipeline(
+            since_days=args.since_days,
+            output_dir=args.output_dir,
+            config=config,
+            strict=args.strict,
+            allow_missing_salary=bool(allow_missing_salary),
+            sources=args.source,
+        )
         return 0
 
     return 1
