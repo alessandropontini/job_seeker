@@ -54,13 +54,16 @@ def maybe_notify(
         logger.info("No meaningful changes to notify.")
         save_snapshot(snapshot_path, diff.current_snapshot)
         return
-    sent = telegram_notifier.send_message(digest)
+    sent, reason = telegram_notifier.send_message(digest)
     if sent:
         logger.info("Notification sent via Telegram.")
         updated_snapshot = mark_notified(diff.current_snapshot, notified_rows)
         save_snapshot(snapshot_path, updated_snapshot)
     else:
-        logger.info("Notification not sent via Telegram.")
+        if reason:
+            logger.warning("Telegram notification skipped: %s.", reason)
+        else:
+            logger.warning("Telegram notification skipped.")
         save_snapshot(snapshot_path, diff.current_snapshot)
 
 

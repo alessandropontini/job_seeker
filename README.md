@@ -9,7 +9,7 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 3 — Hard vs Soft Rules Separation.
 - **Done:** Phase 4 — Scoring & Ranking.
 - **Done:** Phase 5 — Reliability & Extensibility (QA & hardening complete).
-- **In progress:** Phase 6 — Automation & Notifications.
+- **In validation:** Phase 6 — Automation & Notifications (manual trigger only).
 
 Project docs:
 - [ROADMAP.md](ROADMAP.md)
@@ -43,7 +43,7 @@ Key sections:
 - `scoring.base_score`: starting score for accepted postings.
 - `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
 - `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
-- `notifications.telegram.enabled`: enable Telegram notifications (default: false).
+- `notifications.telegram.enabled`: enable Telegram notifications (default: true).
 - `notifications.telegram.top_n`: number of items in the digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
 - `notifications.telegram.min_score_improvement`: minimum score delta to notify.
@@ -88,10 +88,12 @@ python -m job_scout sources --test remotive --since-days 7
 - Documented external dependency failure handling (HTTP 403/429, NO_NETWORK) as
   environment limitations rather than project defects.
 
-## Phase 6 — Automation & Notifications (in progress)
-- Scheduled automation via GitHub Actions (cron + manual dispatch).
+## Phase 6 — Automation & Notifications (in validation)
+- Manual-only GitHub Actions runs (no push/PR/schedule triggers).
 - Lightweight state snapshot + diff to detect new/improved matches.
-- Digest notifications (Telegram optional), opt-in and deterministic.
+- Digest notifications (Telegram always enabled by default) and deterministic.
+- **Phase 6 includes automatic Telegram notifications by default.** If secrets are
+  missing, the run completes with a warning and no notification.
 
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
@@ -132,6 +134,12 @@ The pipeline writes reports to `out/`:
 - Scores are deterministic and derived from configured preference weights.
 - External dependency failures (HTTP 403/429, NO_NETWORK) are treated as environment
   limitations during QA validation, not project defects.
+
+## Telegram notifications (Phase 6)
+- Telegram is always enabled by default (`notifications.telegram.enabled: true`).
+- Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+- If secrets are missing or invalid, the run completes with a warning and skips
+  the notification (no secrets are printed).
 
 ## Testing
 Run offline tests (default, deterministic):
@@ -213,17 +221,17 @@ python tools/update_goldens.py
 - Pytest marker: `integration` for live-network tests.
 
 ## Notifications (Phase 6)
-Notifications are opt-in and disabled by default. Configure in `config/config.yaml`:
-- `notifications.telegram.enabled`: enable Telegram channel.
+Telegram notifications are enabled by default. Configure in `config/config.yaml`:
+- `notifications.telegram.enabled`: keep Telegram enabled (default: true).
 - `notifications.telegram.top_n`: number of jobs to include in the digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
 - `notifications.telegram.min_score_improvement`: minimum score delta to notify.
 
-Telegram credentials must be set via environment variables:
+Telegram credentials must be set via environment variables (or GitHub Actions secrets):
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-If credentials are missing, notifications are skipped and the run continues.
+If credentials are missing or invalid, notifications are skipped with a warning and the run continues.
 
 ### GitHub Actions secrets & manual trigger
 Add repository secrets in GitHub:

@@ -6,9 +6,15 @@ snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP
 documented as environment limitations rather than project defects.
 
 ## Phase 6 Automation Notes
-Scheduled/manual runs use the GitHub Actions workflow `job_scout.yml`. Telegram credentials must be stored
+Manual-only runs use the GitHub Actions workflow `job_scout.yml`. Telegram credentials must be stored
 as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) and are never printed in logs. If
 secrets are missing, notifications are skipped while the pipeline still runs.
+
+### Phase 6 validation checklist
+- Confirm the workflow is manual-only (`workflow_dispatch`) with no push/PR/schedule triggers.
+- Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
+- Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
+  the specific missing/invalid secret(s) and that the run completes without a notification.
 
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.

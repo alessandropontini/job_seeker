@@ -65,10 +65,10 @@
 - External dependency failures (HTTP 403/429, NO_NETWORK) documented as environment limits.
 
 ### Phase 6 — Automation & Notifications
-**Status:** 🚧 In progress
+**Status:** 🧪 In validation — Telegram notifications always enabled, manual trigger only
 **Acceptance Criteria**
-- Scheduled runs are supported (e.g., cron or CI schedule).
-- Notification digests are opt-in and deterministic.
+- Manual-only GitHub Actions workflow (workflow_dispatch only).
+- Telegram notifications enabled by default with explicit logs for sent vs skipped.
+- Missing/invalid secrets yield warnings without failing the run.
 - Notify only when new or improved/high-scoring items appear.
-- Notification tests use fixtures or dry-run mode.
 - State snapshot + diff tracking is persisted between runs.

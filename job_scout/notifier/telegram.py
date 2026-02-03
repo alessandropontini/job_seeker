@@ -11,16 +11,20 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 
-def send_message(text: str) -> bool:
-    """Send a Telegram message, returning True on success."""
+def send_message(text: str) -> tuple[bool, str | None]:
+    """Send a Telegram message, returning (sent, reason)."""
 
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not bot_token or not chat_id:
-        logger.warning(
-            "Telegram disabled: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
-        )
-        return False
+    missing = []
+    if not bot_token:
+        missing.append("TELEGRAM_BOT_TOKEN")
+    if not chat_id:
+        missing.append("TELEGRAM_CHAT_ID")
+    if missing:
+        reason = f"missing secrets: {', '.join(missing)}"
+        logger.warning("Telegram notification skipped (%s).", reason)
+        return False, reason
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = json.dumps(
@@ -38,9 +42,17 @@ def send_message(text: str) -> bool:
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
-            return 200 <= response.status < 300
+            if 200 <= response.status < 300:
+                return True, None
+            reason = f"unexpected response status {response.status}"
+            logger.warning("Telegram notification skipped (%s).", reason)
+            return False, reason
     except urllib.error.HTTPError as exc:
-        logger.warning("Telegram HTTP error: %s", exc.code)
+        hint = "check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"
+        reason = f"HTTP error {exc.code}; {hint}"
+        logger.warning("Telegram notification skipped (%s).", reason)
+        return False, reason
     except urllib.error.URLError as exc:
-        logger.warning("Telegram connection error: %s", exc.reason)
-    return False
+        reason = f"connection error: {exc.reason}"
+        logger.warning("Telegram notification skipped (%s).", reason)
+        return False, reason
