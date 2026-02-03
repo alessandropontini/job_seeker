@@ -36,7 +36,11 @@ def load_snapshot(path: Path) -> Snapshot:
 
     if not path.exists():
         return Snapshot(generated_at="", jobs={})
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Snapshot load failed (%s); starting fresh.", exc)
+        return Snapshot(generated_at="", jobs={})
     jobs_raw = payload.get("jobs", {})
     jobs: dict[str, dict[str, str | int]] = {}
     if isinstance(jobs_raw, dict):
