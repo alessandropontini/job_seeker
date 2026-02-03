@@ -25,7 +25,7 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 6. `job_scout.scoring.apply_scoring` computes scores for accepted postings.
 7. `job_scout.pipeline.run_pipeline` groups rows into Matches / Missing Salary / Rejected.
 8. `job_scout.writers.write_reports` writes `out/report.csv` and `out/report.md`.
-9. `job_scout.notifications.maybe_notify` persists `out/state.json` and sends a
+9. `job_scout.notifications.maybe_notify` persists `out/last_run.json` and sends a
    digest if configured.
 
 ## Key Decision Points (Current)
@@ -79,11 +79,10 @@ Config keys and semantics:
 - `scoring.base_score` — starting score for accepted postings.
 - `scoring.penalty_weights` — per-penalty deductions.
 - `scoring.bonus_weights` — per-bonus additions.
-- `notifications.enabled` — master switch for notifications.
-- `notifications.channels` — list of enabled channels (supports `telegram`).
-- `notifications.top_n` — max jobs included in a digest.
-- `notifications.minimum_score` — minimum score to notify.
-- `notifications.telegram` — Telegram channel configuration.
+- `notifications.telegram.enabled` — enable Telegram notifications.
+- `notifications.telegram.top_n` — max jobs included in a digest.
+- `notifications.telegram.min_score` — minimum score to notify.
+- `notifications.telegram.min_score_improvement` — minimum score delta to notify.
 
 **USED TODAY**: all keys above.
 

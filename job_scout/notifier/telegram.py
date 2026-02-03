@@ -11,16 +11,14 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 
-def send_message(text: str, bot_token_env: str, chat_id_env: str) -> bool:
+def send_message(text: str) -> bool:
     """Send a Telegram message, returning True on success."""
 
-    bot_token = os.getenv(bot_token_env)
-    chat_id = os.getenv(chat_id_env)
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not bot_token or not chat_id:
         logger.warning(
-            "Telegram disabled: missing %s or %s",
-            bot_token_env,
-            chat_id_env,
+            "Telegram disabled: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
         )
         return False
 

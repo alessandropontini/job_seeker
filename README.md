@@ -43,11 +43,10 @@ Key sections:
 - `scoring.base_score`: starting score for accepted postings.
 - `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
 - `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
-- `notifications.enabled`: master switch for notifications (default: false).
-- `notifications.channels`: notification channels list (supports `telegram`).
-- `notifications.top_n`: number of items in the digest.
-- `notifications.minimum_score`: minimum score required to notify.
-- `notifications.telegram.enabled`: enable Telegram channel.
+- `notifications.telegram.enabled`: enable Telegram notifications (default: false).
+- `notifications.telegram.top_n`: number of items in the digest.
+- `notifications.telegram.min_score`: minimum score required to notify.
+- `notifications.telegram.min_score_improvement`: minimum score delta to notify.
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
@@ -119,7 +118,7 @@ The pipeline writes reports to `out/`:
   - `## Missing Salary (allowed)`
   - `## Rejected`
   - Accepted postings include a score line and score adjustments.
-- `out/state.json` stores the last run snapshot (job IDs + scores) for diff-based
+- `out/last_run.json` stores the last run snapshot (job IDs + scores) for diff-based
   notifications.
 
 ## Source connectors
@@ -215,14 +214,22 @@ python tools/update_goldens.py
 
 ## Notifications (Phase 6)
 Notifications are opt-in and disabled by default. Configure in `config/config.yaml`:
-- `notifications.enabled`: master switch.
-- `notifications.channels`: list of enabled channels (supports `telegram`).
-- `notifications.top_n`: number of jobs to include in the digest.
-- `notifications.minimum_score`: minimum score required to notify.
 - `notifications.telegram.enabled`: enable Telegram channel.
+- `notifications.telegram.top_n`: number of jobs to include in the digest.
+- `notifications.telegram.min_score`: minimum score required to notify.
+- `notifications.telegram.min_score_improvement`: minimum score delta to notify.
 
 Telegram credentials must be set via environment variables:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
 If credentials are missing, notifications are skipped and the run continues.
+
+### GitHub Actions secrets & manual trigger
+Add repository secrets in GitHub:
+1. **Settings → Secrets and variables → Actions → New repository secret**
+2. Create `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+
+To run manually: go to **Actions → job-scout** → **Run workflow** and set inputs
+(`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
+`gh workflow run job_scout.yml` (no secrets shown in CLI output).

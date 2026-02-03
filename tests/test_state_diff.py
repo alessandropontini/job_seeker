@@ -42,7 +42,10 @@ def _make_row(job_id: str, score: int) -> ReportRow:
 def test_diff_rows_tracks_new_and_improved():
     previous = Snapshot(
         generated_at="2024-01-01T00:00:00+00:00",
-        jobs={"dummy:alpha": 100, "dummy:beta": 90},
+        jobs={
+            "dummy:alpha": {"score": 100, "notified_at": "2024-01-01T00:00:00+00:00"},
+            "dummy:beta": {"score": 90, "notified_at": "2024-01-01T00:00:00+00:00"},
+        },
     )
     rows = [
         _make_row("alpha", 110),
@@ -50,7 +53,7 @@ def test_diff_rows_tracks_new_and_improved():
         _make_row("gamma", 95),
     ]
 
-    diff = diff_rows(previous, rows)
+    diff = diff_rows(previous, rows, min_improvement=5)
 
     assert [row.posting.id for row in diff.new_rows] == ["gamma"]
     assert [row.posting.id for row in diff.improved_rows] == ["alpha"]

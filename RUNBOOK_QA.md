@@ -5,6 +5,11 @@ Phase 5 (QA & hardening) is complete: the pipeline is deterministic, offline exe
 snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP 403/429, `NO_NETWORK`) are
 documented as environment limitations rather than project defects.
 
+## Phase 6 Automation Notes
+Scheduled/manual runs use the GitHub Actions workflow `job_scout.yml`. Telegram credentials must be stored
+as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) and are never printed in logs. If
+secrets are missing, notifications are skipped while the pipeline still runs.
+
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.
 

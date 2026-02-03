@@ -1,0 +1,72 @@
+name: job-scout
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      since_days:
+        description: "Days back to query"
+        required: false
+        default: "7"
+      sources:
+        description: "Comma-separated sources"
+        required: false
+        default: "remotive"
+      strict:
+        description: "Enable strict mode"
+        required: false
+        default: "false"
+      allow_missing_salary:
+        description: "Allow missing salary"
+        required: false
+        default: "true"
+
+jobs:
+  run-job-scout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements.txt
+          else
+            echo "No runtime dependencies to install."
+          fi
+
+      - name: Run pipeline
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          SINCE_DAYS="${{ inputs.since_days || '7' }}"
+          SOURCES="${{ inputs.sources || 'remotive' }}"
+          STRICT="${{ inputs.strict || 'false' }}"
+          ALLOW_MISSING="${{ inputs.allow_missing_salary || 'true' }}"
+          CMD=(python -m job_scout run --since-days "$SINCE_DAYS" --source "$SOURCES" --output-dir out)
+          if [ "$STRICT" = "true" ]; then
+            CMD+=("--strict")
+          fi
+          if [ "$ALLOW_MISSING" = "true" ]; then
+            CMD+=("--allow-missing-salary")
+          fi
+          "${CMD[@]}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-scout-output
+          if-no-files-found: warn
+          path: |
+            out/report.csv
+            out/report.md
+            out/last_run.json
