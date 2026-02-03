@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -17,6 +18,17 @@ from job_scout.scoring import apply_scoring
 from job_scout.writers import ReportRow, SourceStatus, write_reports
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PipelineSummary:
+    """Aggregate counts from a pipeline run."""
+
+    fetched_count: int
+    normalized_count: int
+    candidates_count: int
+    matches_count: int
+    source_counts: dict[str, int]
 
 
 def _resolve_sources(selected: Iterable[str] | None) -> list[str]:
@@ -38,7 +50,7 @@ def run_pipeline(
     strict: bool,
     allow_missing_salary: bool,
     sources: Iterable[str] | None,
-) -> list[ReportRow]:
+) -> tuple[list[ReportRow], PipelineSummary]:
     """Run the job scouting pipeline end-to-end."""
 
     source_names = _resolve_sources(sources)
@@ -54,6 +66,9 @@ def run_pipeline(
 
     all_rows: list[ReportRow] = []
     source_statuses: list[SourceStatus] = []
+    fetched_total = 0
+    normalized_total = 0
+    source_counts: dict[str, int] = {}
     for name in source_names:
         fetcher = AVAILABLE_SOURCES.get(name)
         if not fetcher:
@@ -81,9 +96,12 @@ def run_pipeline(
                 )
             )
             continue
+        fetched_total += len(source_jobs)
+        source_counts[name] = len(source_jobs)
         normalized_jobs = [
             normalize_source_job(job, region_data) for job in source_jobs
         ]
+        normalized_total += len(normalized_jobs)
         postings = [
             job_posting_from_normalized(job)
             for job in normalized_jobs
@@ -105,7 +123,7 @@ def run_pipeline(
                 strict,
                 allow_missing_salary,
             )
-            scored_match = apply_scoring(match, config)
+            scored_match = apply_scoring(updated_posting, match, config)
             all_rows.append(
                 ReportRow(posting=updated_posting, match=scored_match)
             )
@@ -131,4 +149,11 @@ def run_pipeline(
         source_statuses=source_statuses,
     )
     logger.info("Wrote reports to %s", output_dir)
-    return all_rows
+    summary = PipelineSummary(
+        fetched_count=fetched_total,
+        normalized_count=normalized_total,
+        candidates_count=len(matches) + len(missing_salary_allowed),
+        matches_count=len(matches),
+        source_counts=source_counts,
+    )
+    return all_rows, summary

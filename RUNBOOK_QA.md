@@ -29,6 +29,39 @@ automation manual-only until online validation is complete.
 - **Snapshot warning about missing job_id/score:** A notification row was malformed; the
   run still completes and `last_run.json` is updated using valid rows.
 
+### Remotive validation & tuning (Phase 6)
+Use this checklist when Remotive runs return too few candidates or notifications feel empty.
+
+**Validate a Remotive run**
+1. Trigger a run with `--source remotive` (or enable in `config/config.yaml`).
+2. Inspect `out/report.csv` and `out/report.md` to confirm:
+   - Candidates are present in **Matches** or **Missing Salary (allowed)**.
+   - Data governance bonuses appear in `score_bonuses` when keywords match.
+3. Confirm the summary log line includes:
+   - `fetched_count`, `normalized_count`, `candidates_count`, `matches_count`,
+     `notified_count`, and `notification_mode` (`delta_digest` or `daily_digest`).
+
+**Interpreting the summary log**
+- `fetched_count`: raw source items fetched per run.
+- `normalized_count`: items that passed normalization.
+- `candidates_count`: postings not hard-rejected (accepted + missing salary).
+- `matches_count`: accepted postings with salaries meeting minimums.
+- `notified_count`: jobs included in the Telegram digest (top N).
+- `notification_mode`: `delta_digest` for new/improved rows, `daily_digest` otherwise.
+
+**Tuning strictness (config-first)**
+- **Relax location strictness:** keep `location_rules.allow_unknown_location: true`
+  and tune `scoring.penalty_weights.unknown_location` to control ranking impact.
+- **Remote preferences:** adjust `scoring.penalty_weights.prefer_full_remote`
+  instead of rejecting hybrid/onsite.
+- **Salary gaps:** keep `salary_rules.allow_missing_salary: true` and use the
+  `missing_salary` penalty weight to control ranking impact.
+- **Data governance boost:** tune `scoring.data_governance_boost`,
+  `scoring.data_governance_keywords`, and the secondary boost/keywords to increase
+  relevance for governance roles.
+- **Notifications:** raise/lower `notifications.telegram.top_n` or
+  `notifications.telegram.min_score_improvement` to control digest size and sensitivity.
+
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.
 

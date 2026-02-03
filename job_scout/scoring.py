@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from job_scout.matcher import MatchResult
+from job_scout.models import JobPosting
 
 
 def apply_scoring(
-    match: MatchResult, config: Mapping[str, object]
+    posting: JobPosting,
+    match: MatchResult,
+    config: Mapping[str, object],
 ) -> MatchResult:
     """Return a MatchResult with score metadata applied."""
 
-    score, score_penalties, score_bonuses = compute_score(match, config)
+    score, score_penalties, score_bonuses = compute_score(
+        posting, match, config
+    )
     return replace(
         match,
         score=score,
@@ -23,7 +28,9 @@ def apply_scoring(
 
 
 def compute_score(
-    match: MatchResult, config: Mapping[str, object]
+    posting: JobPosting,
+    match: MatchResult,
+    config: Mapping[str, object],
 ) -> tuple[int | None, list[str], list[str]]:
     """Compute deterministic score and applied preference labels."""
 
@@ -57,6 +64,33 @@ def compute_score(
     for bonus in applied_bonuses:
         score += bonus_weights[bonus]
 
+    data_governance_boost = _parse_int(
+        scoring_rules.get("data_governance_boost")
+    )
+    data_governance_secondary_boost = _parse_int(
+        scoring_rules.get("data_governance_secondary_boost")
+    )
+    search_text = _build_search_text(posting)
+    primary_matches = _find_keywords(
+        search_text, scoring_rules.get("data_governance_keywords", [])
+    )
+    secondary_matches = _find_keywords(
+        search_text,
+        scoring_rules.get("data_governance_secondary_keywords", []),
+    )
+    if primary_matches and data_governance_boost:
+        score += data_governance_boost
+        applied_bonuses.append(
+            _format_keyword_bonus("data_governance", primary_matches)
+        )
+    if secondary_matches and data_governance_secondary_boost:
+        score += data_governance_secondary_boost
+        applied_bonuses.append(
+            _format_keyword_bonus(
+                "data_governance_secondary", secondary_matches
+            )
+        )
+
     return score, applied_penalties, applied_bonuses
 
 
@@ -70,6 +104,34 @@ def _parse_weights(raw: object) -> dict[str, int]:
         except (TypeError, ValueError):
             continue
     return parsed
+
+
+def _parse_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_search_text(posting: JobPosting) -> str:
+    return f"{posting.title}\n{posting.description_snippet}".lower()
+
+
+def _find_keywords(text: str, keywords: object) -> list[str]:
+    if not isinstance(keywords, Iterable) or isinstance(keywords, str):
+        return []
+    matches: list[str] = []
+    for entry in keywords:
+        if not isinstance(entry, str):
+            continue
+        lowered = entry.lower()
+        if lowered and lowered in text:
+            matches.append(entry)
+    return sorted(set(matches), key=str.lower)
+
+
+def _format_keyword_bonus(prefix: str, keywords: list[str]) -> str:
+    return f"{prefix}: {', '.join(keywords)}"
 
 
 def _as_dict(raw: object) -> dict[str, object]:

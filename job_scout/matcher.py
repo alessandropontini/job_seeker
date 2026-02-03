@@ -50,15 +50,11 @@ def match_posting(
         salary_max_eur,
         missing_salary,
         remote_level,
-    ) = evaluate_hard_constraints(
-        posting, config, region_data, strict, allow_missing_salary
-    )
+    ) = evaluate_hard_constraints(posting, config, region_data, strict)
     decision = "rejected" if hard_reject_reasons else "accepted"
-    missing_salary_allowed = (
-        missing_salary and allow_missing_salary and not strict
-    )
+    missing_salary_allowed = missing_salary and allow_missing_salary
     penalties = evaluate_soft_preferences(
-        posting, config, missing_salary_allowed, remote_level
+        config, missing_salary_allowed, missing_fields, remote_level
     )
     matches_all = decision == "accepted"
 
@@ -88,7 +84,6 @@ def evaluate_hard_constraints(
     config: Mapping[str, object],
     region_data: RegionData,
     strict: bool,
-    allow_missing_salary: bool,
 ) -> tuple[
     list[str],
     list[str],
@@ -124,6 +119,9 @@ def evaluate_hard_constraints(
     currency_rates = merge_currency_rates(
         salary_rules.get("currency_rates")
     )
+    allow_unknown_location = bool(
+        location_rules.get("allow_unknown_location", True)
+    )
 
     location_country = normalize_country(
         posting.location_country, region_data
@@ -132,7 +130,10 @@ def evaluate_hard_constraints(
     location_country_lower = location_country.lower()
     location_text_lower = location_text.lower()
 
-    if not location_country_lower and not location_text_lower:
+    location_missing = (
+        not location_country_lower and not location_text_lower
+    )
+    if location_missing:
         missing_fields.append("location")
     if location_country_lower in exclude_countries:
         hard_reject_reasons.append("excluded_country")
@@ -151,8 +152,9 @@ def evaluate_hard_constraints(
         location_allowed = True
 
     if not location_allowed:
-        if strict and not location_country_lower and not location_text_lower:
-            hard_reject_reasons.append("location_missing_strict")
+        if location_missing:
+            if strict or not allow_unknown_location:
+                hard_reject_reasons.append("location_missing_strict")
         else:
             hard_reject_reasons.append("location_not_allowed")
 
@@ -182,10 +184,6 @@ def evaluate_hard_constraints(
 
     if missing_salary:
         missing_fields.append("salary")
-        if strict:
-            hard_reject_reasons.append("missing_salary_strict")
-        elif not allow_missing_salary:
-            hard_reject_reasons.append("missing_salary_disallowed")
 
     remote_level = normalize_remote_level(posting.remote_type)
 
@@ -200,9 +198,9 @@ def evaluate_hard_constraints(
 
 
 def evaluate_soft_preferences(
-    posting: JobPosting,
     config: Mapping[str, object],
     missing_salary_allowed: bool,
+    missing_fields: list[str],
     remote_level: str,
 ) -> list[str]:
     """Evaluate soft preferences, returning deterministic penalty labels."""
@@ -214,6 +212,8 @@ def evaluate_soft_preferences(
         penalties.append("prefer_full_remote")
     if missing_salary_allowed:
         penalties.append("missing_salary")
+    if "location" in missing_fields:
+        penalties.append("unknown_location")
     return penalties
 
 

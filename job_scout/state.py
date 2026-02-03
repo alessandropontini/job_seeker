@@ -248,9 +248,8 @@ def _sort_rows(rows: Iterable[ReportRow]) -> list[ReportRow]:
     return sorted(
         list(rows),
         key=lambda row: (
-            row.match.score or 0,
-            row.posting.posted_at,
+            -(row.match.score or 0),
             row.posting.id,
+            row.posting.source,
         ),
-        reverse=True,
     )

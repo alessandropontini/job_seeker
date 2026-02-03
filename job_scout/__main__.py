@@ -95,7 +95,7 @@ def main(argv: List[str] | None = None) -> int:
             allow_missing_salary = salary_rules.get("flag_missing_salary", True)
         if args.allow_missing_salary is not None:
             allow_missing_salary = True
-        rows = run_pipeline(
+        rows, summary = run_pipeline(
             since_days=args.since_days,
             output_dir=args.output_dir,
             config=config,
@@ -103,7 +103,20 @@ def main(argv: List[str] | None = None) -> int:
             allow_missing_salary=bool(allow_missing_salary),
             sources=args.source,
         )
-        maybe_notify(rows, args.output_dir, config)
+        notification = maybe_notify(rows, args.output_dir, config)
+        logger = logging.getLogger(__name__)
+        logger.info(
+            "Run summary: fetched_count=%s normalized_count=%s "
+            "candidates_count=%s matches_count=%s notified_count=%s "
+            "notification_mode=%s source_counts=%s",
+            summary.fetched_count,
+            summary.normalized_count,
+            summary.candidates_count,
+            summary.matches_count,
+            notification.notified_count,
+            notification.notification_mode,
+            summary.source_counts,
+        )
         return 0
 
     return 1

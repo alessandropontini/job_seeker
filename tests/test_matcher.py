@@ -118,6 +118,22 @@ def test_rejects_unknown_location_in_strict(base_config, region_data):
     assert "location" in result.missing_fields
 
 
+def test_accepts_unknown_location_when_not_strict(
+    base_config, region_data
+):
+    posting = _posting(location_text="", location_country="")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert result.matches_all is True
+    assert "unknown_location" in result.penalties
+
+
 def test_rejects_location_not_allowed_when_not_strict(
     base_config, region_data
 ):
@@ -250,7 +266,7 @@ def test_salary_below_minimum_rejected(base_config, region_data):
     assert "salary_below_minimum" in result.hard_reject_reasons
 
 
-def test_missing_salary_strict_rejected(base_config, region_data):
+def test_missing_salary_strict_allowed(base_config, region_data):
     posting = _posting(salary_text=None, currency=None)
     _, result = match_posting(
         posting,
@@ -259,8 +275,8 @@ def test_missing_salary_strict_rejected(base_config, region_data):
         strict=True,
         allow_missing_salary=True,
     )
-    assert result.decision == "rejected"
-    assert "missing_salary_strict" in result.hard_reject_reasons
+    assert result.decision == "accepted"
+    assert result.missing_salary is True
     assert "salary" in result.missing_fields
 
 
@@ -291,8 +307,9 @@ def test_missing_salary_disallowed(base_config, region_data):
         strict=False,
         allow_missing_salary=False,
     )
-    assert result.decision == "rejected"
-    assert "missing_salary_disallowed" in result.hard_reject_reasons
+    assert result.decision == "accepted"
+    assert result.missing_salary is True
+    assert "missing_salary" not in result.penalties
 
 
 def test_prefer_full_remote_penalty_allows_match(

@@ -17,6 +17,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "include_cities": ["New York"],
         "exclude_countries": ["UK"],
         "prefer_full_remote": True,
+        "allow_unknown_location": True,
     },
     "role_targeting": {"include_titles": ["manager", "lead", "head"]},
     "salary_rules": {
@@ -29,17 +30,44 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "penalty_weights": {
             "prefer_full_remote": 15,
             "missing_salary": 10,
+            "unknown_location": 8,
         },
         "bonus_weights": {
             "full_remote": 5,
         },
+        "data_governance_boost": 20,
+        "data_governance_secondary_boost": 5,
+        "data_governance_keywords": [
+            "data governance",
+            "data management",
+            "data quality",
+            "data stewardship",
+            "metadata",
+            "data lineage",
+            "data catalog",
+            "data ownership",
+            "mdm",
+            "master data",
+            "reference data",
+            "bcbs 239",
+            "dama-dmbok",
+            "collibra",
+            "informatica",
+            "alation",
+            "microsoft purview",
+        ],
+        "data_governance_secondary_keywords": [
+            "bigquery",
+            "gcp",
+            "cloud data platform",
+        ],
     },
     "notifications": {
         "telegram": {
             "enabled": True,
-            "top_n": 5,
+            "top_n": 10,
             "min_score": 0,
-            "min_score_improvement": 5,
+            "min_score_improvement": 3,
         }
     },
 }

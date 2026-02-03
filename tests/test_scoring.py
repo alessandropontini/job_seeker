@@ -39,7 +39,7 @@ def test_scoring_applies_penalties_and_bonuses():
         strict=False,
         allow_missing_salary=True,
     )
-    scored = apply_scoring(match, config)
+    scored = apply_scoring(posting, match, config)
 
     assert scored.score == 95
     assert scored.score_penalties == ["missing_salary"]
@@ -57,8 +57,34 @@ def test_scoring_skips_rejected_postings():
         strict=False,
         allow_missing_salary=True,
     )
-    scored = apply_scoring(match, config)
+    scored = apply_scoring(posting, match, config)
 
     assert scored.score is None
     assert scored.score_penalties == []
     assert scored.score_bonuses == []
+
+
+def test_scoring_applies_data_governance_boost():
+    config = deepcopy(DEFAULT_CONFIG)
+    config["scoring"]["data_governance_boost"] = 25
+    posting = _posting(
+        title="Data Governance Manager",
+        description_snippet="Own Collibra policies and metadata stewardship.",
+        salary_text="€90k-€110k",
+        currency="EUR",
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert scored.score == 130
+    assert any(
+        bonus.startswith("data_governance:")
+        for bonus in scored.score_bonuses
+    )
