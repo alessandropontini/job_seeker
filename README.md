@@ -90,6 +90,9 @@ python -m job_scout sources --test remotive --since-days 7
 
 ## Phase 6 — Automation & Notifications (in validation)
 - Manual-only GitHub Actions runs (no push/PR/schedule triggers).
+- The **only** active workflow is `job-scout` and it must be triggered manually
+  via **Actions → job-scout → Run workflow**.
+- CI tests and build workflows are intentionally removed/disabled in Phase 6.
 - Lightweight state snapshot + diff to detect new/improved matches.
 - Digest notifications (Telegram always enabled by default) and deterministic.
 - **Phase 6 includes automatic Telegram notifications by default.** If secrets are
@@ -122,6 +125,8 @@ The pipeline writes reports to `out/`:
   - Accepted postings include a score line and score adjustments.
 - `out/last_run.json` stores the last run snapshot (job IDs + scores) for diff-based
   notifications.
+When running in GitHub Actions, these files are uploaded as workflow artifacts:
+`report.csv`, `report.md`, and `last_run.json`.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -140,6 +145,9 @@ The pipeline writes reports to `out/`:
 - Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 - If secrets are missing or invalid, the run completes with a warning and skips
   the notification (no secrets are printed).
+- Diagnostics are safe: logs show `getMe` validation results and
+  `sendMessage` failures with Telegram's status/description, plus
+  boolean `token_present`/`chat_id_present` indicators only.
 
 ## Testing
 Run offline tests (default, deterministic):
@@ -175,8 +183,7 @@ bash tools/install_dev_deps.sh
 ```
 The install script will try PyPI first, then fall back to the wheelhouse using
 `--no-index --find-links` once the archive is downloaded or extracted.
-Build the wheelhouse with `.github/workflows/build-wheelhouse.yml` and download
-the `wheelhouse-py311.zip` artifact for reuse.
+Provide the wheelhouse zip manually when CI/build workflows are disabled.
 
 #### PyPI blocked / wheelhouse fallback (copy/paste)
 ```bash
@@ -189,11 +196,8 @@ NO_NETWORK=1 python -m pytest -q
 JOB_SCOUT_RUN_INTEGRATION=1 python -m pytest -q -m integration
 ```
 
-Wheelhouse download via GitHub CLI:
-```bash
-gh workflow run build-wheelhouse.yml
-gh run download --name wheelhouse-py311
-```
+Wheelhouse downloads are not automated in Phase 6; provide the archive via a
+local path or URL.
 
 ### Integration troubleshooting
 If live integration returns HTTP 403 or 429, reproduce with curl:

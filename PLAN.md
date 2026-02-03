@@ -60,7 +60,7 @@
 - Documented offline-first QA runbook with opt-in online integration validation.
 - Added Remotive integration troubleshooting notes and curl evidence capture.
 - Added a wheelhouse-based pytest install fallback and QA scripts for air-gapped runs.
-- Refreshed wheelhouse QA instructions and build workflow for PyPI-blocked environments.
+- Refreshed wheelhouse QA instructions for PyPI-blocked environments.
 - QA close-out confirmed deterministic pipeline, offline execution support, and golden snapshots.
 - External dependency failures (HTTP 403/429, NO_NETWORK) documented as environment limits.
 
@@ -72,3 +72,8 @@
 - Missing/invalid secrets yield warnings without failing the run.
 - Notify only when new or improved/high-scoring items appear.
 - State snapshot + diff tracking is persisted between runs.
+- No scheduled or automatic workflows until Phase 6 is fully validated online.
+
+**Recent updates**
+- Added safe Telegram diagnostics: getMe validation, sendMessage hints, and
+  token/chat presence logging without secrets.
