@@ -34,15 +34,31 @@ def _fetch_remotive_payload() -> dict:
         raise RemotiveSourceError(
             "Network disabled (NO_NETWORK=1); use fixtures or integration tests."
         )
+    request = urllib.request.Request(
+        REMOTIVE_API_URL,
+        headers={
+            "User-Agent": "job_scout/1.0",
+            "Accept": "application/json",
+        },
+    )
     try:
-        with urllib.request.urlopen(
-            REMOTIVE_API_URL, timeout=30
-        ) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        raise RemotiveSourceError(
-            f"Remotive HTTP error: {exc.code}"
-        ) from exc
+        snippet = ""
+        try:
+            snippet = exc.read(200).decode(
+                "utf-8", errors="replace"
+            )
+        except Exception:
+            snippet = ""
+        detail = (
+            f"Remotive HTTP error: {exc.code} "
+            f"for {REMOTIVE_API_URL}"
+        )
+        if snippet:
+            detail = f"{detail} (response snippet: {snippet})"
+        raise RemotiveSourceError(detail) from exc
     except urllib.error.URLError as exc:
         raise RemotiveSourceError(
             f"Remotive connection error: {exc.reason}"

@@ -20,6 +20,11 @@ def test_remotive_live_fetch(monkeypatch):
             pytest.skip(
                 "Remotive rate limited (HTTP 429); rerun later."
             )
+        if "HTTP error: 403" in message:
+            pytest.fail(
+                "Remotive integration fetch failed "
+                f"(forbidden): {message}"
+            )
         pytest.fail(
             f"Remotive integration fetch failed: {message}"
         )

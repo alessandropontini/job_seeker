@@ -128,6 +128,15 @@ Run optional online integration tests (required to validate real sources):
 JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
 ```
 
+### Integration troubleshooting
+If live integration returns HTTP 403 or 429, reproduce with curl:
+```bash
+curl -i "https://remotive.com/api/remote-jobs?limit=1"
+curl -i -H "User-Agent: job_scout_integration_test/1.0" -H "Accept: application/json" \
+  "https://remotive.com/api/remote-jobs?limit=1"
+```
+See `QA_NOTES.md` for captured evidence and notes.
+
 ### Golden tests vs online integration tests
 - Golden tests are offline and compare pipeline outputs against committed fixtures.
 - Integration tests are opt-in, hit real APIs, and are skipped by default.

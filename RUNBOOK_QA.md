@@ -41,3 +41,12 @@ pytest -q -m integration
 - Keep timeouts explicit in source calls.
 - Handle HTTP errors or rate limits (e.g., 429) with clear, explicit test messaging.
 - Do not treat temporary API downtime as a silent pass; surface the reason clearly in the test output.
+
+**Troubleshooting (HTTP 403/429)**
+Reproduce with curl (capture output in QA notes):
+```bash
+curl -i "https://remotive.com/api/remote-jobs?limit=1"
+curl -i -H "User-Agent: job_scout_integration_test/1.0" -H "Accept: application/json" \
+  "https://remotive.com/api/remote-jobs?limit=1"
+```
+See `QA_NOTES.md` for evidence captured during investigation.
