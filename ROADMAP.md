@@ -14,6 +14,8 @@
 - Scoring is deterministic, configurable, and applied to accepted postings for ranking.
 - Offline tests are deterministic and run with `NO_NETWORK=1`; online integration tests are opt-in.
 - Phase 6 is in validation: manual-only automation with Telegram notifications always enabled.
+- Daily digest fallback delivers top matches when no deltas are found.
+- Data governance keyword boosts surface governance roles higher in ranking.
 - Phase 5 QA notes confirm deterministic outputs, golden snapshot tests, and offline support.
 
 ## Target Vision (in one paragraph)
@@ -151,6 +153,7 @@ Add manual-only automation and notification delivery without changing matching o
 - [x] Manual-only runs (GitHub Actions workflow_dispatch only).
 - [x] Notification digest generation (Telegram enabled by default).
 - [x] Notify only on new or improved/high-scoring items.
+- [x] Daily digest fallback when there are no new/improved matches.
 - [x] Clear logs when notifications are sent or skipped (with reasons).
 - [x] Unit tests for diff logic + notification formatting (no network).
 

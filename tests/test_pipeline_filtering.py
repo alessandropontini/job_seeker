@@ -6,7 +6,7 @@ def test_pipeline_groups_and_reports(tmp_path):
     output_dir = tmp_path / "out"
     config = dict(DEFAULT_CONFIG)
 
-    rows = run_pipeline(
+    rows, _summary = run_pipeline(
         since_days=7,
         output_dir=output_dir,
         config=config,

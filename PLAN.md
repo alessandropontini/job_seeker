@@ -79,3 +79,5 @@
   token/chat presence logging without secrets.
 - Hardened snapshot notification marking to accept tuple/dict/object rows,
   log warnings for malformed entries, and always update `last_run.json`.
+- Added daily digest fallback when no new/improved matches are found.
+- Added data governance keyword boosts and rationale visibility in outputs.

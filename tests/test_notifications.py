@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
-from job_scout.notifications import format_digest, select_notified_rows
+from job_scout.notifications import build_digest, select_top_matches
 from job_scout.state import Snapshot, diff_rows
 from job_scout.writers import ReportRow
 
@@ -40,7 +40,7 @@ def _make_row(job_id: str, score: int, penalties: list[str]) -> ReportRow:
     return ReportRow(posting=posting, match=match)
 
 
-def test_format_digest_includes_reasons_and_scores():
+def test_build_digest_delta_includes_reasons_and_scores():
     previous = Snapshot(
         generated_at="2024-01-01T00:00:00+00:00",
         jobs={
@@ -52,11 +52,47 @@ def test_format_digest_includes_reasons_and_scores():
         _make_row("beta", 110, []),
     ]
     diff = diff_rows(previous, rows, min_improvement=5)
-    notified = select_notified_rows(diff, top_n=1, minimum_score=0)
-    digest = format_digest(diff, notified_rows=notified)
+    digest, mode, _ = build_digest(
+        diff, rows, top_n=1, minimum_score=0
+    )
 
-    assert digest is not None
-    assert "Job Scout updates" in digest
+    assert digest
+    assert mode == "delta_digest"
+    assert "New/Improved" in digest
     assert "[NEW]" in digest or "[IMPROVED]" in digest
-    assert "score 110" in digest
-    assert "Bonuses: full_remote" in digest
+    assert "Score: 110" in digest
+    assert "bonuses: full_remote" in digest
+
+
+def test_build_digest_daily_when_no_delta():
+    previous = Snapshot(
+        generated_at="2024-01-01T00:00:00+00:00",
+        jobs={
+            "dummy:alpha": {"score": 100, "notified_at": "2024-01-01T00:00:00+00:00"},
+            "dummy:beta": {"score": 90, "notified_at": "2024-01-01T00:00:00+00:00"},
+        },
+    )
+    rows = [
+        _make_row("alpha", 100, []),
+        _make_row("beta", 90, []),
+    ]
+    diff = diff_rows(previous, rows, min_improvement=5)
+
+    digest, mode, notified_rows = build_digest(
+        diff, rows, top_n=2, minimum_score=0
+    )
+
+    assert digest
+    assert mode == "daily_digest"
+    assert notified_rows
+    assert "Top matches today" in digest
+
+
+def test_select_top_matches_ordering_deterministic():
+    rows = [
+        _make_row("bravo", 100, []),
+        _make_row("alpha", 100, []),
+    ]
+    ranked = select_top_matches(rows, top_n=2, minimum_score=0)
+
+    assert [row.posting.id for row in ranked] == ["alpha", "bravo"]

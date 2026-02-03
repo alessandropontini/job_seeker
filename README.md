@@ -36,6 +36,7 @@ Key sections:
 - `sources.enabled`: list of source names to run (`dummy`, `remotive`).
 - `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
+- `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
 - `role_targeting.include_titles`: manager/lead/head keywords to match.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
@@ -43,6 +44,10 @@ Key sections:
 - `scoring.base_score`: starting score for accepted postings.
 - `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
 - `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
+- `scoring.data_governance_boost`: bonus score for data governance keyword matches.
+- `scoring.data_governance_keywords`: primary keyword list for data governance boosts.
+- `scoring.data_governance_secondary_boost`: smaller bonus for secondary keywords.
+- `scoring.data_governance_secondary_keywords`: secondary keyword list (cloud platform signals).
 - `notifications.telegram.enabled`: enable Telegram notifications (default: true).
 - `notifications.telegram.top_n`: number of items in the digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
@@ -55,7 +60,7 @@ python -m job_scout run
 python -m job_scout run --since-days 7
 ```
 
-Run in strict mode (reject missing salary or missing location data):
+Run in strict mode (reject missing location data; salary gaps are still allowed):
 ```bash
 python -m job_scout run --strict
 ```
@@ -95,6 +100,7 @@ python -m job_scout sources --test remotive --since-days 7
 - CI tests and build workflows are intentionally removed/disabled in Phase 6.
 - Lightweight state snapshot + diff to detect new/improved matches.
 - Digest notifications (Telegram always enabled by default) and deterministic.
+- Daily digest fallback when there are no new/improved matches.
 - Snapshot updates tolerate missing/malformed notification rows; warnings are
   logged and the run continues without crashing.
 - **Phase 6 includes automatic Telegram notifications by default.** If secrets are
@@ -103,13 +109,15 @@ python -m job_scout sources --test remotive --since-days 7
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
 - **Role:** only manager/lead/head titles are accepted.
-- **Salary:** minimum 52,000 EUR; missing salary is flagged unless strict mode rejects it.
+- **Salary:** minimum 52,000 EUR; missing salary is flagged and kept in results.
 - **Remote:** remote level is normalized and reported; non-remote roles are not rejected by default.
   `prefer_full_remote` is treated as a soft preference and records a penalty when not met.
+- **Unknown location:** accepted in non-strict runs with an `unknown_location` penalty.
 
 ## Scoring & ranking
 - Scores apply only to **accepted** postings.
 - Score = `scoring.base_score` + bonuses − penalties (all weights configured in `scoring`).
+- Data governance keyword matches add a configurable boost, recorded in score bonuses.
 - Reports order accepted postings by score (desc), then by newest `posted_at`.
 
 ## Outputs
@@ -137,7 +145,7 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
 
 ## Notes
 - Prefer full-remote roles when available, but do not exclude non-remote roles by default.
-- Missing salaries are tagged with `missing_salary` unless strict mode is enabled.
+- Missing salaries are tagged with `missing_salary` when `allow_missing_salary` is enabled.
 - Scores are deterministic and derived from configured preference weights.
 - External dependency failures (HTTP 403/429, NO_NETWORK) are treated as environment
   limitations during QA validation, not project defects.
@@ -147,6 +155,9 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
 - Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 - If secrets are missing or invalid, the run completes with a warning and skips
   the notification (no secrets are printed).
+- Each run sends exactly one digest message:
+  - **New/Improved** when there are new/improved matches.
+  - **Top matches today** (daily digest) when there are no deltas.
 - If the notification payload contains missing fields, snapshot updates fall back
   safely with warnings and the run completes.
 - Diagnostics are safe: logs show `getMe` validation results and

@@ -60,7 +60,15 @@
 
 ## Missing Salary (allowed)
 
-No postings found.
+- **Data Engineering Lead** at **Polar Analytics** (Amsterdam, Netherlands) - full-remote
+  - Posted: 2024-02-01
+  - Salary: Missing
+  - Remote level: full-remote
+  - Tags: analytics
+  - Score: 105
+  - Score adjustments: +full_remote
+  - Link: https://example.com/jobs/polar-analytics-data-lead
+  - Note: Guide the data platform team for EU clients.
 
 ## Rejected
 
@@ -73,14 +81,4 @@ No postings found.
   - Reject reasons: excluded_country, excluded_country_text, location_not_allowed
   - Link: https://example.com/jobs/thames-fintech-manager
   - Note: Own delivery for the payments platform team.
-
-- **Data Engineering Lead** at **Polar Analytics** (Amsterdam, Netherlands) - full-remote
-  - Posted: 2024-02-01
-  - Salary: Missing
-  - Remote level: full-remote
-  - Tags: analytics
-  - Decision: rejected
-  - Reject reasons: missing_salary_strict
-  - Link: https://example.com/jobs/polar-analytics-data-lead
-  - Note: Guide the data platform team for EU clients.
 
