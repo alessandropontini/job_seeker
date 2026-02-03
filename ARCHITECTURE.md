@@ -10,6 +10,9 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 - `job_scout.pipeline`: orchestration (fetch, match, group, write).
 - `job_scout.matcher`: matching rules + match metadata.
 - `job_scout.scoring`: deterministic scoring and ranking metadata.
+- `job_scout.state`: snapshot + diff helpers for notifications.
+- `job_scout.notifications`: notification orchestration (state diff + digest).
+- `job_scout.notifier.telegram`: Telegram delivery backend.
 - `job_scout.writers`: CSV/Markdown report writers.
 - `job_scout.models`: `JobPosting` data model.
 
@@ -22,6 +25,8 @@ Job Scout is a deterministic batch pipeline that fetches job postings, applies r
 6. `job_scout.scoring.apply_scoring` computes scores for accepted postings.
 7. `job_scout.pipeline.run_pipeline` groups rows into Matches / Missing Salary / Rejected.
 8. `job_scout.writers.write_reports` writes `out/report.csv` and `out/report.md`.
+9. `job_scout.notifications.maybe_notify` persists `out/last_run.json` and sends a
+   digest if configured.
 
 ## Key Decision Points (Current)
 - Config loading & merge (`job_scout.config.load_config`).
@@ -74,9 +79,12 @@ Config keys and semantics:
 - `scoring.base_score` — starting score for accepted postings.
 - `scoring.penalty_weights` — per-penalty deductions.
 - `scoring.bonus_weights` — per-bonus additions.
-- `notifications.telegram` — **PLANNED / NOT ENFORCED YET** (disabled by default).
+- `notifications.telegram.enabled` — enable Telegram notifications.
+- `notifications.telegram.top_n` — max jobs included in a digest.
+- `notifications.telegram.min_score` — minimum score to notify.
+- `notifications.telegram.min_score_improvement` — minimum score delta to notify.
 
-**USED TODAY**: all keys above except `notifications.telegram`.
+**USED TODAY**: all keys above.
 
 ### Decision Engine Contract (Phase 3 implemented)
 - Hard constraints: failing any hard constraint rejects the posting.
@@ -96,7 +104,7 @@ Config keys and semantics:
 - Scores and applied adjustments are included in reports.
 
 ## Testing Strategy (Current + Planned)
-Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 adds golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests. Offline runs set `NO_NETWORK=1` to enforce deterministic, no-network behavior; online integration tests are opt-in via `JOB_SCOUT_RUN_INTEGRATION=1` and `-m integration`. Dev-only dependencies are installed via `tools/install_dev_deps.sh`, which attempts PyPI and falls back to a wheelhouse archive specified by `JOB_SCOUT_WHEELHOUSE_URL` for air-gapped environments.
+Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 added golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests. Offline runs set `NO_NETWORK=1` to enforce deterministic, no-network behavior; online integration tests are opt-in via `JOB_SCOUT_RUN_INTEGRATION=1` and `-m integration`. External dependency failures (HTTP 403/429, `NO_NETWORK`) are treated as environment limitations, not project defects. Dev-only dependencies are installed via `tools/install_dev_deps.sh`, which attempts PyPI and falls back to a wheelhouse archive specified by `JOB_SCOUT_WHEELHOUSE_URL` for air-gapped environments.
 
 ## Region Mapping Design
 - Region data lives in `config/regions.json`.

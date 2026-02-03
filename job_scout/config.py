@@ -37,8 +37,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "notifications": {
         "telegram": {
             "enabled": False,
-            "bot_token_env_var": "TELEGRAM_BOT_TOKEN",
-            "chat_id_env_var": "TELEGRAM_CHAT_ID",
+            "top_n": 5,
+            "min_score": 0,
+            "min_score_improvement": 5,
         }
     },
 }

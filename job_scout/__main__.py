@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List
 
 from job_scout.config import load_config
+from job_scout.notifications import maybe_notify
 from job_scout.pipeline import run_pipeline
 from job_scout.sources import AVAILABLE_SOURCES
 
@@ -94,7 +95,7 @@ def main(argv: List[str] | None = None) -> int:
             allow_missing_salary = salary_rules.get("flag_missing_salary", True)
         if args.allow_missing_salary is not None:
             allow_missing_salary = True
-        run_pipeline(
+        rows = run_pipeline(
             since_days=args.since_days,
             output_dir=args.output_dir,
             config=config,
@@ -102,6 +103,7 @@ def main(argv: List[str] | None = None) -> int:
             allow_missing_salary=bool(allow_missing_salary),
             sources=args.source,
         )
+        maybe_notify(rows, args.output_dir, config)
         return 0
 
     return 1
