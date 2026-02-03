@@ -9,9 +9,9 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
   source .venv/bin/activate
 fi
 
-export NO_NETWORK=1
-
 bash tools/install_dev_deps.sh
+
+export NO_NETWORK=1
 
 python -m pytest -q
 python -m pytest -q
