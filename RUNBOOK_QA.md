@@ -9,9 +9,13 @@ documented as environment limitations rather than project defects.
 Manual-only runs use the GitHub Actions workflow `job_scout.yml`. Telegram credentials must be stored
 as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) and are never printed in logs. If
 secrets are missing, notifications are skipped while the pipeline still runs.
+CI/build workflows are intentionally removed in Phase 6 due to environment constraints and to keep
+automation manual-only until online validation is complete.
 
 ### Phase 6 validation checklist
 - Confirm the workflow is manual-only (`workflow_dispatch`) with no push/PR/schedule triggers.
+- Trigger a manual run via **Actions → job-scout → Run workflow**.
+- Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`.
 - Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
@@ -42,16 +46,10 @@ JOB_SCOUT_RUN_INTEGRATION=1 python -m pytest -q -m integration
 ```
 
 #### How to obtain the wheelhouse artifact
-The workflow `.github/workflows/build-wheelhouse.yml` produces
-`wheelhouse-py311.zip` as an artifact.
+Wheelhouse archives must be provided manually in Phase 6, because build workflows
+are intentionally removed while automation is manual-only.
 
-GitHub CLI example:
-```bash
-gh workflow run build-wheelhouse.yml
-gh run download --name wheelhouse-py311
-```
-
-You may also provide a local path if the file is already available:
+You may provide a local path if the file is already available:
 ```bash
 export JOB_SCOUT_WHEELHOUSE_URL=/absolute/path/to/wheelhouse-py311.zip
 ```
@@ -69,8 +67,7 @@ python -m pytest -q
 ```
 
 **Wheelhouse source**
-Use the workflow artifact from `.github/workflows/build-wheelhouse.yml` or a locally
-provided `wheelhouse-py311.zip`. Pass a direct URL, `file://` URL, or local path.
+Use a locally provided `wheelhouse-py311.zip`. Pass a direct URL, `file://` URL, or local path.
 
 ## B) ONLINE (opt-in integration validation)
 Use this path only when you explicitly want to validate real external sources.

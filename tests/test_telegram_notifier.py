@@ -4,8 +4,12 @@ from job_scout.notifier import telegram
 
 
 class _FakeResponse:
-    def __init__(self, status: int = 200) -> None:
+    def __init__(self, status: int = 200, payload: bytes | None = None) -> None:
         self.status = status
+        self._payload = payload or b'{"ok": true, "description": "ok"}'
+
+    def read(self):
+        return self._payload
 
     def __enter__(self):
         return self
@@ -18,7 +22,9 @@ def test_send_message_skips_without_env(monkeypatch):
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
 
-    assert telegram.send_message("test") is False
+    sent, reason = telegram.send_message("test")
+    assert sent is False
+    assert reason == "missing Telegram configuration"
 
 
 def test_send_message_uses_urlopen(monkeypatch):
@@ -34,5 +40,7 @@ def test_send_message_uses_urlopen(monkeypatch):
 
     monkeypatch.setattr(telegram.urllib.request, "urlopen", _fake_urlopen)
 
-    assert telegram.send_message("test") is True
-    assert called["count"] == 1
+    sent, reason = telegram.send_message("test")
+    assert sent is True
+    assert reason is None
+    assert called["count"] == 2

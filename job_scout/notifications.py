@@ -61,9 +61,9 @@ def maybe_notify(
         save_snapshot(snapshot_path, updated_snapshot)
     else:
         if reason:
-            logger.warning("Telegram notification skipped: %s.", reason)
+            logger.info("Telegram notification not sent: %s.", reason)
         else:
-            logger.warning("Telegram notification skipped.")
+            logger.info("Telegram notification not sent.")
         save_snapshot(snapshot_path, diff.current_snapshot)
 
 
