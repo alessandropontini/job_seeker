@@ -46,6 +46,11 @@ scoring:
     full_remote: 5
 
 notifications:
+  enabled: false
+  channels:
+    - telegram
+  top_n: 5
+  minimum_score: 100
   telegram:
     enabled: false
     bot_token_env_var: TELEGRAM_BOT_TOKEN

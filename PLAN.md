@@ -61,11 +61,14 @@
 - Added Remotive integration troubleshooting notes and curl evidence capture.
 - Added a wheelhouse-based pytest install fallback and QA scripts for air-gapped runs.
 - Refreshed wheelhouse QA instructions and build workflow for PyPI-blocked environments.
+- QA close-out confirmed deterministic pipeline, offline execution support, and golden snapshots.
+- External dependency failures (HTTP 403/429, NO_NETWORK) documented as environment limits.
 
-### Phase 6 — Automation & Notifications (optional)
-**Status:** 💤 Optional
+### Phase 6 — Automation & Notifications
+**Status:** 🚧 In progress
 **Acceptance Criteria**
 - Scheduled runs are supported (e.g., cron or CI schedule).
 - Notification digests are opt-in and deterministic.
-- Notify only when new or high-scoring items appear.
+- Notify only when new or improved/high-scoring items appear.
 - Notification tests use fixtures or dry-run mode.
+- State snapshot + diff tracking is persisted between runs.

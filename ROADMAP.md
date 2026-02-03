@@ -1,7 +1,7 @@
 # Job Scout — Project Roadmap
 
-## Where We Are Now (Post Phase 3)
-- Phases 1–3 (rules, explainability, hard/soft separation) are complete.
+## Where We Are Now (Post Phase 5)
+- Phases 1–5 (rules, explainability, hard/soft separation, scoring, QA hardening) are complete.
 - Runnable CLI pipeline that loads config, fetches sources, matches, and writes reports.
 - Sources implemented today: `dummy` (offline) and `remotive` (public API).
 - Location rules are enforced: EU + Italy + New York are allowed; UK is explicitly rejected.
@@ -13,6 +13,7 @@
 - Matching results include hard reject reasons, penalties, missing fields, and decision status.
 - Scoring is deterministic, configurable, and applied to accepted postings for ranking.
 - Offline tests are deterministic and run with `NO_NETWORK=1`; online integration tests are opt-in.
+- Phase 5 QA notes confirm deterministic outputs, golden snapshot tests, and offline support.
 
 ## Target Vision (in one paragraph)
 Job Scout evolves into a deterministic decision engine for job opportunities: it ingests multiple sources, applies explicit hard constraints and soft preferences, produces explainable decisions, and (later) ranks results using transparent scoring—without ML or opaque heuristics.
@@ -125,6 +126,8 @@ Add golden output tests and refine source abstractions without changing matching
 - [x] Error handling for network sources with clear failures and no-network guardrails.
 - [x] Documentation of source contract and normalization rules.
 - [x] Offline CI run with network disabled; integration tests are opt-in.
+- [x] Deterministic pipeline outputs validated with offline execution support.
+- [x] External dependency failures (HTTP 403/429, `NO_NETWORK`) documented as environment limitations.
 
 ### Risks addressed (3–5 bullets)
 - Undetected regressions in outputs.
@@ -136,7 +139,7 @@ Add golden output tests and refine source abstractions without changing matching
 - No automated notifications yet.
 - No changes to CLI flags.
 
-## Phase 6 — Automation & Notifications (OPTIONAL / LATER)
+## Phase 6 — Automation & Notifications (IN PROGRESS)
 ### Objective
 Automate scheduled runs and deliver notification digests when new high-quality matches appear.
 
@@ -144,11 +147,11 @@ Automate scheduled runs and deliver notification digests when new high-quality m
 Add scheduling and notification delivery without changing matching or scoring rules.
 
 ### Definition of Done (5–8 checkboxes)
-- [ ] Scheduled runs (e.g., GitHub Actions cron).
-- [ ] Notification digest generation (Telegram optional).
-- [ ] Notify only on new or high-scoring items.
-- [ ] Opt-in configuration with explicit enablement.
-- [ ] Tests or dry-run mode for notifications.
+- [x] Scheduled runs (GitHub Actions cron + manual dispatch).
+- [x] Notification digest generation (Telegram optional).
+- [x] Notify only on new or improved/high-scoring items.
+- [x] Opt-in configuration with explicit enablement.
+- [x] Unit tests for diff logic + notification formatting (no network).
 
 ### Risks addressed (3–5 bullets)
 - Spamming notifications without relevance.

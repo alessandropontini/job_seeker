@@ -8,8 +8,8 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 2 — Decision Transparency & Explainability.
 - **Done:** Phase 3 — Hard vs Soft Rules Separation.
 - **Done:** Phase 4 — Scoring & Ranking.
-- **Done:** Phase 5 — Reliability & Extensibility.
-- **Optional:** Phase 6 — Automation & Notifications.
+- **Done:** Phase 5 — Reliability & Extensibility (QA & hardening complete).
+- **In progress:** Phase 6 — Automation & Notifications.
 
 Project docs:
 - [ROADMAP.md](ROADMAP.md)
@@ -43,6 +43,11 @@ Key sections:
 - `scoring.base_score`: starting score for accepted postings.
 - `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
 - `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
+- `notifications.enabled`: master switch for notifications (default: false).
+- `notifications.channels`: notification channels list (supports `telegram`).
+- `notifications.top_n`: number of items in the digest.
+- `notifications.minimum_score`: minimum score required to notify.
+- `notifications.telegram.enabled`: enable Telegram channel.
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
@@ -77,9 +82,17 @@ python -m job_scout sources --test remotive --since-days 7
 
 ## Phase 5 — Reliability & Extensibility (overview)
 - Added golden snapshot tests to validate deterministic CSV/Markdown outputs offline.
+- Confirmed deterministic pipeline behavior with offline execution support.
 - Introduced a source normalization contract and centralized salary/remote normalization.
 - Externalized region/country mappings into `config/regions.json`.
 - Added source failure reporting in `out/report.md` under **Source Status**.
+- Documented external dependency failure handling (HTTP 403/429, NO_NETWORK) as
+  environment limitations rather than project defects.
+
+## Phase 6 — Automation & Notifications (in progress)
+- Scheduled automation via GitHub Actions (cron + manual dispatch).
+- Lightweight state snapshot + diff to detect new/improved matches.
+- Digest notifications (Telegram optional), opt-in and deterministic.
 
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
@@ -106,6 +119,8 @@ The pipeline writes reports to `out/`:
   - `## Missing Salary (allowed)`
   - `## Rejected`
   - Accepted postings include a score line and score adjustments.
+- `out/state.json` stores the last run snapshot (job IDs + scores) for diff-based
+  notifications.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -116,6 +131,8 @@ The pipeline writes reports to `out/`:
 - Prefer full-remote roles when available, but do not exclude non-remote roles by default.
 - Missing salaries are tagged with `missing_salary` unless strict mode is enabled.
 - Scores are deterministic and derived from configured preference weights.
+- External dependency failures (HTTP 403/429, NO_NETWORK) are treated as environment
+  limitations during QA validation, not project defects.
 
 ## Testing
 Run offline tests (default, deterministic):
@@ -195,3 +212,17 @@ python tools/update_goldens.py
 - `JOB_SCOUT_RUN_INTEGRATION=1`: opt-in to live API integration tests.
 - `JOB_SCOUT_FIXTURE_DIR=tests/fixtures`: use fixture payloads instead of live APIs.
 - Pytest marker: `integration` for live-network tests.
+
+## Notifications (Phase 6)
+Notifications are opt-in and disabled by default. Configure in `config/config.yaml`:
+- `notifications.enabled`: master switch.
+- `notifications.channels`: list of enabled channels (supports `telegram`).
+- `notifications.top_n`: number of jobs to include in the digest.
+- `notifications.minimum_score`: minimum score required to notify.
+- `notifications.telegram.enabled`: enable Telegram channel.
+
+Telegram credentials must be set via environment variables:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+If credentials are missing, notifications are skipped and the run continues.

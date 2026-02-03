@@ -1,6 +1,9 @@
 # QA Runbook — Offline & Online Validation
 
 This runbook provides deterministic offline validation and an explicit opt-in path for online integration testing.
+Phase 5 (QA & hardening) is complete: the pipeline is deterministic, offline execution is supported, and golden
+snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP 403/429, `NO_NETWORK`) are
+documented as environment limitations rather than project defects.
 
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.
@@ -89,7 +92,8 @@ bash tools/run_tests_integration.sh
   cannot be performed.
 
 These outcomes are environment-dependent. A 429 or 403 is not a project-logic bug, but
-tests must report them deterministically (skip vs fail) and must never crash.
+tests must report them deterministically (skip vs fail) and must never crash. When `NO_NETWORK=1` is set,
+offline runs must pass without network access; failures in restricted environments are external limitations.
 
 **Anti-flake recommendations**
 - Keep timeouts explicit in source calls.

@@ -35,6 +35,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
     },
     "notifications": {
+        "enabled": False,
+        "channels": ["telegram"],
+        "top_n": 5,
+        "minimum_score": 100,
         "telegram": {
             "enabled": False,
             "bot_token_env_var": "TELEGRAM_BOT_TOKEN",
