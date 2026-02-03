@@ -154,6 +154,23 @@ The install script will try PyPI first, then fall back to the wheelhouse using
 Build the wheelhouse with `.github/workflows/build-wheelhouse.yml` and download
 the `wheelhouse-py311.zip` artifact for reuse.
 
+#### PyPI blocked / wheelhouse fallback (copy/paste)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+export JOB_SCOUT_WHEELHOUSE_URL=</path/or/url/to/wheelhouse-py311.zip>
+bash tools/install_dev_deps.sh
+NO_NETWORK=1 python -m pytest -q
+NO_NETWORK=1 python -m pytest -q
+JOB_SCOUT_RUN_INTEGRATION=1 python -m pytest -q -m integration
+```
+
+Wheelhouse download via GitHub CLI:
+```bash
+gh workflow run build-wheelhouse.yml
+gh run download --name wheelhouse-py311
+```
+
 ### Integration troubleshooting
 If live integration returns HTTP 403 or 429, reproduce with curl:
 ```bash

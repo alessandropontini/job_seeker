@@ -18,6 +18,17 @@ export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
 bash tools/install_dev_deps.sh
 ```
 
+### PyPI blocked / wheelhouse fallback (copy/paste)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+export JOB_SCOUT_WHEELHOUSE_URL=</path/or/url/to/wheelhouse-py311.zip>
+bash tools/install_dev_deps.sh
+NO_NETWORK=1 python -m pytest -q
+NO_NETWORK=1 python -m pytest -q
+JOB_SCOUT_RUN_INTEGRATION=1 python -m pytest -q -m integration
+```
+
 ## How to build the wheelhouse
 Use the GitHub Actions workflow `.github/workflows/build-wheelhouse.yml`.
 It produces `wheelhouse-py311.zip` as a workflow artifact containing the wheels

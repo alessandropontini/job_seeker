@@ -23,7 +23,7 @@ jobs:
       - name: Download wheelhouse
         run: |
           mkdir -p wheelhouse
-          python -m pip download --only-binary=:all: --dest wheelhouse "pytest>=7.4,<9"
+          python -m pip download --only-binary=:all: --dest wheelhouse -r requirements-dev.txt
 
       - name: Add third-party notices
         run: |
