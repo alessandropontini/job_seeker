@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
-from job_scout.state import Snapshot, diff_rows
+from job_scout.state import Snapshot, diff_rows, mark_notified
 from job_scout.writers import ReportRow
 
 
@@ -57,3 +57,29 @@ def test_diff_rows_tracks_new_and_improved():
 
     assert [row.posting.id for row in diff.new_rows] == ["gamma"]
     assert [row.posting.id for row in diff.improved_rows] == ["alpha"]
+
+
+def test_mark_notified_accepts_tuple_rows():
+    snapshot = Snapshot(generated_at="2024-01-01T00:00:00+00:00", jobs={})
+    row = _make_row("alpha", 120)
+
+    updated = mark_notified(snapshot, notified_rows=[("new", row)])
+
+    assert "dummy:alpha" in updated.jobs
+    assert updated.jobs["dummy:alpha"]["score"] == 120
+    assert updated.jobs["dummy:alpha"]["notified_at"]
+
+
+def test_mark_notified_accepts_dict_rows():
+    snapshot = Snapshot(generated_at="2024-01-01T00:00:00+00:00", jobs={})
+
+    updated = mark_notified(
+        snapshot,
+        notified_rows=[
+            {"id": "beta", "source": "dummy", "score": 105}
+        ],
+    )
+
+    assert "dummy:beta" in updated.jobs
+    assert updated.jobs["dummy:beta"]["score"] == 105
+    assert updated.jobs["dummy:beta"]["notified_at"]
