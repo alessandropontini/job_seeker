@@ -59,6 +59,7 @@
 - Updated documentation for contracts, tests, and failure modes.
 - Documented offline-first QA runbook with opt-in online integration validation.
 - Added Remotive integration troubleshooting notes and curl evidence capture.
+- Added a wheelhouse-based pytest install fallback and QA scripts for air-gapped runs.
 
 ### Phase 6 — Automation & Notifications (optional)
 **Status:** 💤 Optional

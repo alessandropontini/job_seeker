@@ -26,7 +26,7 @@ Project docs:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+bash tools/install_dev_deps.sh
 ```
 
 ## Configuration
@@ -127,6 +127,32 @@ Run optional online integration tests (required to validate real sources):
 ```bash
 JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
 ```
+
+### Offline & online QA runner scripts
+Offline deterministic QA (wheelhouse fallback supported):
+```bash
+export NO_NETWORK=1
+export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
+bash tools/run_tests_offline.sh
+```
+
+Online integration QA (wheelhouse fallback supported):
+```bash
+export JOB_SCOUT_RUN_INTEGRATION=1
+export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
+bash tools/run_tests_integration.sh
+```
+
+### Troubleshooting (PyPI blocked)
+If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
+```bash
+export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
+bash tools/install_dev_deps.sh
+```
+The install script will try PyPI first, then fall back to the wheelhouse using
+`--no-index --find-links` once the archive is downloaded or extracted.
+Build the wheelhouse with `.github/workflows/build-wheelhouse.yml` and download
+the `wheelhouse-py311.zip` artifact for reuse.
 
 ### Integration troubleshooting
 If live integration returns HTTP 403 or 429, reproduce with curl:
