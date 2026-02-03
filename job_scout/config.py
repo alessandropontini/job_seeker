@@ -70,6 +70,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "min_score_improvement": 3,
         }
     },
+    "digest": {
+        "mode": "daily_window",
+        "window_hours": 24,
+        "top_n": 10,
+    },
 }
 
 

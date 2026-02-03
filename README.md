@@ -9,7 +9,7 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 3 — Hard vs Soft Rules Separation.
 - **Done:** Phase 4 — Scoring & Ranking.
 - **Done:** Phase 5 — Reliability & Extensibility (QA & hardening complete).
-- **In validation:** Phase 6 — Automation & Notifications (manual trigger only).
+- **Live:** Phase 6 — Automation & Notifications (scheduled daily digest @ 08:00 Europe/Rome).
 
 Project docs:
 - [ROADMAP.md](ROADMAP.md)
@@ -48,10 +48,12 @@ Key sections:
 - `scoring.data_governance_keywords`: primary keyword list for data governance boosts.
 - `scoring.data_governance_secondary_boost`: smaller bonus for secondary keywords.
 - `scoring.data_governance_secondary_keywords`: secondary keyword list (cloud platform signals).
-- `notifications.telegram.enabled`: enable Telegram notifications (default: true).
-- `notifications.telegram.top_n`: number of items in the digest.
+- `notifications.telegram.enabled`: Telegram is always-on in production (defaults to true).
+- `notifications.telegram.top_n`: fallback max items per digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
-- `notifications.telegram.min_score_improvement`: minimum score delta to notify.
+- `digest.mode`: `daily_window` for the scheduled digest behavior.
+- `digest.window_hours`: size of the daily window (24 hours).
+- `digest.top_n`: number of items in the daily digest.
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
@@ -93,18 +95,15 @@ python -m job_scout sources --test remotive --since-days 7
 - Documented external dependency failure handling (HTTP 403/429, NO_NETWORK) as
   environment limitations rather than project defects.
 
-## Phase 6 — Automation & Notifications (in validation)
-- Manual-only GitHub Actions runs (no push/PR/schedule triggers).
-- The **only** active workflow is `job-scout` and it must be triggered manually
-  via **Actions → job-scout → Run workflow**.
-- CI tests and build workflows are intentionally removed/disabled in Phase 6.
-- Lightweight state snapshot + diff to detect new/improved matches.
-- Digest notifications (Telegram always enabled by default) and deterministic.
-- Daily digest fallback when there are no new/improved matches.
-- Snapshot updates tolerate missing/malformed notification rows; warnings are
-  logged and the run continues without crashing.
-- **Phase 6 includes automatic Telegram notifications by default.** If secrets are
-  missing, the run completes with a warning and no notification.
+## Phase 6 — Automation & Notifications (live)
+- GitHub Actions runs daily at **08:00 Europe/Rome** (CET/CEST schedule in UTC).
+- Manual runs remain available via **Actions → job-scout → Run workflow**.
+- CI tests and build workflows remain intentionally removed/disabled.
+- Daily digest uses a 24-hour window (UTC) based on `posted_at` timestamps.
+- Telegram notifications are always on and send exactly one message per run.
+- Snapshot updates tolerate missing/malformed entries; warnings are logged and the
+  run continues without crashing.
+- If secrets are missing or invalid, the run completes with a warning and no notification.
 
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
@@ -133,8 +132,8 @@ The pipeline writes reports to `out/`:
   - `## Missing Salary (allowed)`
   - `## Rejected`
   - Accepted postings include a score line and score adjustments.
-- `out/last_run.json` stores the last run snapshot (job IDs + scores) for diff-based
-  notifications and is updated even when some notification rows are malformed.
+- `out/last_run.json` stores notified job IDs + scores + notification timestamps
+  to prevent duplicate daily alerts and is updated even when some notification rows are malformed.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, and `last_run.json`.
 
@@ -150,16 +149,16 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
 - External dependency failures (HTTP 403/429, NO_NETWORK) are treated as environment
   limitations during QA validation, not project defects.
 
-## Telegram notifications (Phase 6)
+## Telegram notifications (Phase 6 live)
 - Telegram is always enabled by default (`notifications.telegram.enabled: true`).
 - Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 - If secrets are missing or invalid, the run completes with a warning and skips
   the notification (no secrets are printed).
-- Each run sends exactly one digest message:
-  - **New/Improved** when there are new/improved matches.
-  - **Top matches today** (daily digest) when there are no deltas.
-- If the notification payload contains missing fields, snapshot updates fall back
-  safely with warnings and the run completes.
+- Each run sends exactly one daily digest message using the last 24 hours
+  (`digest.window_hours`) of `posted_at` timestamps in UTC.
+- If there are no jobs in the 24h window, the message states:
+  “No new job postings published in the last 24 hours.”
+- Snapshot updates tolerate missing fields; warnings are logged and the run completes.
 - Diagnostics are safe: logs show `getMe` validation results and
   `sendMessage` failures with Telegram's status/description, plus
   boolean `token_present`/`chat_id_present` indicators only.
@@ -240,23 +239,28 @@ python tools/update_goldens.py
 - Pytest marker: `integration` for live-network tests.
 
 ## Notifications (Phase 6)
-Telegram notifications are enabled by default. Configure in `config/config.yaml`:
+Telegram notifications are always on by default. Configure in `config/config.yaml`:
 - `notifications.telegram.enabled`: keep Telegram enabled (default: true).
-- `notifications.telegram.top_n`: number of jobs to include in the digest.
+- `notifications.telegram.top_n`: fallback number of jobs to include in the digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
-- `notifications.telegram.min_score_improvement`: minimum score delta to notify.
+- `digest.mode`: `daily_window` for the daily scheduled digest.
+- `digest.window_hours`: number of hours in the daily digest window (24).
+- `digest.top_n`: number of jobs to include in the daily digest.
 
 Telegram credentials must be set via environment variables (or GitHub Actions secrets):
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
 If credentials are missing or invalid, notifications are skipped with a warning and the run continues.
+Each run sends exactly one message; when there are no eligible jobs in the last 24 hours the message is:
+“No new job postings published in the last 24 hours.”
 
 ### GitHub Actions secrets & manual trigger
 Add repository secrets in GitHub:
 1. **Settings → Secrets and variables → Actions → New repository secret**
 2. Create `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
 
-To run manually: go to **Actions → job-scout** → **Run workflow** and set inputs
+The workflow runs daily at 08:00 Europe/Rome. To run manually: go to
+**Actions → job-scout** → **Run workflow** and set inputs
 (`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
 `gh workflow run job_scout.yml` (no secrets shown in CLI output).

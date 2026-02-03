@@ -6,14 +6,40 @@ snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP
 documented as environment limitations rather than project defects.
 
 ## Phase 6 Automation Notes
-Manual-only runs use the GitHub Actions workflow `job_scout.yml`. Telegram credentials must be stored
-as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) and are never printed in logs. If
-secrets are missing, notifications are skipped while the pipeline still runs.
-CI/build workflows are intentionally removed in Phase 6 due to environment constraints and to keep
-automation manual-only until online validation is complete.
+GitHub Actions runs are scheduled daily via `job_scout.yml`, and manual runs remain available.
+Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
+and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
+CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
+
+## Production operations (live schedule)
+The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
+`.github/workflows/job_scout.yml`:
+- `0 7 * * *` → 08:00 CET (winter)
+- `0 6 * * *` → 08:00 CEST (summer)
+
+### Daily digest behavior (yesterday window)
+- Each scheduled run uses a UTC window of the last 24 hours (`now_utc - 24h → now_utc`).
+- Only jobs with valid `posted_at` timestamps are eligible for the digest.
+- Jobs already notified in previous runs are excluded to prevent duplicate alerts.
+
+### What happens when no jobs are found
+- A Telegram message is still sent with the exact text:
+  “No new job postings published in the last 24 hours.”
+
+### Interpreting Telegram messages
+- Title: **Job Scout — Daily Digest (last 24h)**.
+- Subtitle: **Published yesterday**.
+- “Total in window” reflects the number of eligible jobs in the last 24 hours.
+- Entries list job title, company, remote level, location, score, and rationale
+  (bonuses/penalties, including data governance boosts).
+
+### Temporarily disabling the schedule
+- Edit `.github/workflows/job_scout.yml` and comment out or remove the `schedule` block.
+- Keep `workflow_dispatch` to allow manual runs while the schedule is disabled.
 
 ### Phase 6 validation checklist
-- Confirm the workflow is manual-only (`workflow_dispatch`) with no push/PR/schedule triggers.
+- Confirm the workflow has only `workflow_dispatch` and `schedule` triggers.
+- Verify the cron schedule aligns with 08:00 Europe/Rome (CET/CEST).
 - Trigger a manual run via **Actions → job-scout → Run workflow**.
 - Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`.
 - Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
@@ -39,7 +65,7 @@ Use this checklist when Remotive runs return too few candidates or notifications
    - Data governance bonuses appear in `score_bonuses` when keywords match.
 3. Confirm the summary log line includes:
    - `fetched_count`, `normalized_count`, `candidates_count`, `matches_count`,
-     `notified_count`, and `notification_mode` (`delta_digest` or `daily_digest`).
+     `notified_count`, and `notification_mode` (`daily_window`).
 
 **Interpreting the summary log**
 - `fetched_count`: raw source items fetched per run.
@@ -47,7 +73,7 @@ Use this checklist when Remotive runs return too few candidates or notifications
 - `candidates_count`: postings not hard-rejected (accepted + missing salary).
 - `matches_count`: accepted postings with salaries meeting minimums.
 - `notified_count`: jobs included in the Telegram digest (top N).
-- `notification_mode`: `delta_digest` for new/improved rows, `daily_digest` otherwise.
+- `notification_mode`: `daily_window` for the daily digest window.
 
 **Tuning strictness (config-first)**
 - **Relax location strictness:** keep `location_rules.allow_unknown_location: true`
@@ -59,8 +85,8 @@ Use this checklist when Remotive runs return too few candidates or notifications
 - **Data governance boost:** tune `scoring.data_governance_boost`,
   `scoring.data_governance_keywords`, and the secondary boost/keywords to increase
   relevance for governance roles.
-- **Notifications:** raise/lower `notifications.telegram.top_n` or
-  `notifications.telegram.min_score_improvement` to control digest size and sensitivity.
+- **Notifications:** raise/lower `digest.top_n` or `notifications.telegram.min_score`
+  to control digest size and sensitivity.
 
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.
@@ -89,7 +115,7 @@ JOB_SCOUT_RUN_INTEGRATION=1 python -m pytest -q -m integration
 
 #### How to obtain the wheelhouse artifact
 Wheelhouse archives must be provided manually in Phase 6, because build workflows
-are intentionally removed while automation is manual-only.
+are intentionally removed even while automation is live.
 
 You may provide a local path if the file is already available:
 ```bash

@@ -13,8 +13,8 @@
 - Matching results include hard reject reasons, penalties, missing fields, and decision status.
 - Scoring is deterministic, configurable, and applied to accepted postings for ranking.
 - Offline tests are deterministic and run with `NO_NETWORK=1`; online integration tests are opt-in.
-- Phase 6 is in validation: manual-only automation with Telegram notifications always enabled.
-- Daily digest fallback delivers top matches when no deltas are found.
+- Phase 6 is live: scheduled daily automation with Telegram notifications always enabled.
+- Daily digest runs at 08:00 Europe/Rome and uses a 24-hour window.
 - Data governance keyword boosts surface governance roles higher in ranking.
 - Phase 5 QA notes confirm deterministic outputs, golden snapshot tests, and offline support.
 
@@ -142,18 +142,18 @@ Add golden output tests and refine source abstractions without changing matching
 - No automated notifications yet.
 - No changes to CLI flags.
 
-## Phase 6 — Automation & Notifications (IN VALIDATION — Telegram always enabled, manual trigger only)
+## Phase 6 — Automation & Notifications (LIVE — Scheduled daily digest @ 08:00 Europe/Rome)
 ### Objective
-Enable manual runs that deliver notification digests when new high-quality matches appear.
+Enable scheduled daily runs that deliver notification digests with the last 24h of matches.
 
 ### Scope (what it changes conceptually)
-Add manual-only automation and notification delivery without changing matching or scoring rules.
+Add daily automation and notification delivery without changing matching or scoring rules.
 
 ### Definition of Done (5–8 checkboxes)
-- [x] Manual-only runs (GitHub Actions workflow_dispatch only).
+- [x] Daily scheduled runs with CET/CEST-aware cron (workflow_dispatch retained).
 - [x] Notification digest generation (Telegram enabled by default).
-- [x] Notify only on new or improved/high-scoring items.
-- [x] Daily digest fallback when there are no new/improved matches.
+- [x] Daily window digest uses last 24 hours of `posted_at` timestamps in UTC.
+- [x] One Telegram message per run (even when no jobs are found).
 - [x] Clear logs when notifications are sent or skipped (with reasons).
 - [x] Unit tests for diff logic + notification formatting (no network).
 

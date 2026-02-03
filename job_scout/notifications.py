@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from job_scout.notifier import telegram as telegram_notifier
 from job_scout.state import (
-    SnapshotDiff,
-    diff_rows,
+    Snapshot,
     load_snapshot,
     mark_notified,
     save_snapshot,
@@ -33,140 +33,136 @@ def maybe_notify(
     output_dir: Path,
     config: Mapping[str, object],
 ) -> NotificationResult:
-    """Compare rows against snapshot and send notifications when enabled."""
+    """Send the daily digest notification for the current run."""
 
     notifications = _as_dict(config.get("notifications"))
     telegram_config = _as_dict(notifications.get("telegram"))
-    enabled = bool(telegram_config.get("enabled", False))
-    top_n = _parse_int(telegram_config.get("top_n", 5), 5)
+    top_n = _parse_int(telegram_config.get("top_n", 10), 10)
     min_score = _parse_int(telegram_config.get("min_score", 0), 0)
-    min_improvement = _parse_int(
-        telegram_config.get("min_score_improvement", 5), 5
-    )
+    digest_config = _as_dict(config.get("digest"))
+    digest_mode = str(digest_config.get("mode", "daily_window"))
+    if digest_mode != "daily_window":
+        logger.info(
+            "Digest mode '%s' not supported; using daily_window.", digest_mode
+        )
+    window_hours = _parse_int(digest_config.get("window_hours", 24), 24)
+    digest_top_n = _parse_int(digest_config.get("top_n", top_n), top_n)
 
     snapshot_path = output_dir / "last_run.json"
     previous = load_snapshot(snapshot_path)
-    diff = diff_rows(previous, rows, min_improvement=min_improvement)
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(hours=window_hours)
+    daily_rows = _select_daily_window_rows(
+        rows,
+        previous,
+        window_start,
+        now,
+        minimum_score=min_score,
+    )
+    total_in_window = len(daily_rows)
+    top_rows = _sort_rows(daily_rows)[: max(digest_top_n, 1)] if daily_rows else []
 
-    if not enabled:
-        logger.info("Notifications disabled; snapshot updated only.")
-        save_snapshot(snapshot_path, diff.current_snapshot)
-        return NotificationResult(
-            notified_count=0, notification_mode="disabled"
-        )
-
-    digest, mode, notified_rows = build_digest(
-        diff, rows, top_n=top_n, minimum_score=min_score
+    digest = _format_daily_window_digest(
+        top_rows,
+        total_in_window=total_in_window,
+        window_hours=window_hours,
     )
     sent, reason = telegram_notifier.send_message(digest)
     if sent:
         logger.info("Notification sent via Telegram.")
-        updated_snapshot = mark_notified(diff.current_snapshot, notified_rows)
+        updated_snapshot = mark_notified(previous, top_rows)
         save_snapshot(snapshot_path, updated_snapshot)
     else:
         if reason:
             logger.info("Telegram notification not sent: %s.", reason)
         else:
             logger.info("Telegram notification not sent.")
-        save_snapshot(snapshot_path, diff.current_snapshot)
+        fallback_snapshot = Snapshot(
+            generated_at=now.isoformat(),
+            jobs=dict(previous.jobs),
+        )
+        save_snapshot(snapshot_path, fallback_snapshot)
     return NotificationResult(
-        notified_count=len(notified_rows), notification_mode=mode
+        notified_count=len(top_rows),
+        notification_mode="daily_window",
     )
 
 
-def select_notified_rows(
-    diff: SnapshotDiff,
-    top_n: int,
-    minimum_score: int,
-) -> list[tuple[str, ReportRow]]:
-    """Select which rows to notify based on thresholds and ranking."""
-
-    items: list[tuple[str, ReportRow]] = []
-    for row in diff.new_rows:
-        if (row.match.score or 0) >= minimum_score:
-            items.append(("new", row))
-    for row in diff.improved_rows:
-        if (row.match.score or 0) >= minimum_score:
-            items.append(("improved", row))
-
-    ranked = _sort_ranked_rows(items)
-    return ranked[: max(top_n, 1)]
-
-
-def select_top_matches(
+def _select_daily_window_rows(
     rows: Iterable[ReportRow],
-    top_n: int,
+    snapshot: Snapshot,
+    window_start: datetime,
+    window_end: datetime,
     minimum_score: int,
 ) -> list[ReportRow]:
-    """Select top matches for daily digests."""
+    candidates: list[ReportRow] = []
+    for row in rows:
+        if not row.match.matches_all:
+            continue
+        if (row.match.score or 0) < minimum_score:
+            continue
+        if _was_previously_notified(snapshot, row):
+            continue
+        if not _posted_within_window(
+            row, window_start=window_start, window_end=window_end
+        ):
+            continue
+        candidates.append(row)
+    return candidates
 
-    candidates = [
-        row
-        for row in rows
-        if row.match.matches_all
-        and (row.match.score or 0) >= minimum_score
-    ]
-    ranked = _sort_rows(candidates)
-    return ranked[: max(top_n, 1)]
 
-
-def build_digest(
-    diff: SnapshotDiff,
-    rows: Iterable[ReportRow],
-    top_n: int,
-    minimum_score: int,
-) -> tuple[str, str, Sequence[object]]:
-    """Build a digest payload and determine notification mode."""
-
-    notified_rows = select_notified_rows(
-        diff, top_n=top_n, minimum_score=minimum_score
-    )
-    if notified_rows:
-        return (
-            _format_delta_digest(diff, notified_rows),
-            "delta_digest",
-            notified_rows,
+def _posted_within_window(
+    row: ReportRow,
+    window_start: datetime,
+    window_end: datetime,
+) -> bool:
+    posted_at = getattr(row.posting, "posted_at", None)
+    if not isinstance(posted_at, datetime):
+        logger.warning(
+            "Skipping digest row with missing/invalid posted_at: %s.",
+            _snapshot_key(row),
         )
-    top_rows = select_top_matches(
-        rows, top_n=top_n, minimum_score=minimum_score
-    )
-    return (
-        _format_daily_digest(top_rows),
-        "daily_digest",
-        top_rows,
-    )
+        return False
+    if posted_at.tzinfo is None:
+        logger.warning(
+            "Skipping digest row with naive posted_at: %s.",
+            _snapshot_key(row),
+        )
+        return False
+    try:
+        posted_at_utc = posted_at.astimezone(timezone.utc)
+    except (ValueError, OSError) as exc:
+        logger.warning(
+            "Skipping digest row with invalid posted_at: %s (%s).",
+            _snapshot_key(row),
+            exc,
+        )
+        return False
+    return window_start <= posted_at_utc <= window_end
 
 
-def _format_delta_digest(
-    diff: SnapshotDiff,
-    notified_rows: list[tuple[str, ReportRow]],
+def _was_previously_notified(
+    snapshot: Snapshot,
+    row: ReportRow,
+) -> bool:
+    entry = snapshot.jobs.get(_snapshot_key(row))
+    if not isinstance(entry, dict):
+        return False
+    notified_at = entry.get("notified_at")
+    return bool(notified_at)
+
+
+def _format_daily_window_digest(
+    rows: Sequence[ReportRow],
+    total_in_window: int,
+    window_hours: int,
 ) -> str:
+    if total_in_window == 0:
+        return "No new job postings published in the last 24 hours."
     lines: list[str] = []
-    lines.append("Job Scout digest")
-    lines.append(
-        f"New/Improved ({len(diff.new_rows)} new, {len(diff.improved_rows)} improved)"
-    )
-    for index, (kind, row) in enumerate(notified_rows, start=1):
-        marker = "NEW" if kind == "new" else "IMPROVED"
-        prev = diff.previous_scores.get(_snapshot_key(row))
-        lines.extend(
-            _format_row_block(
-                index=index,
-                marker=marker,
-                row=row,
-                previous_score=prev if kind == "improved" else None,
-            )
-        )
-    return "\n".join(lines)
-
-
-def _format_daily_digest(rows: Sequence[ReportRow]) -> str:
-    lines: list[str] = []
-    lines.append("Job Scout daily digest")
-    if not rows:
-        lines.append("Top matches today: none found.")
-        return "\n".join(lines)
-    lines.append(f"Top matches today ({len(rows)})")
+    lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
+    lines.append("Published yesterday")
+    lines.append(f"Total in window: {total_in_window}")
     for index, row in enumerate(rows, start=1):
         lines.extend(
             _format_row_block(index=index, marker=None, row=row)
@@ -187,13 +183,16 @@ def _format_row_block(
     remote_level = row.match.remote_level or "unknown"
     label = f"[{marker}] " if marker else ""
     line = (
-        f"{index}. {label}{posting.title} — {posting.company} "
-        f"| Remote: {remote_level} | Location: {location} | Score: {score}"
+        f"{index}. {label}{posting.title} — {posting.company}"
+    )
+    details = (
+        f"   Remote: {remote_level} | Location: {location} | Score: {score}"
     )
     if previous_score is not None:
-        line += f" (was {previous_score})"
+        details += f" (was {previous_score})"
     return [
         line,
+        details,
         _format_rationale(row),
         posting.url,
     ]
@@ -223,19 +222,6 @@ def _sort_rows(rows: Iterable[ReportRow]) -> list[ReportRow]:
             -(row.match.score or 0),
             row.posting.id,
             row.posting.source,
-        ),
-    )
-
-
-def _sort_ranked_rows(
-    rows: list[tuple[str, ReportRow]]
-) -> list[tuple[str, ReportRow]]:
-    return sorted(
-        rows,
-        key=lambda entry: (
-            -(entry[1].match.score or 0),
-            entry[1].posting.id,
-            entry[1].posting.source,
         ),
     )
 
