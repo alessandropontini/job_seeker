@@ -1,6 +1,6 @@
 # Job Scout — Project Roadmap
 
-## Where We Are Now (Post Phase 5)
+## Where We Are Now (Phase 6 Validation)
 - Phases 1–5 (rules, explainability, hard/soft separation, scoring, QA hardening) are complete.
 - Runnable CLI pipeline that loads config, fetches sources, matches, and writes reports.
 - Sources implemented today: `dummy` (offline) and `remotive` (public API).
@@ -13,6 +13,7 @@
 - Matching results include hard reject reasons, penalties, missing fields, and decision status.
 - Scoring is deterministic, configurable, and applied to accepted postings for ranking.
 - Offline tests are deterministic and run with `NO_NETWORK=1`; online integration tests are opt-in.
+- Phase 6 is in validation: manual-only automation with Telegram notifications always enabled.
 - Phase 5 QA notes confirm deterministic outputs, golden snapshot tests, and offline support.
 
 ## Target Vision (in one paragraph)
@@ -139,18 +140,18 @@ Add golden output tests and refine source abstractions without changing matching
 - No automated notifications yet.
 - No changes to CLI flags.
 
-## Phase 6 — Automation & Notifications (IN PROGRESS)
+## Phase 6 — Automation & Notifications (IN VALIDATION — Telegram always enabled, manual trigger only)
 ### Objective
-Automate scheduled runs and deliver notification digests when new high-quality matches appear.
+Enable manual runs that deliver notification digests when new high-quality matches appear.
 
 ### Scope (what it changes conceptually)
-Add scheduling and notification delivery without changing matching or scoring rules.
+Add manual-only automation and notification delivery without changing matching or scoring rules.
 
 ### Definition of Done (5–8 checkboxes)
-- [x] Scheduled runs (GitHub Actions cron + manual dispatch).
-- [x] Notification digest generation (Telegram optional).
+- [x] Manual-only runs (GitHub Actions workflow_dispatch only).
+- [x] Notification digest generation (Telegram enabled by default).
 - [x] Notify only on new or improved/high-scoring items.
-- [x] Opt-in configuration with explicit enablement.
+- [x] Clear logs when notifications are sent or skipped (with reasons).
 - [x] Unit tests for diff logic + notification formatting (no network).
 
 ### Risks addressed (3–5 bullets)

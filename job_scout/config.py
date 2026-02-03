@@ -36,7 +36,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "notifications": {
         "telegram": {
-            "enabled": False,
+            "enabled": True,
             "top_n": 5,
             "min_score": 0,
             "min_score_improvement": 5,
