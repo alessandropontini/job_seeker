@@ -4,7 +4,29 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+bash tools/install_dev_deps.sh
+```
+
+## Dev dependencies install (PyPI + wheelhouse fallback)
+By default, the installer uses PyPI. If PyPI is blocked or pip has no cache,
+set `JOB_SCOUT_WHEELHOUSE_URL` to a wheelhouse zip (URL, file://, or local path).
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
+bash tools/install_dev_deps.sh
+```
+
+## How to build the wheelhouse
+Use the GitHub Actions workflow `.github/workflows/build-wheelhouse.yml`.
+It produces `wheelhouse-py311.zip` as a workflow artifact containing the wheels
+plus a `THIRD_PARTY_LICENSES/NOTICE`.
+
+Example (GitHub CLI):
+```bash
+gh workflow run build-wheelhouse.yml
+gh run download --name wheelhouse-py311
 ```
 
 ## Testing Matrix
