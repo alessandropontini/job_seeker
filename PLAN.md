@@ -57,6 +57,7 @@
 - Added offline CI coverage with network disabled and integration tests gated.
 - Added explicit no-network guardrails for offline testing and documentation updates.
 - Updated documentation for contracts, tests, and failure modes.
+- Documented offline-first QA runbook with opt-in online integration validation.
 
 ### Phase 6 — Automation & Notifications (optional)
 **Status:** 💤 Optional

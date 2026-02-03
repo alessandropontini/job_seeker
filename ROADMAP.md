@@ -12,6 +12,7 @@
 - Outputs are `out/report.csv` and `out/report.md` with Matches / Missing Salary / Rejected.
 - Matching results include hard reject reasons, penalties, missing fields, and decision status.
 - Scoring is deterministic, configurable, and applied to accepted postings for ranking.
+- Offline tests are deterministic and run with `NO_NETWORK=1`; online integration tests are opt-in.
 
 ## Target Vision (in one paragraph)
 Job Scout evolves into a deterministic decision engine for job opportunities: it ingests multiple sources, applies explicit hard constraints and soft preferences, produces explainable decisions, and (later) ranks results using transparent scoring—without ML or opaque heuristics.

@@ -15,21 +15,17 @@ Project docs:
 - [ROADMAP.md](ROADMAP.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
+- [RUNBOOK_QA.md](RUNBOOK_QA.md)
 
 ## Requirements
 - Python 3.11
-- Runtime dependencies in `requirements.txt`
-- Test/dev dependencies in `requirements-dev.txt`
+- Runtime dependencies: **stdlib-only**
+- Test/dev dependencies in `requirements-dev.txt` (pytest only)
 
 ## Setup
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Install test/dev tooling:
-```bash
 pip install -r requirements-dev.txt
 ```
 
@@ -124,15 +120,10 @@ The pipeline writes reports to `out/`:
 ## Testing
 Run offline tests (default, deterministic):
 ```bash
-pytest -q
-```
-
-Run offline tests with network guardrails enabled:
-```bash
 NO_NETWORK=1 pytest -q
 ```
 
-Run optional online integration tests (requires network access):
+Run optional online integration tests (required to validate real sources):
 ```bash
 JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
 ```

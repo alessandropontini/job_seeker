@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from job_scout.sources.remotive import fetch_remotive
+from job_scout.sources.remotive import RemotiveSourceError, fetch_remotive
 
 
 @pytest.mark.integration
@@ -12,5 +12,15 @@ from job_scout.sources.remotive import fetch_remotive
 )
 def test_remotive_live_fetch(monkeypatch):
     monkeypatch.delenv("JOB_SCOUT_FIXTURE_DIR", raising=False)
-    jobs = fetch_remotive(1)
+    try:
+        jobs = fetch_remotive(1)
+    except RemotiveSourceError as exc:
+        message = str(exc)
+        if "HTTP error: 429" in message:
+            pytest.skip(
+                "Remotive rate limited (HTTP 429); rerun later."
+            )
+        pytest.fail(
+            f"Remotive integration fetch failed: {message}"
+        )
     assert isinstance(jobs, list)

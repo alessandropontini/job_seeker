@@ -96,7 +96,7 @@ Config keys and semantics:
 - Scores and applied adjustments are included in reports.
 
 ## Testing Strategy (Current + Planned)
-Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 adds golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests. Offline runs can set `NO_NETWORK=1` to enforce deterministic, no-network behavior.
+Current tests cover matcher rules, pipeline grouping, and Remotive fixture parsing. Phase 5 adds golden snapshot tests for full pipeline outputs, unit tests for normalization and region loading, and optional online integration tests. Offline runs set `NO_NETWORK=1` to enforce deterministic, no-network behavior; online integration tests are opt-in via `JOB_SCOUT_RUN_INTEGRATION=1` and `-m integration`.
 
 ## Region Mapping Design
 - Region data lives in `config/regions.json`.

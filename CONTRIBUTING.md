@@ -4,20 +4,20 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements-dev.txt
 ```
+
+## Testing Matrix
+- **Offline (default, deterministic):** always runnable with network disabled.
+- **Online integration (opt-in):** validates live external APIs; requires explicit enablement.
 
 ## Run Tests
-```bash
-pytest -q
-```
-
-Run offline tests with network guardrails enabled:
+Offline tests (default, deterministic):
 ```bash
 NO_NETWORK=1 pytest -q
 ```
 
-Run optional integration tests (network required):
+Run optional integration tests (network required, opt-in):
 ```bash
 JOB_SCOUT_RUN_INTEGRATION=1 pytest -q -m integration
 ```
