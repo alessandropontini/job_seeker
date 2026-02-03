@@ -95,6 +95,8 @@ python -m job_scout sources --test remotive --since-days 7
 - CI tests and build workflows are intentionally removed/disabled in Phase 6.
 - Lightweight state snapshot + diff to detect new/improved matches.
 - Digest notifications (Telegram always enabled by default) and deterministic.
+- Snapshot updates tolerate missing/malformed notification rows; warnings are
+  logged and the run continues without crashing.
 - **Phase 6 includes automatic Telegram notifications by default.** If secrets are
   missing, the run completes with a warning and no notification.
 
@@ -124,7 +126,7 @@ The pipeline writes reports to `out/`:
   - `## Rejected`
   - Accepted postings include a score line and score adjustments.
 - `out/last_run.json` stores the last run snapshot (job IDs + scores) for diff-based
-  notifications.
+  notifications and is updated even when some notification rows are malformed.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, and `last_run.json`.
 
@@ -145,6 +147,8 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
 - Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 - If secrets are missing or invalid, the run completes with a warning and skips
   the notification (no secrets are printed).
+- If the notification payload contains missing fields, snapshot updates fall back
+  safely with warnings and the run completes.
 - Diagnostics are safe: logs show `getMe` validation results and
   `sendMessage` failures with Telegram's status/description, plus
   boolean `token_present`/`chat_id_present` indicators only.

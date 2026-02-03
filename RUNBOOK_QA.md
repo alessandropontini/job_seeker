@@ -19,6 +19,15 @@ automation manual-only until online validation is complete.
 - Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
+- Confirm snapshot updates complete even if notification rows have missing fields
+  (warnings are logged, `last_run.json` still updates, and the run exits successfully).
+
+### Phase 6 common log meanings
+- **Token OK + chat_id OK + sendMessage OK:** Telegram delivery succeeded.
+- **Token OK + chat_id missing/invalid:** Notification skipped; check `TELEGRAM_CHAT_ID`.
+- **Token missing/invalid:** Notification skipped; check `TELEGRAM_BOT_TOKEN`.
+- **Snapshot warning about missing job_id/score:** A notification row was malformed; the
+  run still completes and `last_run.json` is updated using valid rows.
 
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.
