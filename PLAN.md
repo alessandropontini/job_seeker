@@ -122,3 +122,5 @@
   privacy-safe fields, request correlation IDs, and troubleshooting guidance.
 - Phase 7 observability: added Telegram callback smoke workflow and hardened auth/GET probe for
   webhook debugging without local tooling.
+- Phase 7 ops: aligned Telegram callback smoke payload with the `fb|run|short|action|hash` contract
+  and documented the callback format for webhook troubleshooting.
