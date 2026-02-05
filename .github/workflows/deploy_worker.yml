@@ -11,7 +11,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      WRANGLER_VERSION: "3.89.0"
+      WRANGLER_VERSION: "latest"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,8 +23,13 @@ jobs:
             echo "::error::Missing CLOUDFLARE_KV_NAMESPACE_ID secret."
             exit 1
           fi
+          if [ -z "${ALLOWED_TELEGRAM_USER_ID:-}" ]; then
+            echo "::error::Missing ALLOWED_TELEGRAM_USER_ID secret."
+            exit 1
+          fi
         env:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+          ALLOWED_TELEGRAM_USER_ID: ${{ secrets.ALLOWED_TELEGRAM_USER_ID }}
 
       - name: Configure Worker namespace
         run: |
@@ -36,6 +41,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Diagnostics (worker config)
+        run: |
+          set -euo pipefail
+          pwd
+          ls -la cloudflare/worker
+          sed -n '1,120p' cloudflare/worker/wrangler.toml
+          npx --yes wrangler@${WRANGLER_VERSION} --version
 
       - name: Deploy Worker (bootstrap without secrets)
         # First deploy must NOT upload secrets. This avoids the wrangler-action bulk
@@ -55,10 +68,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+          ALLOWED_TELEGRAM_USER_ID: ${{ secrets.ALLOWED_TELEGRAM_USER_ID }}
         run: |
           set -euo pipefail
           printf "%s" "$TELEGRAM_BOT_TOKEN" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_BOT_TOKEN
           printf "%s" "$JOB_SCOUT_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put JOB_SCOUT_WEBHOOK_SECRET
+          printf "%s" "$ALLOWED_TELEGRAM_USER_ID" | npx --yes wrangler@${WRANGLER_VERSION} secret put ALLOWED_TELEGRAM_USER_ID
 
       - name: Deploy Worker (finalize bindings)
         # Re-deploy to ensure secrets/bindings are active and the deploy is idempotent.
@@ -68,3 +83,8 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: "cloudflare/worker"
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
+
+      - name: Diagnostics (post-deploy)
+        run: |
+          set -euo pipefail
+          echo "Deployed worker name: $(sed -n 's/^name = \"\\(.*\\)\"/\\1/p' cloudflare/worker/wrangler.toml)"

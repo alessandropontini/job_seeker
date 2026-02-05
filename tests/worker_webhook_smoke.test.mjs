@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { createContext, SourceTextModule } from "node:vm";
+import vm from "node:vm";
 
 const workerPath = path.resolve("cloudflare/worker/worker.js");
+const { createContext, SourceTextModule } = vm;
+const supportsVmModules = typeof SourceTextModule === "function";
+const maybeTest = supportsVmModules ? test : test.skip;
 
 class MockKV {
   constructor(seed = {}) {
@@ -33,7 +36,10 @@ class MockKV {
   }
 }
 
-async function loadWorker() {
+async function loadWorkerModule() {
+  if (!supportsVmModules) {
+    throw new Error("SourceTextModule not available in this Node runtime");
+  }
   const source = await readFile(workerPath, "utf8");
   const context = createContext({
     TextDecoder,
@@ -52,15 +58,16 @@ async function loadWorker() {
     throw new Error("Unexpected import in worker module");
   });
   await module.evaluate();
-  return module.namespace.default;
+  return module.namespace;
 }
 
-function buildEnv({ secret, kv }) {
+function buildEnv({ secret, kv, allowedUserId }) {
   return {
     JOB_SCOUT_WEBHOOK_SECRET: secret,
     TELEGRAM_BOT_TOKEN: undefined,
     FEEDBACK_WINDOW_MINUTES: 60,
     JOB_SCOUT_KV: kv,
+    ALLOWED_TELEGRAM_USER_ID: allowedUserId,
   };
 }
 
@@ -95,26 +102,29 @@ function seedSession(nowMs) {
   };
 }
 
-test("telegram webhook rejects missing secret header", async () => {
-  const worker = await loadWorker();
+maybeTest("telegram webhook rejects missing secret header", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: null }), env);
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
   assert.equal(kv.putCalls.length, 0);
 });
 
-test("telegram webhook rejects wrong secret header", async () => {
-  const worker = await loadWorker();
+maybeTest("telegram webhook rejects wrong secret header", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: "wrong" }), env);
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
   assert.equal(kv.putCalls.length, 0);
 });
 
-test("telegram webhook accepts correct secret header and writes KV", async () => {
-  const worker = await loadWorker();
+maybeTest("telegram webhook accepts correct secret header and writes KV", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(
@@ -124,4 +134,34 @@ test("telegram webhook accepts correct secret header and writes KV", async () =>
   assert.equal(response.status, 200);
   assert.equal(kv.putCalls.length, 1);
   assert.ok(kv.store.has("feedback:run123:job1:42"));
+});
+
+maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV(seedSession(Date.now()));
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    allowedUserId: "99",
+  });
+  const response = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  assert.equal(kv.putCalls.length, 0);
+});
+
+maybeTest("parseCallbackData accepts the expected feedback payload format", async () => {
+  const module = await loadWorkerModule();
+  const { parseCallbackData } = module;
+  const parsed = parseCallbackData("fb|run123|job1|L|hash1");
+  assert.deepEqual(parsed, {
+    runId: "run123",
+    jobShortId: "job1",
+    action: "L",
+    jobHash: "hash1",
+  });
+  assert.equal(parseCallbackData("fb|run123|job1|bad|hash1"), null);
 });

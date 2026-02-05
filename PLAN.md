@@ -99,3 +99,11 @@
 - Phase 7 ops fix: ensured Node is installed in deploy workflow so Wrangler secrets upload succeeds.
 - Phase 7 ops fix: added explicit secret validation to fail fast when KV namespace ID is missing.
 - Phase 7 ops docs: clarified Wrangler action warnings and expected behavior in the runbook.
+- Phase 7 feedback fix: immediate Telegram ACK with KV persistence queued, plus callback parsing tests
+  and verification steps documented.
+- Phase 7 ops: updated Worker deploy workflow to track latest Wrangler CLI and added test runtime
+  guardrails for Node VM module availability.
+- Phase 7 ops fix: aligned Cloudflare Worker name with the Telegram webhook route and added
+  non-sensitive deploy diagnostics to confirm the deployed worker.
+- Phase 7 security: enforce feedback allowlist via `ALLOWED_TELEGRAM_USER_ID` and document
+  the authorization behavior for Telegram callbacks.

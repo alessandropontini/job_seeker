@@ -1,9 +1,9 @@
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === "/telegram/feedback" || path === "/telegram/webhook") {
-      return handleTelegramWebhook(request, env);
+      return handleTelegramWebhook(request, env, ctx);
     }
     if (path === "/feedback") {
       return handleFeedback(request, env);
@@ -15,7 +15,7 @@ export default {
   },
 };
 
-async function handleTelegramWebhook(request, env) {
+async function handleTelegramWebhook(request, env, ctx) {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
@@ -33,22 +33,31 @@ async function handleTelegramWebhook(request, env) {
   if (!callback) {
     return new Response("No callback", { status: 200 });
   }
+  const allowedUserId = env.ALLOWED_TELEGRAM_USER_ID;
+  const callbackUserId = callback.from?.id;
+  if (
+    allowedUserId &&
+    String(callbackUserId ?? "") !== String(allowedUserId)
+  ) {
+    await answerCallback(env, callback.id, "🚫 Not authorized");
+    return new Response("OK", { status: 200 });
+  }
   const data = callback.data;
   if (typeof data !== "string") {
-    await answerCallback(env, callback.id, "Invalid feedback payload");
-    return new Response("Invalid data", { status: 400 });
+    scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
+    return new Response("Invalid data", { status: 200 });
   }
   const parsed = parseCallbackData(data);
   if (!parsed) {
-    await answerCallback(env, callback.id, "Invalid feedback payload");
-    return new Response("Invalid callback data", { status: 400 });
+    scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
+    return new Response("Invalid callback data", { status: 200 });
   }
   const { runId, jobShortId, action, jobHash } = parsed;
   const sessionKey = `session:${runId}`;
   const windowRaw = await env.JOB_SCOUT_KV.get(sessionKey, "json");
   if (!windowRaw) {
-    await answerCallback(env, callback.id, "⏱ Session expired");
-    return new Response("Session missing", { status: 410 });
+    scheduleAnswer(env, ctx, callback.id, "⏱ Session scaduta");
+    return new Response("Session missing", { status: 200 });
   }
   const now = Date.now();
   const openAt = Date.parse(windowRaw.open_at);
@@ -57,18 +66,18 @@ async function handleTelegramWebhook(request, env) {
   const maxCloseAt = openAt + maxWindowMs;
   const effectiveCloseAt = Math.min(closeAt, maxCloseAt);
   if (!Number.isFinite(openAt) || !Number.isFinite(closeAt)) {
-    await answerCallback(env, callback.id, "Feedback window invalid");
-    return new Response("Window invalid", { status: 400 });
+    scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
+    return new Response("Window invalid", { status: 200 });
   }
   if (now < openAt || now > effectiveCloseAt) {
-    await answerCallback(env, callback.id, "⏱ Session expired");
-    return new Response("Window closed", { status: 410 });
+    scheduleAnswer(env, ctx, callback.id, "⏱ Session scaduta");
+    return new Response("Window closed", { status: 200 });
   }
   const jobs = Array.isArray(windowRaw.jobs) ? windowRaw.jobs : [];
   const jobEntry = jobs.find((job) => job?.short_id === jobShortId);
   if (!jobEntry || jobEntry?.job_hash !== jobHash) {
-    await answerCallback(env, callback.id, "Unknown job");
-    return new Response("Job not found", { status: 400 });
+    scheduleAnswer(env, ctx, callback.id, "Job non riconosciuto");
+    return new Response("Job not found", { status: 200 });
   }
   const userId = callback.from?.id ?? "unknown";
   const messageId = callback.message?.message_id ?? null;
@@ -82,21 +91,31 @@ async function handleTelegramWebhook(request, env) {
     user_id: userId,
     source: jobEntry?.source ?? "unknown",
   };
-  await env.JOB_SCOUT_KV.put(key, JSON.stringify(value), {
+  const writePromise = env.JOB_SCOUT_KV.put(key, JSON.stringify(value), {
     expirationTtl: 60 * 60 * 24 * 7,
-  });
-  await answerCallback(env, callback.id, "✅ Feedback recorded");
+  }).catch(() => {});
+  const ackPromise = answerCallback(env, callback.id, "✅ Feedback salvato").catch(
+    () => {}
+  );
+  if (ctx) {
+    ctx.waitUntil(writePromise);
+    ctx.waitUntil(ackPromise);
+  } else {
+    await writePromise;
+    await ackPromise;
+  }
   return new Response("OK", { status: 200 });
 }
 
 function ensureTelegramWebhookAuthorized(request, env) {
-  const secret = env.JOB_SCOUT_WEBHOOK_SECRET;
+  const secret =
+    env.TELEGRAM_WEBHOOK_SECRET || env.JOB_SCOUT_WEBHOOK_SECRET;
   if (!secret) {
     return new Response("Missing webhook secret", { status: 500 });
   }
   const provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
   if (!provided || provided !== secret) {
-    return new Response("Forbidden", { status: 403 });
+    return new Response("Unauthorized", { status: 401 });
   }
   return null;
 }
@@ -168,7 +187,7 @@ async function handleWindowOpen(request, env) {
   return new Response("OK", { status: 200 });
 }
 
-function parseCallbackData(data) {
+export function parseCallbackData(data) {
   if (!data.startsWith("fb|")) {
     return null;
   }
@@ -178,6 +197,9 @@ function parseCallbackData(data) {
   }
   const [_, runId, jobShortId, action, jobHash] = parts;
   if (!runId || !jobShortId || !action || !jobHash) {
+    return null;
+  }
+  if (!isValidAction(action)) {
     return null;
   }
   return { runId, jobShortId, action, jobHash };
@@ -266,6 +288,29 @@ function feedbackWindowMs(env) {
     return 60 * 60 * 1000;
   }
   return minutes * 60 * 1000;
+}
+
+function isValidAction(action) {
+  return [
+    "L",
+    "M",
+    "D",
+    "S",
+    "X",
+    "like",
+    "maybe",
+    "dislike",
+    "love",
+    "duplicate",
+  ].includes(action);
+}
+
+function scheduleAnswer(env, ctx, callbackId, text) {
+  const promise = answerCallback(env, callbackId, text).catch(() => {});
+  if (ctx) {
+    ctx.waitUntil(promise);
+  }
+  return promise;
 }
 
 async function answerCallback(env, callbackId, text) {
