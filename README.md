@@ -330,6 +330,17 @@ tools/telegram_set_webhook.sh
 The script sets the webhook to `POST /telegram/feedback` and prints non-sensitive fields from
 `getWebhookInfo` so you can confirm the URL.
 
+**Debug: Telegram webhook status (Phase 1)**
+Use the manual GitHub Actions workflow to read the current Telegram webhook configuration
+without exposing secrets. Run **Actions → telegram_webhook_get → Run workflow**.
+
+The logs print only non-sensitive fields (`url`, `pending_update_count`, optional error/IP/cert flags).
+In a correct setup, `url` should be `https://<worker-domain>/telegram/feedback`. If `url` is empty
+or different, Telegram is not sending callbacks to the Worker and button clicks will not reach
+`/telegram/feedback`.
+
+Security note: the workflow reads `TELEGRAM_BOT_TOKEN` from GitHub Secrets and never prints it.
+
 **Manual feedback verification**
 1. Run the dummy E2E pipeline (see above) to send a Telegram digest with inline feedback buttons.
 2. Tap 👍/👎/⭐/🧻 and confirm the spinner disappears immediately with a “Feedback salvato” toast.
