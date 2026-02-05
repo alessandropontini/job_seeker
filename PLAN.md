@@ -89,3 +89,5 @@
 - Split GitHub Actions workflows into daily remotive runs and manual dummy E2E runs.
 - Stabilized `last_run.json` digest schema with channel aliases and added a fallback
   digest scope when the daily window is empty.
+- Switched dummy E2E to real Telegram delivery with isolated state suffixing.
+- Expanded deterministic dummy postings to guarantee data-only picks for governance roles.

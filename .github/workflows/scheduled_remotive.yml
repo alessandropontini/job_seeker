@@ -1,4 +1,4 @@
-name: daily-job-scout
+name: scheduled-remotive
 
 on:
   workflow_dispatch:

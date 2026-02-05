@@ -58,6 +58,8 @@ Key sections:
 - `notifications.telegram.min_score`: minimum score required to notify.
 - `notifications.dedupe.enabled`: stateful daily digest de-duplication.
 - `notifications.dedupe.state_path`: file name for digest dedupe state (default: `out/last_notified.json`).
+- `state.suffix`: suffix appended to state files (e.g., `last_run_dummy_e2e.json`).
+- `state.dir`: optional base directory for state files (relative paths resolve under `out/`).
 - `digest.mode`: `daily_window` for the scheduled digest behavior.
 - `digest.window_hours`: size of the daily window (24 hours).
 - `digest.top_n`: number of items in the daily digest.
@@ -67,6 +69,11 @@ Run the pipeline (defaults to configured sources or `dummy`):
 ```bash
 python -m job_scout run
 python -m job_scout run --since-days 7
+```
+
+Run the pipeline with isolated state files:
+```bash
+python -m job_scout run --state-suffix dummy_e2e
 ```
 
 Run in strict mode (reject missing location data; salary gaps are still allowed):
@@ -104,7 +111,7 @@ python -m job_scout sources --test remotive --since-days 7
 
 ## Phase 6 — Automation & Notifications (live)
 - GitHub Actions runs daily at **08:00 Europe/Rome** (CET/CEST schedule in UTC).
-- Manual runs remain available via **Actions → job-scout → Run workflow**.
+- Manual runs remain available via **Actions → scheduled-remotive → Run workflow**.
 - CI tests and build workflows remain intentionally removed/disabled.
 - Daily digest uses a 24-hour window (UTC) based on `posted_at` timestamps.
 - Telegram notifications are always on and send exactly one message per run.
@@ -165,12 +172,14 @@ The pipeline writes reports to `out/`:
   - Top-level aliases: `counts` (run summary) and `digest_hash`.
 - `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
 - `out/preferences.json` stores the preference profile and last feedback cache.
+- When `state.suffix` (or `--state-suffix`) is used, these state files are suffixed
+  (for example `out/last_run_dummy_e2e.json`).
 - `out/telegram_payload.json` stores the dry-run Telegram payload when
   `notifications.telegram.dry_run: true` is enabled (no network calls).
 - `out/digest.md` stores the plain-text digest in dry-run mode.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`,
-plus `telegram_payload.json`/`digest.md` for dummy dry-run workflows.
+plus `telegram_payload.json`/`digest.md` when dry-run mode is enabled.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -205,11 +214,12 @@ plus `telegram_payload.json`/`digest.md` for dummy dry-run workflows.
   boolean `token_present`/`chat_id_present` indicators only.
 
 ## GitHub Actions workflows
-- **Daily (08:00 Europe/Rome)**: `.github/workflows/daily_job_scout.yml`
+- **Daily (08:00 Europe/Rome)**: `.github/workflows/scheduled_remotive.yml`
   runs `remotive` and sends the real Telegram digest (secrets required).
 - **Dummy E2E (manual-only)**: `.github/workflows/dummy_e2e.yml`
-  runs the dummy source with `notifications.telegram.dry_run: true` to validate
-  the full pipeline offline (no Telegram network calls).
+  runs the dummy source and sends a real Telegram digest to validate the full
+  pipeline end-to-end. State files are isolated with the `dummy_e2e` suffix and
+  the workflow executes twice to confirm dedupe without impacting production.
 
 ## Testing
 Run offline tests (default, deterministic):
@@ -237,13 +247,16 @@ export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
 bash tools/run_tests_integration.sh
 ```
 
-### Dummy E2E dry-run (local)
-Run the offline-safe dummy workflow locally without Telegram:
+### Dummy E2E (local, real Telegram)
+Run the dummy E2E configuration locally with real Telegram delivery:
 ```bash
-python -m job_scout run --config config/dummy_e2e.yaml --since-days 7 --source dummy --output-dir out
+export TELEGRAM_BOT_TOKEN=...
+export TELEGRAM_CHAT_ID=...
+python -m job_scout run --config config/dummy_e2e.yaml --since-days 7 --source dummy --state-suffix dummy_e2e --output-dir out
 ```
-Inspect `out/telegram_payload.json`, `out/digest.md`, and `out/last_run.json` to validate
-the digest payload and dedupe state.
+Inspect `out/last_run_dummy_e2e.json` and `out/last_notified_dummy_e2e.json` to validate
+the digest payload and dedupe state. To perform an offline dry run, set
+`notifications.telegram.dry_run: true` in `config/dummy_e2e.yaml`.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
@@ -318,9 +331,9 @@ Add repository secrets in GitHub:
 2. Create `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
 
 The daily workflow runs at 08:00 Europe/Rome. To run manually: go to
-**Actions → daily-job-scout** → **Run workflow** and set inputs
+**Actions → scheduled-remotive** → **Run workflow** and set inputs
 (`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
-`gh workflow run daily_job_scout.yml` (no secrets shown in CLI output).
+`gh workflow run scheduled_remotive.yml` (no secrets shown in CLI output).
 
 The dummy E2E workflow is manual-only:
 **Actions → dummy-e2e** → **Run workflow** or

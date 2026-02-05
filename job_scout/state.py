@@ -103,6 +103,38 @@ def save_run_state(
     )
 
 
+def resolve_state_dir(
+    output_dir: Path, state_dir: str | Path | None
+) -> Path:
+    """Return the base directory for state files."""
+
+    if not state_dir:
+        return output_dir
+    resolved = Path(str(state_dir))
+    if resolved.is_absolute():
+        return resolved
+    return output_dir / resolved
+
+
+def resolve_state_path(
+    output_dir: Path,
+    raw_path: object,
+    *,
+    state_dir: str | Path | None = None,
+    state_suffix: str | None = None,
+) -> Path:
+    """Resolve a state file path with optional suffix or base directory."""
+
+    path = Path(str(raw_path))
+    filename = _apply_state_suffix(path.name, state_suffix)
+    if path.is_absolute():
+        return path.parent / filename
+    base_dir = resolve_state_dir(output_dir, state_dir)
+    if path.parent != Path("."):
+        base_dir = base_dir / path.parent
+    return base_dir / filename
+
+
 def diff_rows(
     previous: Snapshot,
     rows: Iterable[ReportRow],
@@ -184,6 +216,16 @@ def mark_notified(
 
 def _snapshot_key(row: ReportRow) -> str:
     return f"{row.posting.source}:{row.posting.id}"
+
+
+def _apply_state_suffix(filename: str, state_suffix: str | None) -> str:
+    if not state_suffix:
+        return filename
+    path = Path(filename)
+    suffix = f"_{state_suffix}"
+    if path.suffix:
+        return f"{path.stem}{suffix}{path.suffix}"
+    return f"{path.name}{suffix}"
 
 
 def _extract_notified_fields(row: object) -> tuple[str | None, int | None]:

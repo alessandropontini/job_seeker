@@ -13,6 +13,7 @@ from typing import Iterable, Mapping
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
 from job_scout.notifier import telegram as telegram_notifier
+from job_scout.state import resolve_state_path
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +35,20 @@ class PreferenceProfile:
 
 
 def resolve_profile_path(
-    config: Mapping[str, object], output_dir: Path
+    config: Mapping[str, object],
+    output_dir: Path,
+    *,
+    state_dir: str | Path | None = None,
+    state_suffix: str | None = None,
 ) -> Path:
     personalization = _as_dict(config.get("personalization"))
     raw_path = personalization.get("profile_path", "out/preferences.json")
-    path = Path(str(raw_path))
-    if not path.is_absolute():
-        return output_dir / path
-    return path
+    return resolve_state_path(
+        output_dir,
+        raw_path,
+        state_dir=state_dir,
+        state_suffix=state_suffix,
+    )
 
 
 def load_profile(path: Path) -> PreferenceProfile:

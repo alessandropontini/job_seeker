@@ -6,9 +6,10 @@ snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP
 documented as environment limitations rather than project defects.
 
 ## Phase 6 Automation Notes
-GitHub Actions runs are scheduled daily via `daily_job_scout.yml`, and manual runs remain available.
-The dummy end-to-end workflow (`dummy_e2e.yml`) is manual-only and runs offline with a dry-run
-notifier that writes payload artifacts instead of calling Telegram.
+GitHub Actions runs are scheduled daily via `scheduled_remotive.yml`, and manual runs remain available.
+The dummy end-to-end workflow (`dummy_e2e.yml`) is manual-only and sends a real Telegram digest so
+the full pipeline (pipeline → digest → Telegram) is validated end-to-end. Dummy state files are
+isolated with a `dummy_e2e` suffix to avoid impacting the 08:00 Remotive run.
 Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
 CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
@@ -17,7 +18,7 @@ Phase 6 refinement adds dual-channel outputs, Telegram feedback buttons, and a s
 
 ## Production operations (live schedule)
 The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
-`.github/workflows/daily_job_scout.yml`:
+`.github/workflows/scheduled_remotive.yml`:
 - `0 7 * * *` → 08:00 CET (winter)
 - `0 6 * * *` → 08:00 CEST (summer)
 
@@ -42,18 +43,19 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Inline feedback buttons (👍/👎/⭐/🧻) are attached for preference learning.
 
 ### Temporarily disabling the schedule
-- Edit `.github/workflows/daily_job_scout.yml` and comment out or remove the `schedule` block.
+- Edit `.github/workflows/scheduled_remotive.yml` and comment out or remove the `schedule` block.
 - Keep `workflow_dispatch` to allow manual runs while the schedule is disabled.
 
 ### Phase 6 validation checklist
 - Confirm the daily workflow has only `workflow_dispatch` and `schedule` triggers.
 - Verify the cron schedule aligns with 08:00 Europe/Rome (CET/CEST).
-- Trigger a manual run via **Actions → daily-job-scout → Run workflow**.
+- Trigger a manual run via **Actions → scheduled-remotive → Run workflow**.
 - Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`,
   `last_notified.json`, `preferences.json`.
 - Trigger a manual run via **Actions → dummy-e2e → Run workflow** and verify
-  `telegram_payload.json` and `digest.md` artifacts exist.
-- Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
+  `last_run_dummy_e2e.json`, `last_notified_dummy_e2e.json`, and `report.*` artifacts exist.
+- Trigger a manual run with valid Telegram secrets and verify the dummy digest is delivered.
+- Confirm the workflow runs twice and the second run skips with `duplicate_digest`.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
 - Confirm snapshot updates complete even if notification rows have missing fields
@@ -78,11 +80,18 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 
 ### Troubleshooting: dummy E2E artifact check failure
 - The guard-rail validates that accepted matches imply a non-empty digest.
-- Check `out/last_run.json` for `digest.jobs`, or the channel-specific lists
+- Check `out/last_run_dummy_e2e.json` for `digest.jobs`, or the channel-specific lists
   `digest.top_matches` / `digest.data_only_best_picks`.
 - If all digest lists are empty but `report.csv` shows accepted rows, inspect
   `posted_at` timestamps and the daily window; a fallback digest should be used
   when the 24h window is empty.
+
+### Troubleshooting: dummy E2E does not send Telegram
+- Ensure GitHub Actions secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` exist and are valid.
+- Confirm the dummy run is using the isolated state suffix (`dummy_e2e`) so a prior digest
+  from the daily workflow is not treated as a duplicate.
+- If the second (rerun) step skips with `duplicate_digest`, this is expected and confirms
+  dedupe is working for the dummy workflow only.
 
 ### Remotive validation & tuning (Phase 6)
 Use this checklist when Remotive runs return too few candidates or notifications feel empty.

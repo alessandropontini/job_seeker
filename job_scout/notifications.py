@@ -21,6 +21,7 @@ from job_scout.state import (
     Snapshot,
     load_snapshot,
     mark_notified,
+    resolve_state_path,
     save_run_state,
 )
 from job_scout.writers import ReportRow
@@ -63,7 +64,15 @@ def maybe_notify(
         )
     window_hours = _parse_int(digest_config.get("window_hours", 24), 24)
 
-    snapshot_path = output_dir / "last_run.json"
+    state_config = _as_dict(config.get("state"))
+    state_dir = state_config.get("dir")
+    state_suffix = state_config.get("suffix")
+    snapshot_path = resolve_state_path(
+        output_dir,
+        "last_run.json",
+        state_dir=state_dir,
+        state_suffix=state_suffix,
+    )
     previous = load_snapshot(snapshot_path)
     now = _now()
     window_start = now - timedelta(hours=window_hours)
@@ -109,8 +118,11 @@ def maybe_notify(
 
     dedupe_enabled = bool(dedupe_config.get("enabled", True))
     raw_state_path = dedupe_config.get("state_path", "last_notified.json")
-    digest_state_path = _resolve_state_path(
-        output_dir, raw_state_path
+    digest_state_path = resolve_state_path(
+        output_dir,
+        raw_state_path,
+        state_dir=state_dir,
+        state_suffix=state_suffix,
     )
     digest_date = now.date().isoformat()
     digest_hash = compute_digest_hash(
@@ -144,6 +156,9 @@ def maybe_notify(
         )
     if skip_reason:
         logger.info("Skipping Telegram notification: %s.", skip_reason)
+        logger.info(
+            "Telegram send attempted: no; reason=%s.", skip_reason
+        )
         save_run_state(
             snapshot_path,
             base_snapshot,
@@ -164,6 +179,9 @@ def maybe_notify(
 
     if not telegram_enabled and not dry_run:
         logger.info("Telegram notifications disabled via config.")
+        logger.info(
+            "Telegram send attempted: no; reason=disabled."
+        )
         save_run_state(
             snapshot_path,
             base_snapshot,
@@ -195,9 +213,14 @@ def maybe_notify(
             reply_markup=reply_markup,
             digest_payload=digest_payload,
         )
+        logger.info("Telegram send attempted: no; reason=dry_run.")
     else:
         sent, reason = telegram_notifier.send_message(
             digest, reply_markup=reply_markup
+        )
+        logger.info(
+            "Telegram send attempted: yes; reason=%s.",
+            reason or "sent",
         )
     if sent:
         logger.info("Notification sent via Telegram.")
@@ -511,13 +534,6 @@ def _save_digest_state(
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _resolve_state_path(output_dir: Path, raw_path: object) -> Path:
-    path = Path(str(raw_path))
-    if not path.is_absolute():
-        return output_dir / path
-    return path
 
 
 def _as_dict(raw: object) -> dict[str, object]:

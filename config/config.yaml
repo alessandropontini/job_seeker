@@ -135,6 +135,10 @@ notifications:
     enabled: true
     state_path: last_notified.json
 
+state:
+  suffix: null
+  dir: null
+
 digest:
   mode: daily_window
   window_hours: 24

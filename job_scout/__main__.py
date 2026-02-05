@@ -43,6 +43,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("out"),
     )
     run_parser.add_argument(
+        "--state-suffix",
+        help="Suffix to isolate state files (last_run/last_notified/preferences).",
+    )
+    run_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help="Alternate base directory for state files.",
+    )
+    run_parser.add_argument(
         "--strict",
         action="store_true",
         help="Reject postings with missing mandatory data.",
@@ -95,14 +104,32 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.command == "run":
         config = load_config(args.config)
+        state_config = config.get("state")
+        if not isinstance(state_config, dict):
+            state_config = {}
+        if args.state_suffix:
+            state_config["suffix"] = args.state_suffix
+        if args.state_dir:
+            state_config["dir"] = str(args.state_dir)
+        if state_config:
+            config["state"] = state_config
         preference_profile = None
         preference_path = None
         personalization = config.get("personalization", {})
         if isinstance(personalization, dict) and personalization.get(
             "enabled", False
         ):
+            state_suffix = None
+            state_dir = None
+            state_config = config.get("state")
+            if isinstance(state_config, dict):
+                state_suffix = state_config.get("suffix")
+                state_dir = state_config.get("dir")
             preference_path = resolve_profile_path(
-                config, args.output_dir
+                config,
+                args.output_dir,
+                state_dir=state_dir,
+                state_suffix=state_suffix,
             )
             preference_profile = load_profile(preference_path)
             preference_profile = apply_telegram_feedback(

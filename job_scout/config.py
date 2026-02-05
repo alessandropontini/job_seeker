@@ -126,6 +126,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "dedupe": {"enabled": True, "state_path": "last_notified.json"},
     },
+    "state": {"suffix": None, "dir": None},
     "digest": {
         "mode": "daily_window",
         "window_hours": 24,

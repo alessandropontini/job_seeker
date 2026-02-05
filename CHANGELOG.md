@@ -8,11 +8,13 @@ All notable changes to this project will be documented in this file.
 - Telegram feedback buttons with a lightweight preference profile stored locally.
 - Stateful daily digest dedupe via `out/last_notified.json`.
 - Dry-run Telegram payload output (`out/telegram_payload.json`, `out/digest.md`) for dummy E2E runs.
+- State isolation controls (`state.suffix` / `--state-suffix`) for per-workflow dedupe and snapshots.
 
 ### Changed
 - Telegram digest now includes dual-channel sections and feedback buttons.
 - GitHub Actions caches notification state and preference profiles between runs.
 - Daily workflow split into real (remotive) and dummy E2E workflows.
+- Dummy E2E now sends real Telegram notifications with deterministic dummy postings and isolated state.
 
 ### Fixed
 - Prevented duplicate daily digests from sending on the same UTC date.
