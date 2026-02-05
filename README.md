@@ -136,6 +136,8 @@ python -m job_scout sources --test remotive --since-days 7
 - Telegram callbacks are handled by a free Cloudflare Worker + KV store.
 - Feedback is applied on the next run to influence ranking and duplicate suppression (no hard rejects bypassed).
 - Callback data uses compact IDs (`fb|<run>|<short_job>|<act>|<hash>`) to stay under the 64-byte limit.
+  Actions are one of `L`, `M`, `D`, `S`, `X`, or their long forms (`like`, `maybe`, `dislike`,
+  `love`, `duplicate`).
 - GitHub Actions requests to the Worker are signed with HMAC SHA-256 (no secrets in logs).
 
 Architecture (Phase 7 feedback flow):

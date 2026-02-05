@@ -28,7 +28,7 @@ jobs:
             exit 1
           fi
           base_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}"
-          payload='{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":'"${ALLOWED_TELEGRAM_USER_ID}"'},"data":"LIKE_TEST","message":{"message_id":1}}}'
+          payload='{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":'"${ALLOWED_TELEGRAM_USER_ID}"'},"data":"fb|smoke-001|job-001|like|hash-001","message":{"message_id":1}}}'
           response=$(curl -sS -w "\n%{http_code}" \
             --connect-timeout 10 \
             --max-time 30 \

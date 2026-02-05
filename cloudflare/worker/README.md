@@ -9,6 +9,11 @@ Receives Telegram `callback_query` updates, validates the run window, writes fee
 always responds with `answerCallbackQuery` to clear the loading spinner. Requires
 `X-Telegram-Bot-Api-Secret-Token`; missing or invalid headers return **401**.
 
+Callback data contract (must be compact, under Telegram's ~64 byte limit):
+- Format: `fb|<run_id>|<job_short_id>|<action>|<job_hash>`
+- Valid actions: `L`, `M`, `D`, `S`, `X`, or their long forms (`like`, `maybe`, `dislike`, `love`, `duplicate`)
+- Any other value returns `Invalid callback data` (HTTP 200) and does not write KV.
+
 ### `GET /telegram/feedback`
 Returns `200 OK` to verify reachability and generate logs without touching KV.
 

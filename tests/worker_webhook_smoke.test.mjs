@@ -72,11 +72,11 @@ function buildEnv({ secret, kv, allowedUserId, telegramToken }) {
   };
 }
 
-function buildRequest({ secretHeader }) {
+function buildRequest({ secretHeader, data } = {}) {
   const payload = {
     callback_query: {
       id: "cb1",
-      data: "fb|run123|job1|like|hash1",
+      data: data ?? "fb|run123|job1|like|hash1",
       from: { id: 42 },
       message: { message_id: 11 },
     },
@@ -146,6 +146,8 @@ maybeTest("telegram webhook accepts correct secret header and writes KV", async 
     env
   );
   assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body, { ok: true });
   assert.equal(kv.putCalls.length, 1);
   assert.ok(kv.store.has("feedback:run123:job1:42"));
   assert.ok(findLogEvent(logs, "request_received"));
@@ -155,6 +157,23 @@ maybeTest("telegram webhook accepts correct secret header and writes KV", async 
     fetchMock.calls[0].url,
     "https://api.telegram.org/bottoken/answerCallbackQuery"
   );
+});
+
+maybeTest("telegram webhook returns invalid callback data on malformed data", async () => {
+  const { consoleMock, logs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
+  const worker = module.default;
+  const kv = new MockKV(seedSession(Date.now()));
+  const env = buildEnv({ secret: "topsecret", kv });
+  const response = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret", data: "LIKE_TEST" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.equal(body, "Invalid callback data");
+  assert.equal(kv.putCalls.length, 0);
+  assert.ok(findLogEvent(logs, "telegram_webhook_rejected"));
 });
 
 maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
