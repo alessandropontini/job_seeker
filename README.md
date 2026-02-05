@@ -301,9 +301,15 @@ the digest payload and dedupe state. To perform an offline dry run, set
 Deploy the Worker in `cloudflare/worker/` and set repository secrets:
 - `JOB_SCOUT_WEBHOOK_BASE_URL` (Worker URL)
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret)
- - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
+- `TELEGRAM_BOT_TOKEN` (Telegram bot for feedback callbacks)
+- `TELEGRAM_WEBHOOK_SECRET` (Telegram webhook secret)
+- `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
 Worker deploys run via **Actions → deploy-feedback-worker**. See
 `cloudflare/worker/README.md` for deployment details.
+The deploy workflow intentionally runs in multiple steps (bootstrap deploy, secret
+uploads, then a final deploy) to avoid the known wrangler-action issue where bulk
+secret uploads fail before the Worker script exists. This makes the workflow
+idempotent for both first-time and repeat deploys.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:

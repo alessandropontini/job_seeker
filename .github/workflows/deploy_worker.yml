@@ -10,6 +10,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      WRANGLER_VERSION: "3.89.0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,16 +22,36 @@ jobs:
         env:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
 
-      - name: Deploy Worker
+      - name: Deploy Worker (bootstrap without secrets)
+        # First deploy must NOT upload secrets. This avoids the wrangler-action bulk
+        # secrets bug when the Worker script does not exist yet.
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: "cloudflare/worker"
-          secrets: |
-            TELEGRAM_BOT_TOKEN
-            JOB_SCOUT_WEBHOOK_SECRET
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+
+      - name: Upload Worker secrets (after script exists)
+        # Upload secrets only after the Worker exists to avoid "Failed to upload secrets".
+        working-directory: cloudflare/worker
         env:
-          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          FEEDBACK_WINDOW_MINUTES: "60"
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          printf "%s" "$TELEGRAM_BOT_TOKEN" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_BOT_TOKEN
+          printf "%s" "$JOB_SCOUT_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put JOB_SCOUT_WEBHOOK_SECRET
+          printf "%s" "$TELEGRAM_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_WEBHOOK_SECRET
+
+      - name: Deploy Worker (finalize bindings)
+        # Re-deploy to ensure secrets/bindings are active and the deploy is idempotent.
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: "cloudflare/worker"
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
