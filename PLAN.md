@@ -115,3 +115,5 @@
   token and non-sensitive verification output (Phase 2).
 - Phase 7 ops: improved Telegram webhook setup diagnostics with HTTP status, raw response logging,
   and HTTPS base URL validation for faster troubleshooting.
+- Phase 7 ops: expanded `telegram_webhook_get` diagnostics with HTTP status, raw response, curl
+  stderr, and non-sensitive token fingerprinting to detect secret mismatches.
