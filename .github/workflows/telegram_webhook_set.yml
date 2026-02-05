@@ -1,0 +1,86 @@
+name: telegram_webhook_set
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-webhook:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate webhook secrets
+        env:
+          JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${JOB_SCOUT_WEBHOOK_BASE_URL:-}" ]; then
+            echo "JOB_SCOUT_WEBHOOK_BASE_URL is required." >&2
+            exit 1
+          fi
+          if [ -z "${JOB_SCOUT_WEBHOOK_SECRET:-}" ]; then
+            echo "JOB_SCOUT_WEBHOOK_SECRET is required." >&2
+            exit 1
+          fi
+      - name: Set Telegram webhook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          webhook_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}/telegram/feedback"
+          payload="$(python - <<'PY'
+          import json
+          import os
+
+          webhook_url = os.environ.get("JOB_SCOUT_WEBHOOK_BASE_URL", "").rstrip("/") + "/telegram/feedback"
+          secret_token = os.environ.get("JOB_SCOUT_WEBHOOK_SECRET", "")
+          print(json.dumps({"url": webhook_url, "secret_token": secret_token}))
+          PY
+          )"
+          response="$(curl -sS -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook")"
+          printf '%s' "$response" | python - <<'PY'
+          import json
+          import sys
+
+          payload = sys.stdin.read().strip() or "{}"
+          data = json.loads(payload)
+          ok = data.get("ok") is True
+          print(f"ok: {data.get('ok')}")
+          print(f"description: {data.get('description', '')}")
+          if not ok:
+              sys.exit(1)
+          PY
+      - name: Fetch Telegram webhook info
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          response="$(curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
+          printf '%s' "$response" | python - <<'PY'
+          import json
+          import sys
+
+          payload = sys.stdin.read().strip() or "{}"
+          data = json.loads(payload)
+          result = data.get("result", {})
+
+          print(f"url: {result.get('url', '')}")
+          print(f"pending_update_count: {result.get('pending_update_count', '')}")
+
+          last_error_message = result.get("last_error_message")
+          if last_error_message:
+              print(f"last_error_message: {last_error_message}")
+
+          ip_address = result.get("ip_address")
+          if ip_address:
+              print(f"ip_address: {ip_address}")
+
+          if "has_custom_certificate" in result:
+              print(f"has_custom_certificate: {result.get('has_custom_certificate')}")
+          PY

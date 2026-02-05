@@ -152,6 +152,19 @@ job_scout run
 See `docs/PHASE_7_SECURE_FEEDBACK.md` and the diagram in
 `docs/diagrams/phase7_feedback_flow.md` for the secure feedback flow.
 
+## Telegram webhook management (Phase 1 & 2)
+- `telegram_webhook_get` (workflow_dispatch) is read-only and prints the current webhook status.
+- `telegram_webhook_set` (workflow_dispatch) sets the webhook to
+  `${JOB_SCOUT_WEBHOOK_BASE_URL}/telegram/feedback` and then re-reads the webhook status.
+- The Cloudflare Worker validates the `X-Telegram-Bot-Api-Secret-Token` header against
+  `JOB_SCOUT_WEBHOOK_SECRET` for authenticated callback delivery.
+
+Run the workflows from **GitHub Actions**:
+1. Run `telegram_webhook_set`.
+2. Run `telegram_webhook_get` and confirm the `url` ends with `/telegram/feedback`.
+3. Click 👍 in a Telegram digest message and confirm Cloudflare logs show
+   `POST /telegram/feedback`.
+
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
 - **Role:** only manager/lead/head titles are accepted.

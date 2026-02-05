@@ -111,3 +111,5 @@
   with non-sensitive verification output.
 - Phase 7 ops: added a manual GitHub Actions workflow to read Telegram webhook status (Phase 1)
   and documented the expected `/telegram/feedback` URL.
+- Phase 7 ops: added a manual GitHub Actions workflow to set the Telegram webhook with a secret
+  token and non-sensitive verification output (Phase 2).
