@@ -93,6 +93,10 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
   answers with “⏱ Feedback window closed” and returns HTTP 410.
 - Check the Worker logs for `window` or `job` validation failures.
 
+### Troubleshooting: deploy workflow fails before wrangler deploy
+- If logs show `kv_namespaces[0]... id:""` or `Missing CLOUDFLARE_KV_NAMESPACE_ID`, ensure the
+  GitHub Actions secret `CLOUDFLARE_KV_NAMESPACE_ID` is set and matches your Cloudflare KV namespace.
+
 ### Troubleshooting: dummy E2E artifact check failure
 - The guard-rail validates that accepted matches imply a non-empty digest.
 - Check `out/last_run_dummy_e2e.json` for `digest.jobs`, or the channel-specific lists

@@ -16,6 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_KV_NAMESPACE_ID:-}" ]; then
+            echo "::error::Missing CLOUDFLARE_KV_NAMESPACE_ID secret."
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+
       - name: Configure Worker namespace
         run: |
           sed -i "s/REPLACE_WITH_NAMESPACE_ID/${CLOUDFLARE_KV_NAMESPACE_ID}/" cloudflare/worker/wrangler.toml
