@@ -28,10 +28,7 @@ jobs:
             exit 1
           fi
           base_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}"
-          payload=$(cat <<JSON
-{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":${ALLOWED_TELEGRAM_USER_ID}},"data":"LIKE_TEST","message":{"message_id":1}}}
-JSON
-          )
+          payload='{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":'"${ALLOWED_TELEGRAM_USER_ID}"'},"data":"LIKE_TEST","message":{"message_id":1}}}'
           response=$(curl -sS -w "\n%{http_code}" \
             -H "Content-Type: application/json" \
             -H "X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}" \
@@ -39,14 +36,8 @@ JSON
             "${base_url}/telegram/feedback")
           status=$(echo "${response}" | tail -n1)
           body=$(echo "${response}" | sed '$d')
-          body_short=$(printf "%s" "${body}" | python - <<'PY'
-import sys
+          body_short=$(printf "%s" "${body}" | python -c 'import sys
 text = sys.stdin.read().strip()
-if len(text) > 200:
-    print(text[:200] + "…")
-else:
-    print(text)
-PY
-          )
+print(text[:200] + "…" if len(text) > 200 else text)')
           echo "status=${status}"
           echo "body=${body_short}"
