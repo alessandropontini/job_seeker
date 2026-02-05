@@ -311,6 +311,7 @@ uploads, then a final deploy) to avoid the known wrangler-action issue where bul
 secret uploads fail before the Worker script exists. This makes the workflow
 idempotent for both first-time and repeat deploys.
 The workflow now tracks the latest Wrangler CLI release for more predictable Cloudflare deploys.
+The Cloudflare Worker name is `job-scout-telegram-feedback` and should match the Telegram webhook route.
 
 **Secure webhook enabled checklist**
 - ✅ `JOB_SCOUT_WEBHOOK_SECRET` exists in GitHub Actions secrets and Cloudflare Worker secrets.

@@ -1,4 +1,4 @@
-name = "job-scout-feedback"
+name = "job-scout-telegram-feedback"
 main = "worker.js"
 compatibility_date = "2024-10-01"
 

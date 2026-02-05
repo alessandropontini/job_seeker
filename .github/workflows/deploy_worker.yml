@@ -37,6 +37,14 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Diagnostics (worker config)
+        run: |
+          set -euo pipefail
+          pwd
+          ls -la cloudflare/worker
+          sed -n '1,120p' cloudflare/worker/wrangler.toml
+          npx --yes wrangler@${WRANGLER_VERSION} --version
+
       - name: Deploy Worker (bootstrap without secrets)
         # First deploy must NOT upload secrets. This avoids the wrangler-action bulk
         # secrets bug when the Worker script does not exist yet.
@@ -68,3 +76,8 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: "cloudflare/worker"
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
+
+      - name: Diagnostics (post-deploy)
+        run: |
+          set -euo pipefail
+          echo "Deployed worker name: $(sed -n 's/^name = \"\\(.*\\)\"/\\1/p' cloudflare/worker/wrangler.toml)"

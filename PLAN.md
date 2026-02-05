@@ -103,3 +103,5 @@
   and verification steps documented.
 - Phase 7 ops: updated Worker deploy workflow to track latest Wrangler CLI and added test runtime
   guardrails for Node VM module availability.
+- Phase 7 ops fix: aligned Cloudflare Worker name with the Telegram webhook route and added
+  non-sensitive deploy diagnostics to confirm the deployed worker.
