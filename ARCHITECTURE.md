@@ -80,6 +80,7 @@ Config keys and semantics:
 - `scoring.penalty_weights` — per-penalty deductions.
 - `scoring.bonus_weights` — per-bonus additions.
 - `notifications.telegram.enabled` — enable Telegram notifications.
+- `notifications.telegram.dry_run` — write Telegram payload locally without network calls.
 - `notifications.telegram.top_n` — max jobs included in a digest.
 - `notifications.telegram.min_score` — minimum score to notify.
 - `notifications.telegram.min_score_improvement` — minimum score delta to notify.

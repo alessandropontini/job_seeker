@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -98,3 +99,39 @@ def test_dedupe_skips_duplicate_digest(tmp_path, monkeypatch):
 
     assert called["count"] == 0
     assert result.skipped_reason == "duplicate_digest"
+
+
+def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
+    fixed_now = datetime(2024, 2, 6, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    row = _make_row("alpha", 110, [])
+    row.posting.posted_at = fixed_now - timedelta(hours=2)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["dry_run"] = True
+
+    result = notifications.maybe_notify([row], output_dir, config)
+
+    assert result.notification_mode == "daily_window"
+
+    last_run = json.loads(
+        (output_dir / "last_run.json").read_text(encoding="utf-8")
+    )
+    digest = last_run["digest"]
+    assert digest["digest_hash"]
+    assert digest["jobs"]
+    assert last_run["summary"]["digest_count"] == len(digest["jobs"])
+    assert "dummy:alpha" in last_run["jobs"]
+
+    last_notified = json.loads(
+        (output_dir / "last_notified.json").read_text(encoding="utf-8")
+    )
+    assert last_notified["notified_ids"]
+
+    payload = json.loads(
+        (output_dir / "telegram_payload.json").read_text(encoding="utf-8")
+    )
+    assert payload["text"]

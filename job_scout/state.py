@@ -75,6 +75,28 @@ def save_snapshot(path: Path, snapshot: Snapshot) -> None:
     )
 
 
+def save_run_state(
+    path: Path,
+    snapshot: Snapshot,
+    digest: Mapping[str, object],
+    summary: Mapping[str, object] | None = None,
+) -> None:
+    """Persist snapshot data alongside the latest digest payload."""
+
+    payload = {
+        "generated_at": snapshot.generated_at,
+        "jobs": snapshot.jobs,
+        "digest": dict(digest),
+    }
+    if summary:
+        payload["summary"] = dict(summary)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, sort_keys=True, indent=2),
+        encoding="utf-8",
+    )
+
+
 def diff_rows(
     previous: Snapshot,
     rows: Iterable[ReportRow],

@@ -1,0 +1,111 @@
+name: dummy-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      since_days:
+        description: "Days back to query (dummy)"
+        required: false
+        default: "7"
+
+jobs:
+  run-dummy-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements.txt
+          else
+            echo "No runtime dependencies to install."
+          fi
+
+      - name: Run dummy pipeline (dry-run notifier)
+        run: |
+          SINCE_DAYS="${{ inputs.since_days || '7' }}"
+          python -m job_scout run \
+            --config config/dummy_e2e.yaml \
+            --since-days "$SINCE_DAYS" \
+            --source dummy \
+            --output-dir out
+
+      - name: Assert digest state populated
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          from pathlib import Path
+
+          report_path = Path("out/report.csv")
+          last_run_path = Path("out/last_run.json")
+          if not report_path.exists():
+              raise SystemExit("report.csv missing")
+          if not last_run_path.exists():
+              raise SystemExit("last_run.json missing")
+          with report_path.open(newline="", encoding="utf-8") as handle:
+              reader = csv.DictReader(handle)
+              accepted = [row for row in reader if row.get("decision") == "accepted"]
+          last_run = json.loads(last_run_path.read_text(encoding="utf-8"))
+          digest_jobs = last_run.get("digest", {}).get("jobs", [])
+          if accepted and not digest_jobs:
+              raise SystemExit("digest jobs missing despite accepted matches")
+          print(f"Accepted matches: {len(accepted)}; digest jobs: {len(digest_jobs)}")
+          PY
+
+      - name: Assert dedupe on rerun (dry-run)
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          payload_path = Path("out/telegram_payload.json")
+          if not payload_path.exists():
+              raise SystemExit("telegram_payload.json missing after first run")
+          digest = hashlib.sha256(payload_path.read_bytes()).hexdigest()
+          Path("out/payload_hash.txt").write_text(digest, encoding="utf-8")
+          PY
+          python -m job_scout run \
+            --config config/dummy_e2e.yaml \
+            --since-days "${{ inputs.since_days || '7' }}" \
+            --source dummy \
+            --output-dir out
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          payload_path = Path("out/telegram_payload.json")
+          last_notified_path = Path("out/last_notified.json")
+          hash_path = Path("out/payload_hash.txt")
+          if not last_notified_path.exists():
+              raise SystemExit("last_notified.json missing after rerun")
+          if not payload_path.exists():
+              raise SystemExit("telegram_payload.json missing after rerun")
+          if not hash_path.exists():
+              raise SystemExit("payload hash missing")
+          prior_hash = hash_path.read_text(encoding="utf-8").strip()
+          current_hash = hashlib.sha256(payload_path.read_bytes()).hexdigest()
+          if prior_hash != current_hash:
+              raise SystemExit("dedupe failed: payload changed on rerun")
+          PY
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-scout-dummy-e2e
+          if-no-files-found: warn
+          path: |
+            out/report.csv
+            out/report.md
+            out/last_run.json
+            out/last_notified.json
+            out/telegram_payload.json
+            out/digest.md

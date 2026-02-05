@@ -84,3 +84,6 @@
 - Implemented Telegram feedback buttons with a lightweight preference profile.
 - Added stateful digest dedupe (`last_notified.json`) and cache persistence in Actions.
 - Expanded documentation (README + runbook) and refreshed goldens/tests for no regressions.
+- Persisted full digest payloads in `last_run.json` and wired daily notifications to the
+  complete daily window digest.
+- Split GitHub Actions workflows into daily remotive runs and manual dummy E2E runs.

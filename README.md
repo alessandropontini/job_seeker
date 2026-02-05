@@ -153,12 +153,17 @@ The pipeline writes reports to `out/`:
   - `## Missing Salary (allowed)`
   - `## Rejected`
   - Accepted postings include a score line and score adjustments.
-- `out/last_run.json` stores notified job IDs + scores + notification timestamps
-  to prevent duplicate daily alerts and is updated even when some notification rows are malformed.
+- `out/last_run.json` stores the latest digest payload **and** the notification snapshot
+  (job IDs + scores + notification timestamps). The digest section mirrors the report
+  content used for Telegram and includes summary counts plus a digest hash.
 - `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
 - `out/preferences.json` stores the preference profile and last feedback cache.
+- `out/telegram_payload.json` stores the dry-run Telegram payload when
+  `notifications.telegram.dry_run: true` is enabled (no network calls).
+- `out/digest.md` stores the plain-text digest in dry-run mode.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
-`report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`.
+`report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`,
+plus `telegram_payload.json`/`digest.md` for dummy dry-run workflows.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -174,11 +179,15 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
 
 ## Telegram notifications (Phase 6 live)
 - Telegram is always enabled by default (`notifications.telegram.enabled: true`).
+- Use `notifications.telegram.dry_run: true` to write the payload to disk without
+  contacting Telegram (offline-safe dummy runs).
 - Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 - If secrets are missing or invalid, the run completes with a warning and skips
   the notification (no secrets are printed).
 - Each run sends exactly one daily digest message using the last 24 hours
-  (`digest.window_hours`) of `posted_at` timestamps in UTC.
+  (`digest.window_hours`) of `posted_at` timestamps in UTC. The daily window
+  always includes the full digest; dedupe prevents re-sending identical digests
+  on the same date.
 - If there are no jobs in the 24h window, the message states:
   “No new job postings published in the last 24 hours.”
 - Each digest item includes inline feedback buttons:
@@ -187,6 +196,13 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
 - Diagnostics are safe: logs show `getMe` validation results and
   `sendMessage` failures with Telegram's status/description, plus
   boolean `token_present`/`chat_id_present` indicators only.
+
+## GitHub Actions workflows
+- **Daily (08:00 Europe/Rome)**: `.github/workflows/daily_job_scout.yml`
+  runs `remotive` and sends the real Telegram digest (secrets required).
+- **Dummy E2E (manual-only)**: `.github/workflows/dummy_e2e.yml`
+  runs the dummy source with `notifications.telegram.dry_run: true` to validate
+  the full pipeline offline (no Telegram network calls).
 
 ## Testing
 Run offline tests (default, deterministic):
@@ -213,6 +229,14 @@ export JOB_SCOUT_RUN_INTEGRATION=1
 export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
 bash tools/run_tests_integration.sh
 ```
+
+### Dummy E2E dry-run (local)
+Run the offline-safe dummy workflow locally without Telegram:
+```bash
+python -m job_scout run --config config/dummy_e2e.yaml --since-days 7 --source dummy --output-dir out
+```
+Inspect `out/telegram_payload.json`, `out/digest.md`, and `out/last_run.json` to validate
+the digest payload and dedupe state.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
@@ -266,6 +290,7 @@ python tools/update_goldens.py
 ## Notifications (Phase 6)
 Telegram notifications are always on by default. Configure in `config/config.yaml`:
 - `notifications.telegram.enabled`: keep Telegram enabled (default: true).
+- `notifications.telegram.dry_run`: write the payload to disk without sending to Telegram.
 - `notifications.telegram.top_n`: fallback number of jobs to include in the digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
 - `digest.mode`: `daily_window` for the daily scheduled digest.
@@ -285,7 +310,11 @@ Add repository secrets in GitHub:
 1. **Settings → Secrets and variables → Actions → New repository secret**
 2. Create `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
 
-The workflow runs daily at 08:00 Europe/Rome. To run manually: go to
-**Actions → job-scout** → **Run workflow** and set inputs
+The daily workflow runs at 08:00 Europe/Rome. To run manually: go to
+**Actions → daily-job-scout** → **Run workflow** and set inputs
 (`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
-`gh workflow run job_scout.yml` (no secrets shown in CLI output).
+`gh workflow run daily_job_scout.yml` (no secrets shown in CLI output).
+
+The dummy E2E workflow is manual-only:
+**Actions → dummy-e2e** → **Run workflow** or
+`gh workflow run dummy_e2e.yml`.

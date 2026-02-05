@@ -1,0 +1,16 @@
+# Dummy E2E configuration (offline-safe, deterministic).
+sources:
+  enabled:
+    - dummy
+
+notifications:
+  telegram:
+    enabled: true
+    dry_run: true
+  dedupe:
+    enabled: true
+    state_path: last_notified.json
+
+digest:
+  mode: daily_window
+  window_hours: 24

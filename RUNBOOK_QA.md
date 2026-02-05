@@ -6,7 +6,9 @@ snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP
 documented as environment limitations rather than project defects.
 
 ## Phase 6 Automation Notes
-GitHub Actions runs are scheduled daily via `job_scout.yml`, and manual runs remain available.
+GitHub Actions runs are scheduled daily via `daily_job_scout.yml`, and manual runs remain available.
+The dummy end-to-end workflow (`dummy_e2e.yml`) is manual-only and runs offline with a dry-run
+notifier that writes payload artifacts instead of calling Telegram.
 Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
 CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
@@ -15,14 +17,14 @@ Phase 6 refinement adds dual-channel outputs, Telegram feedback buttons, and a s
 
 ## Production operations (live schedule)
 The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
-`.github/workflows/job_scout.yml`:
+`.github/workflows/daily_job_scout.yml`:
 - `0 7 * * *` → 08:00 CET (winter)
 - `0 6 * * *` → 08:00 CEST (summer)
 
 ### Daily digest behavior (yesterday window)
 - Each scheduled run uses a UTC window of the last 24 hours (`now_utc - 24h → now_utc`).
 - Only jobs with valid `posted_at` timestamps are eligible for the digest.
-- Jobs already notified in previous runs are excluded to prevent duplicate alerts.
+- The daily digest always includes **all** eligible jobs in the window.
 - A daily digest hash is stored in `out/last_notified.json` to avoid re-sending the
   same digest on the same UTC date.
 
@@ -40,15 +42,17 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Inline feedback buttons (👍/👎/⭐/🧻) are attached for preference learning.
 
 ### Temporarily disabling the schedule
-- Edit `.github/workflows/job_scout.yml` and comment out or remove the `schedule` block.
+- Edit `.github/workflows/daily_job_scout.yml` and comment out or remove the `schedule` block.
 - Keep `workflow_dispatch` to allow manual runs while the schedule is disabled.
 
 ### Phase 6 validation checklist
-- Confirm the workflow has only `workflow_dispatch` and `schedule` triggers.
+- Confirm the daily workflow has only `workflow_dispatch` and `schedule` triggers.
 - Verify the cron schedule aligns with 08:00 Europe/Rome (CET/CEST).
-- Trigger a manual run via **Actions → job-scout → Run workflow**.
+- Trigger a manual run via **Actions → daily-job-scout → Run workflow**.
 - Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`,
   `last_notified.json`, `preferences.json`.
+- Trigger a manual run via **Actions → dummy-e2e → Run workflow** and verify
+  `telegram_payload.json` and `digest.md` artifacts exist.
 - Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
@@ -61,6 +65,13 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - **Token missing/invalid:** Notification skipped; check `TELEGRAM_BOT_TOKEN`.
 - **Snapshot warning about missing job_id/score:** A notification row was malformed; the
   run still completes and `last_run.json` is updated using valid rows.
+
+### Troubleshooting: Telegram empty but report populated
+- Inspect `out/last_run.json` and confirm `digest.jobs` is non-empty for the run.
+- If `digest.jobs` is empty, confirm the daily window matches the expected time range
+  and that `posted_at` timestamps are present in `report.csv`.
+- If `digest.jobs` is present but Telegram is empty, verify the payload in
+  `out/telegram_payload.json` (dry-run) or check action logs for send failures.
 
 ### Remotive validation & tuning (Phase 6)
 Use this checklist when Remotive runs return too few candidates or notifications feel empty.
