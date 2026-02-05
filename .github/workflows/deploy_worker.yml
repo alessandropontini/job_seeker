@@ -22,6 +22,11 @@ jobs:
         env:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
 
+      - name: Setup Node.js for Wrangler CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Deploy Worker (bootstrap without secrets)
         # First deploy must NOT upload secrets. This avoids the wrangler-action bulk
         # secrets bug when the Worker script does not exist yet.
@@ -31,11 +36,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: "cloudflare/worker"
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
-
-      - name: Setup Node.js for Wrangler CLI
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Upload Worker secrets (after script exists)
         # Upload secrets only after the Worker exists to avoid "Failed to upload secrets".
