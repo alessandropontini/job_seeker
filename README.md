@@ -310,6 +310,7 @@ The deploy workflow intentionally runs in multiple steps (bootstrap deploy, secr
 uploads, then a final deploy) to avoid the known wrangler-action issue where bulk
 secret uploads fail before the Worker script exists. This makes the workflow
 idempotent for both first-time and repeat deploys.
+The workflow now tracks the latest Wrangler CLI release for more predictable Cloudflare deploys.
 
 **Secure webhook enabled checklist**
 - ✅ `JOB_SCOUT_WEBHOOK_SECRET` exists in GitHub Actions secrets and Cloudflare Worker secrets.

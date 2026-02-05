@@ -101,3 +101,5 @@
 - Phase 7 ops docs: clarified Wrangler action warnings and expected behavior in the runbook.
 - Phase 7 feedback fix: immediate Telegram ACK with KV persistence queued, plus callback parsing tests
   and verification steps documented.
+- Phase 7 ops: updated Worker deploy workflow to track latest Wrangler CLI and added test runtime
+  guardrails for Node VM module availability.

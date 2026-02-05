@@ -11,7 +11,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      WRANGLER_VERSION: "3.89.0"
+      WRANGLER_VERSION: "latest"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

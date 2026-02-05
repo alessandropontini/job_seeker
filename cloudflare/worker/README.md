@@ -41,6 +41,7 @@ kv_namespaces = [
 ## Deploy
 Worker deploys are handled via GitHub Actions using `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 See `.github/workflows/deploy_worker.yml` and repository secrets setup in the main README.
+The workflow pins Wrangler to the latest release so Worker code stays aligned with Cloudflare CLI updates.
 
 ## Configure Telegram webhook
 Point Telegram to the Worker endpoint and include the secret token header:
