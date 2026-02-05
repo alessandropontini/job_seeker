@@ -35,6 +35,17 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Restore notification state
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/last_notified.json
+            out/preferences.json
+            out/last_run.json
+          key: job-scout-state-${{ github.run_id }}
+          restore-keys: |
+            job-scout-state-
+
       - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then
@@ -71,3 +82,5 @@ jobs:
             out/report.csv
             out/report.md
             out/last_run.json
+            out/last_notified.json
+            out/preferences.json

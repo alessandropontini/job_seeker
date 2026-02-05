@@ -9,7 +9,7 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 3 — Hard vs Soft Rules Separation.
 - **Done:** Phase 4 — Scoring & Ranking.
 - **Done:** Phase 5 — Reliability & Extensibility (QA & hardening complete).
-- **Live:** Phase 6 — Automation & Notifications (scheduled daily digest @ 08:00 Europe/Rome).
+- **Live:** Phase 6 — Refinement: dual-channel output, Telegram feedback, and anti-dup digest (08:00 Europe/Rome).
 
 Project docs:
 - [ROADMAP.md](ROADMAP.md)
@@ -41,6 +41,11 @@ Key sections:
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
 - `salary_rules.currency_rates`: approximate rates used for conversion (EUR=1.0, USD=0.92, GBP=1.17).
+- `channels.top_matches`: strict channel settings (top N, minimum score, missing salary handling).
+- `channels.data_only_best_picks`: wide channel settings plus data keyword lists.
+- `personalization.enabled`: toggle preference learning (default: `false`).
+- `personalization.profile_path`: preference profile location (default: `out/preferences.json`).
+- `personalization.*_step`: per-feedback weight deltas for tokens, tags, remote level, seniority.
 - `scoring.base_score`: starting score for accepted postings.
 - `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
 - `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
@@ -51,6 +56,8 @@ Key sections:
 - `notifications.telegram.enabled`: Telegram is always-on in production (defaults to true).
 - `notifications.telegram.top_n`: fallback max items per digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
+- `notifications.dedupe.enabled`: stateful daily digest de-duplication.
+- `notifications.dedupe.state_path`: file name for digest dedupe state (default: `out/last_notified.json`).
 - `digest.mode`: `daily_window` for the scheduled digest behavior.
 - `digest.window_hours`: size of the daily window (24 hours).
 - `digest.top_n`: number of items in the daily digest.
@@ -101,6 +108,7 @@ python -m job_scout sources --test remotive --since-days 7
 - CI tests and build workflows remain intentionally removed/disabled.
 - Daily digest uses a 24-hour window (UTC) based on `posted_at` timestamps.
 - Telegram notifications are always on and send exactly one message per run.
+- Inline feedback buttons are attached to each digest item (👍/👎/⭐/🧻).
 - Snapshot updates tolerate missing/malformed entries; warnings are logged and the
   run continues without crashing.
 - If secrets are missing or invalid, the run completes with a warning and no notification.
@@ -113,11 +121,22 @@ python -m job_scout sources --test remotive --since-days 7
   `prefer_full_remote` is treated as a soft preference and records a penalty when not met.
 - **Unknown location:** accepted in non-strict runs with an `unknown_location` penalty.
 
+## Dual-channel output
+- **TOP_MATCHES (strict):** the primary channel of accepted matches, ordered by score.
+- **DATA_ONLY_BEST_PICKS (wide):** a secondary channel filtered by data keywords
+  (title/snippet/tags), still respecting the manager/lead role constraints.
+
 ## Scoring & ranking
 - Scores apply only to **accepted** postings.
 - Score = `scoring.base_score` + bonuses − penalties (all weights configured in `scoring`).
 - Data governance keyword matches add a configurable boost, recorded in score bonuses.
 - Reports order accepted postings by score (desc), then by newest `posted_at`.
+
+## Personalization (optional)
+- Enable with `personalization.enabled: true` to apply lightweight preference learning.
+- Telegram feedback buttons update a local profile file with token/tag/remote/seniority weights.
+- Preference scores **only** adjust ranking; hard rejects remain enforced.
+- The profile is stored at `out/preferences.json` by default and is safe to delete/reset.
 
 ## Outputs
 The pipeline writes reports to `out/`:
@@ -127,6 +146,8 @@ The pipeline writes reports to `out/`:
     `salary_min_eur`, `salary_max_eur`, `score`, `score_penalties`,
     `score_bonuses`.
 - `out/report.md` has sections:
+  - `## TOP_MATCHES (strict)`
+  - `## DATA_ONLY_BEST_PICKS (wide)`
   - `## Source Status`
   - `## Matches`
   - `## Missing Salary (allowed)`
@@ -134,8 +155,10 @@ The pipeline writes reports to `out/`:
   - Accepted postings include a score line and score adjustments.
 - `out/last_run.json` stores notified job IDs + scores + notification timestamps
   to prevent duplicate daily alerts and is updated even when some notification rows are malformed.
+- `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
+- `out/preferences.json` stores the preference profile and last feedback cache.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
-`report.csv`, `report.md`, and `last_run.json`.
+`report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -158,6 +181,8 @@ When running in GitHub Actions, these files are uploaded as workflow artifacts:
   (`digest.window_hours`) of `posted_at` timestamps in UTC.
 - If there are no jobs in the 24h window, the message states:
   “No new job postings published in the last 24 hours.”
+- Each digest item includes inline feedback buttons:
+  👍 Interested, 👎 Not a fit, ⭐ Very interesting, 🧻 Duplicate/seen.
 - Snapshot updates tolerate missing fields; warnings are logged and the run completes.
 - Diagnostics are safe: logs show `getMe` validation results and
   `sendMessage` failures with Telegram's status/description, plus

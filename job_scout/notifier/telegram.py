@@ -11,7 +11,9 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 
-def send_message(text: str) -> tuple[bool, str | None]:
+def send_message(
+    text: str, reply_markup: dict | None = None
+) -> tuple[bool, str | None]:
     """Send a Telegram message, returning (sent, reason)."""
 
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -38,13 +40,14 @@ def send_message(text: str) -> tuple[bool, str | None]:
         return False, "getMe failed"
     logger.info("Telegram token validated via getMe.")
 
-    payload = json.dumps(
-        {
-            "chat_id": chat_id,
-            "text": text,
-            "disable_web_page_preview": True,
-        }
-    ).encode("utf-8")
+    message_payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        message_payload["reply_markup"] = reply_markup
+    payload = json.dumps(message_payload).encode("utf-8")
     status, description = _telegram_request(
         bot_token, "sendMessage", payload=payload
     )
@@ -74,6 +77,51 @@ def send_message(text: str) -> tuple[bool, str | None]:
     return True, None
 
 
+def get_updates(
+    offset: int | None = None,
+) -> tuple[list[dict], str | None]:
+    """Fetch Telegram updates for feedback callbacks."""
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        return [], "missing Telegram configuration"
+    payload: dict[str, object] = {"timeout": 0}
+    if offset is not None:
+        payload["offset"] = offset
+    status, body = _telegram_request_payload(
+        bot_token, "getUpdates", payload=json.dumps(payload).encode("utf-8")
+    )
+    if status is None:
+        return [], "connection error"
+    if status != 200:
+        return [], "getUpdates failed"
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return [], "invalid response"
+    if not data.get("ok"):
+        return [], "getUpdates not ok"
+    result = data.get("result", [])
+    if isinstance(result, list):
+        return result, None
+    return [], "invalid response"
+
+
+def answer_callback_query(callback_query_id: str) -> bool:
+    """Acknowledge a Telegram callback query."""
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        return False
+    payload = json.dumps({"callback_query_id": callback_query_id}).encode(
+        "utf-8"
+    )
+    status, _description = _telegram_request(
+        bot_token, "answerCallbackQuery", payload=payload
+    )
+    return status == 200
+
+
 def _telegram_request(
     bot_token: str,
     method: str,
@@ -93,6 +141,38 @@ def _telegram_request(
     except urllib.error.HTTPError as exc:
         body = exc.read()
         return exc.code, _extract_description(body)
+    except urllib.error.URLError as exc:
+        return None, str(exc.reason)
+
+
+def _telegram_request_payload(
+    bot_token: str,
+    method: str,
+    payload: bytes | None = None,
+) -> tuple[int | None, str]:
+    url = f"https://api.telegram.org/bot{bot_token}/{method}"
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST" if payload is not None else "GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read()
+            if isinstance(body, bytes):
+                return response.status, body.decode(
+                    "utf-8", errors="replace"
+                )
+            return response.status, str(body)
+    except urllib.error.HTTPError as exc:
+        body = exc.read()
+        payload_text = (
+            body.decode("utf-8", errors="replace")
+            if isinstance(body, bytes)
+            else str(body)
+        )
+        return exc.code, payload_text
     except urllib.error.URLError as exc:
         return None, str(exc.reason)
 

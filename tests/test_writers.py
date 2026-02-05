@@ -46,6 +46,9 @@ def test_write_reports_creates_files(tmp_path):
         [],
         [],
         tmp_path,
+        top_matches=[row],
+        data_only_best_picks=[row],
+        channel_reasons={"dummy:unit-2": ["data keyword: data"]},
         source_statuses=[SourceStatus(name="dummy", ok=True, count=1)],
     )
 
@@ -62,6 +65,8 @@ def test_write_reports_creates_files(tmp_path):
     assert "Salary: Missing" in md_content
     assert "Penalties: missing_salary" in md_content
     assert "Score: 95" in md_content
+    assert "## TOP_MATCHES" in md_content
+    assert "## DATA_ONLY_BEST_PICKS" in md_content
     assert "## Matches" in md_content
     assert "## Source Status" in md_content
 

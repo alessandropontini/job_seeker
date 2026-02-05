@@ -10,6 +10,12 @@ from typing import List
 from job_scout.config import load_config
 from job_scout.notifications import maybe_notify
 from job_scout.pipeline import run_pipeline
+from job_scout.preferences import (
+    apply_telegram_feedback,
+    load_profile,
+    resolve_profile_path,
+    save_profile,
+)
 from job_scout.sources import AVAILABLE_SOURCES
 
 
@@ -89,6 +95,20 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.command == "run":
         config = load_config(args.config)
+        preference_profile = None
+        preference_path = None
+        personalization = config.get("personalization", {})
+        if isinstance(personalization, dict) and personalization.get(
+            "enabled", False
+        ):
+            preference_path = resolve_profile_path(
+                config, args.output_dir
+            )
+            preference_profile = load_profile(preference_path)
+            preference_profile = apply_telegram_feedback(
+                preference_profile, config
+            )
+            save_profile(preference_path, preference_profile)
         salary_rules = config.get("salary_rules", {})
         allow_missing_salary = salary_rules.get("allow_missing_salary")
         if allow_missing_salary is None:
@@ -102,8 +122,15 @@ def main(argv: List[str] | None = None) -> int:
             strict=args.strict,
             allow_missing_salary=bool(allow_missing_salary),
             sources=args.source,
+            preference_profile=preference_profile,
         )
-        notification = maybe_notify(rows, args.output_dir, config)
+        notification = maybe_notify(
+            rows,
+            args.output_dir,
+            config,
+            preference_profile=preference_profile,
+            preference_path=preference_path,
+        )
         logger = logging.getLogger(__name__)
         logger.info(
             "Run summary: fetched_count=%s normalized_count=%s "
