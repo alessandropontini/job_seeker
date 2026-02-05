@@ -75,6 +75,17 @@ def maybe_notify(
         minimum_score=min_score,
     )
     total_in_window = len(daily_rows)
+    digest_scope = "daily_window"
+    if not daily_rows:
+        fallback_rows = _select_fallback_rows(rows, minimum_score=min_score)
+        if fallback_rows:
+            logger.info(
+                "Daily window empty; using %d fallback rows for digest.",
+                len(fallback_rows),
+            )
+            daily_rows = fallback_rows
+            total_in_window = len(fallback_rows)
+            digest_scope = "fallback_recent"
 
     exclude_ids = set()
     if preference_profile:
@@ -92,6 +103,7 @@ def maybe_notify(
         channel_selection.data_only_best_picks,
         total_in_window=total_in_window,
         window_hours=window_hours,
+        digest_scope=digest_scope,
         data_only_reasons=channel_selection.data_only_reasons,
     )
 
@@ -111,6 +123,7 @@ def maybe_notify(
         digest_date=digest_date,
         digest_hash=digest_hash,
         window_hours=window_hours,
+        digest_scope=digest_scope,
         total_in_window=total_in_window,
         top_rows=channel_selection.top_matches,
         data_only_rows=channel_selection.data_only_best_picks,
@@ -280,6 +293,20 @@ def _select_daily_window_rows(
     return candidates
 
 
+def _select_fallback_rows(
+    rows: Iterable[ReportRow],
+    minimum_score: int,
+) -> list[ReportRow]:
+    candidates: list[ReportRow] = []
+    for row in rows:
+        if not row.match.matches_all:
+            continue
+        if (row.match.score or 0) < minimum_score:
+            continue
+        candidates.append(row)
+    return candidates
+
+
 def _posted_within_window(
     row: ReportRow,
     window_start: datetime,
@@ -315,14 +342,22 @@ def _format_dual_channel_digest(
     data_only_rows: Sequence[ReportRow],
     total_in_window: int,
     window_hours: int,
+    digest_scope: str,
     data_only_reasons: Mapping[str, list[str]] | None = None,
 ) -> str:
     if total_in_window == 0:
         return "No new job postings published in the last 24 hours."
     lines: list[str] = []
-    lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
-    lines.append("Published yesterday")
-    lines.append(f"Total in window: {total_in_window}")
+    if digest_scope == "fallback_recent":
+        lines.append("Job Scout — Daily Digest (fallback)")
+        lines.append(
+            "No new postings in the last 24h; showing latest accepted matches."
+        )
+        lines.append(f"Total in digest: {total_in_window}")
+    else:
+        lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
+        lines.append("Published yesterday")
+        lines.append(f"Total in window: {total_in_window}")
     if top_rows:
         lines.append("\nTop matches")
         for index, row in enumerate(top_rows, start=1):
@@ -529,26 +564,37 @@ def _build_digest_payload(
     digest_date: str,
     digest_hash: str,
     window_hours: int,
+    digest_scope: str,
     total_in_window: int,
     top_rows: Sequence[ReportRow],
     data_only_rows: Sequence[ReportRow],
     data_only_reasons: Mapping[str, list[str]] | None = None,
 ) -> dict[str, object]:
     jobs: list[dict[str, object]] = []
+    top_matches_payload: list[dict[str, object]] = []
+    data_only_payload: list[dict[str, object]] = []
     for channel, row in _channel_rows(top_rows, data_only_rows):
         reasons = None
         if channel == "data_only_best_picks" and data_only_reasons:
             reasons = data_only_reasons.get(_snapshot_key(row))
-        jobs.append(_serialize_digest_row(row, channel, reasons))
+        serialized = _serialize_digest_row(row, channel, reasons)
+        jobs.append(serialized)
+        if channel == "top_matches":
+            top_matches_payload.append(serialized)
+        else:
+            data_only_payload.append(serialized)
     return {
         "generated_at": now.isoformat(),
         "date": digest_date,
         "window_hours": window_hours,
+        "scope": digest_scope,
         "total_in_window": total_in_window,
         "top_matches_count": len(top_rows),
         "data_only_count": len(data_only_rows),
         "digest_hash": digest_hash,
         "jobs": jobs,
+        "top_matches": top_matches_payload,
+        "data_only_best_picks": data_only_payload,
     }
 
 

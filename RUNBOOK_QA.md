@@ -68,10 +68,21 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 
 ### Troubleshooting: Telegram empty but report populated
 - Inspect `out/last_run.json` and confirm `digest.jobs` is non-empty for the run.
-- If `digest.jobs` is empty, confirm the daily window matches the expected time range
-  and that `posted_at` timestamps are present in `report.csv`.
+  If `digest.jobs` is empty, check `digest.top_matches` and
+  `digest.data_only_best_picks` (schema aliases).
+- If `digest.scope` is `fallback_recent`, the daily window had no recent postings.
+  Confirm the daily window matches the expected time range and that `posted_at`
+  timestamps are present in `report.csv`.
 - If `digest.jobs` is present but Telegram is empty, verify the payload in
   `out/telegram_payload.json` (dry-run) or check action logs for send failures.
+
+### Troubleshooting: dummy E2E artifact check failure
+- The guard-rail validates that accepted matches imply a non-empty digest.
+- Check `out/last_run.json` for `digest.jobs`, or the channel-specific lists
+  `digest.top_matches` / `digest.data_only_best_picks`.
+- If all digest lists are empty but `report.csv` shows accepted rows, inspect
+  `posted_at` timestamps and the daily window; a fallback digest should be used
+  when the 24h window is empty.
 
 ### Remotive validation & tuning (Phase 6)
 Use this checklist when Remotive runs return too few candidates or notifications feel empty.

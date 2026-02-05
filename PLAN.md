@@ -87,3 +87,5 @@
 - Persisted full digest payloads in `last_run.json` and wired daily notifications to the
   complete daily window digest.
 - Split GitHub Actions workflows into daily remotive runs and manual dummy E2E runs.
+- Stabilized `last_run.json` digest schema with channel aliases and added a fallback
+  digest scope when the daily window is empty.
