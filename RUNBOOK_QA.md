@@ -88,6 +88,7 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 ### Troubleshooting: feedback buttons do nothing
 - Confirm the Telegram webhook is set to the Worker endpoint (`/telegram/feedback`).
 - Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `JOB_SCOUT_WEBHOOK_SECRET` configured.
+- Confirm the Telegram webhook was configured with `secret_token` matching `JOB_SCOUT_WEBHOOK_SECRET`.
 - Verify the callback arrives within the 1-hour feedback window; outside the window the Worker
   answers with “⏱ Feedback window closed” and returns HTTP 410.
 - Check the Worker logs for `window` or `job` validation failures.

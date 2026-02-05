@@ -8,6 +8,8 @@ and is applied to ranking/duplicate suppression on the next run without bypassin
 
 ## Security model
 - GitHub Actions → Worker requests are **HMAC SHA-256 signed** using `JOB_SCOUT_WEBHOOK_SECRET`.
+- Telegram → Worker webhook requests must include `X-Telegram-Bot-Api-Secret-Token`, matching
+  `JOB_SCOUT_WEBHOOK_SECRET`.
 - Worker validates:
   - Signature (`X-Webhook-Signature`)
   - Timestamp freshness (`X-Webhook-Timestamp`, ±5 minutes)
@@ -36,12 +38,25 @@ Required:
 - `JOB_SCOUT_WEBHOOK_BASE_URL`, `JOB_SCOUT_WEBHOOK_SECRET`
 - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
 
+## Configure Telegram webhook secret token
+Telegram must be configured with the shared secret token so the Worker can authenticate the
+callback queries:
+```bash
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url":"https://<your-worker-domain>/telegram/feedback",
+    "secret_token":"<JOB_SCOUT_WEBHOOK_SECRET>"
+  }'
+```
+
 ## Dummy vs Remotive separation
 Dummy E2E runs use a state suffix (`dummy_e2e`) to isolate dedupe and preference state. The
 feedback flow is identical but uses the dummy dataset for deterministic UX validation.
 
 ## Troubleshooting
-- **Buttons not working:** verify Telegram webhook to `/telegram/feedback` and Worker secrets.
+- **Buttons not working:** verify Telegram webhook to `/telegram/feedback`, ensure the
+  `secret_token` matches `JOB_SCOUT_WEBHOOK_SECRET`, and confirm Worker secrets are set.
 - **Feedback not applied:** ensure `feedback.run_id` exists in `last_run.json` and Worker returns
   feedback for the run.
 - **Signature errors:** verify `JOB_SCOUT_WEBHOOK_SECRET` matches between Actions and Worker.

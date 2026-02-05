@@ -40,12 +40,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
-          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
           printf "%s" "$TELEGRAM_BOT_TOKEN" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_BOT_TOKEN
           printf "%s" "$JOB_SCOUT_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put JOB_SCOUT_WEBHOOK_SECRET
-          printf "%s" "$TELEGRAM_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_WEBHOOK_SECRET
 
       - name: Deploy Worker (finalize bindings)
         # Re-deploy to ensure secrets/bindings are active and the deploy is idempotent.

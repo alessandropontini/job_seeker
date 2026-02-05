@@ -19,6 +19,10 @@ async function handleTelegramWebhook(request, env) {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
+  const authError = ensureTelegramWebhookAuthorized(request, env);
+  if (authError) {
+    return authError;
+  }
   let payload;
   try {
     payload = await request.json();
@@ -83,6 +87,18 @@ async function handleTelegramWebhook(request, env) {
   });
   await answerCallback(env, callback.id, "✅ Feedback recorded");
   return new Response("OK", { status: 200 });
+}
+
+function ensureTelegramWebhookAuthorized(request, env) {
+  const secret = env.JOB_SCOUT_WEBHOOK_SECRET;
+  if (!secret) {
+    return new Response("Missing webhook secret", { status: 500 });
+  }
+  const provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
+  if (!provided || provided !== secret) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  return null;
 }
 
 async function handleFeedback(request, env) {

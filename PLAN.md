@@ -94,3 +94,5 @@
 - Phase 7 kickoff: per-job Telegram UX with time-gated feedback via Cloudflare Worker + KV.
 - Phase 7 security: HMAC-signed Worker requests, idempotency checks, and 60-minute feedback window.
 - Phase 7 ops: stabilized Cloudflare Worker deploy workflow with staged deploy + secret upload.
+- Phase 7 security hardening: Telegram webhook secret-token auth, aligned secret naming, and
+  updated runbooks/tests for authenticated callbacks.
