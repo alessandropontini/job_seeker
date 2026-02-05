@@ -105,3 +105,5 @@
   guardrails for Node VM module availability.
 - Phase 7 ops fix: aligned Cloudflare Worker name with the Telegram webhook route and added
   non-sensitive deploy diagnostics to confirm the deployed worker.
+- Phase 7 security: enforce feedback allowlist via `ALLOWED_TELEGRAM_USER_ID` and document
+  the authorization behavior for Telegram callbacks.

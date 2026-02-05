@@ -61,12 +61,13 @@ async function loadWorkerModule() {
   return module.namespace;
 }
 
-function buildEnv({ secret, kv }) {
+function buildEnv({ secret, kv, allowedUserId }) {
   return {
     JOB_SCOUT_WEBHOOK_SECRET: secret,
     TELEGRAM_BOT_TOKEN: undefined,
     FEEDBACK_WINDOW_MINUTES: 60,
     JOB_SCOUT_KV: kv,
+    ALLOWED_TELEGRAM_USER_ID: allowedUserId,
   };
 }
 
@@ -133,6 +134,23 @@ maybeTest("telegram webhook accepts correct secret header and writes KV", async 
   assert.equal(response.status, 200);
   assert.equal(kv.putCalls.length, 1);
   assert.ok(kv.store.has("feedback:run123:job1:42"));
+});
+
+maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV(seedSession(Date.now()));
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    allowedUserId: "99",
+  });
+  const response = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  assert.equal(kv.putCalls.length, 0);
 });
 
 maybeTest("parseCallbackData accepts the expected feedback payload format", async () => {

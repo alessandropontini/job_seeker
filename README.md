@@ -303,6 +303,7 @@ Deploy the Worker in `cloudflare/worker/` and set repository secrets:
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret for HMAC + Telegram webhook authentication)
 - `TELEGRAM_WEBHOOK_SECRET` (optional override for Telegram `secret_token`; defaults to `JOB_SCOUT_WEBHOOK_SECRET`)
 - `TELEGRAM_BOT_TOKEN` (Telegram bot for feedback callbacks)
+- `ALLOWED_TELEGRAM_USER_ID` (numeric Telegram user ID allowed to record feedback)
 - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
 Worker deploys run via **Actions → deploy-feedback-worker**. See
 `cloudflare/worker/README.md` for deployment details.

@@ -26,6 +26,7 @@ Set these as Worker secrets in Cloudflare:
 - `TELEGRAM_BOT_TOKEN` (the same bot used by Job Scout)
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret used by Job Scout to sign requests and by Telegram webhook authentication)
 - `TELEGRAM_WEBHOOK_SECRET` (optional override for Telegram `secret_token`; falls back to `JOB_SCOUT_WEBHOOK_SECRET`)
+- `ALLOWED_TELEGRAM_USER_ID` (numeric Telegram user ID allowed to record feedback)
 
 Optional Worker env vars:
 - `FEEDBACK_WINDOW_MINUTES` (default: 60)
@@ -60,6 +61,11 @@ Set these environment variables in GitHub Actions (or local shell):
 - `JOB_SCOUT_WEBHOOK_BASE_URL` (e.g., `https://<your-worker-domain>`)
 - `JOB_SCOUT_WEBHOOK_SECRET` (same as `JOB_SCOUT_WEBHOOK_SECRET` in Worker)
 - `FEEDBACK_WINDOW_MINUTES` (optional override, default 60)
+
+## Allowlist behavior
+Only the user whose Telegram ID matches `ALLOWED_TELEGRAM_USER_ID` can store feedback.
+To discover your numeric user ID, message `@userinfobot` on Telegram and copy the `id` value.
+Other users will see `🚫 Not authorized`, the spinner will clear, and no KV entry is written.
 
 ## Verification (manual)
 1. Run the dummy E2E pipeline to send a Telegram digest with feedback buttons.

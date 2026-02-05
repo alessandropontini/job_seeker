@@ -33,6 +33,15 @@ async function handleTelegramWebhook(request, env, ctx) {
   if (!callback) {
     return new Response("No callback", { status: 200 });
   }
+  const allowedUserId = env.ALLOWED_TELEGRAM_USER_ID;
+  const callbackUserId = callback.from?.id;
+  if (
+    allowedUserId &&
+    String(callbackUserId ?? "") !== String(allowedUserId)
+  ) {
+    await answerCallback(env, callback.id, "🚫 Not authorized");
+    return new Response("OK", { status: 200 });
+  }
   const data = callback.data;
   if (typeof data !== "string") {
     scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
