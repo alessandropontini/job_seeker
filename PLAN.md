@@ -96,3 +96,4 @@
 - Phase 7 ops: stabilized Cloudflare Worker deploy workflow with staged deploy + secret upload.
 - Phase 7 security hardening: Telegram webhook secret-token auth, aligned secret naming, and
   updated runbooks/tests for authenticated callbacks.
+- Phase 7 ops fix: ensured Node is installed in deploy workflow so Wrangler secrets upload succeeds.

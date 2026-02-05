@@ -32,6 +32,11 @@ jobs:
           workingDirectory: "cloudflare/worker"
           wranglerVersion: ${{ env.WRANGLER_VERSION }}
 
+      - name: Setup Node.js for Wrangler CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Upload Worker secrets (after script exists)
         # Upload secrets only after the Worker exists to avoid "Failed to upload secrets".
         working-directory: cloudflare/worker
