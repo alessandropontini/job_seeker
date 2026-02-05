@@ -1,0 +1,52 @@
+name: cf_worker_smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+      JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+      ALLOWED_TELEGRAM_USER_ID: ${{ secrets.ALLOWED_TELEGRAM_USER_ID }}
+    steps:
+      - name: Smoke test Telegram callback endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${JOB_SCOUT_WEBHOOK_BASE_URL}" ]]; then
+            echo "JOB_SCOUT_WEBHOOK_BASE_URL is not set."
+            exit 1
+          fi
+          if [[ -z "${JOB_SCOUT_WEBHOOK_SECRET}" ]]; then
+            echo "JOB_SCOUT_WEBHOOK_SECRET is not set."
+            exit 1
+          fi
+          if [[ -z "${ALLOWED_TELEGRAM_USER_ID}" ]]; then
+            echo "ALLOWED_TELEGRAM_USER_ID is not set."
+            exit 1
+          fi
+          base_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}"
+          payload=$(cat <<JSON
+{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":${ALLOWED_TELEGRAM_USER_ID}},"data":"LIKE_TEST","message":{"message_id":1}}}
+JSON
+          )
+          response=$(curl -sS -w "\n%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}" \
+            -d "${payload}" \
+            "${base_url}/telegram/feedback")
+          status=$(echo "${response}" | tail -n1)
+          body=$(echo "${response}" | sed '$d')
+          body_short=$(printf "%s" "${body}" | python - <<'PY'
+import sys
+text = sys.stdin.read().strip()
+if len(text) > 200:
+    print(text[:200] + "…")
+else:
+    print(text)
+PY
+          )
+          echo "status=${status}"
+          echo "body=${body_short}"

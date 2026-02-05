@@ -386,6 +386,27 @@ Security note: the workflow reads `TELEGRAM_BOT_TOKEN` from GitHub Secrets and n
 2. Tap 👍/👎/⭐/🧻 and confirm the spinner disappears immediately with a “Feedback salvato” toast.
 3. In Cloudflare KV, verify a key like `feedback:<run_id>:<short_id>:<user_id>` was created/updated.
 
+**Worker logs (Observability)**
+1. Open **Workers & Pages → job-scout-telegram-feedback → Observability → Events/Logs**.
+2. Logs appear only when the Worker emits `console.log`/`console.error` output.
+3. Filter by `event` (example: `telegram_webhook_rejected`, `kv_write_failed`) to inspect callback flow.
+
+Optional local tail (no secrets printed):
+```bash
+wrangler tail --format json
+```
+
+**Security note (Telegram callbacks)**
+Telegram servers—not your phone—invoke the webhook. IP allowlists based on a mobile device will
+block callbacks. The correct protection is the `X-Telegram-Bot-Api-Secret-Token` header (matched
+against `JOB_SCOUT_WEBHOOK_SECRET`) plus `ALLOWED_TELEGRAM_USER_ID` for callback ownership.
+
+**Debug flow (no local PC required)**
+1. Deploy the Worker (`deploy-feedback-worker` workflow).
+2. Run **Actions → cf_worker_smoke → Run workflow** to POST a safe test callback.
+3. Run **Actions → telegram_webhook_set → Run workflow** to confirm the webhook configuration.
+4. Tap a feedback button in Telegram and verify the Worker logs + “OK” checkmark appear.
+
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
 ```bash

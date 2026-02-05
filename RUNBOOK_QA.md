@@ -89,6 +89,10 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Confirm the Telegram webhook is set to the Worker endpoint (`/telegram/feedback`).
 - Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `JOB_SCOUT_WEBHOOK_SECRET` configured.
 - Confirm the Telegram webhook was configured with `secret_token` matching `JOB_SCOUT_WEBHOOK_SECRET`.
+- Telegram callbacks come from Telegram servers, not the phone. Do not IP-whitelist a mobile device.
+- Run **Actions → cf_worker_smoke** to POST a safe callback test and confirm logs appear in Cloudflare.
+- Run **Actions → telegram_webhook_set** to confirm the webhook configuration points to
+  `/telegram/feedback`.
 - Verify the callback arrives within the 1-hour feedback window; outside the window the Worker
   answers with “⏱ Feedback window closed” and returns HTTP 410.
 - Check the Worker logs for `window` or `job` validation failures.

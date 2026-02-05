@@ -9,6 +9,12 @@ Receives Telegram `callback_query` updates, validates the run window, writes fee
 always responds with `answerCallbackQuery` to clear the loading spinner. Requires
 `X-Telegram-Bot-Api-Secret-Token`; missing or invalid headers return **401**.
 
+### `GET /telegram/feedback`
+Returns `200 OK` to verify reachability and generate logs without touching KV.
+
+### `GET /healthz`
+Returns `200 OK` for quick liveness checks (useful for log verification).
+
 ### `POST /window/open`
 Registers the feedback window and job mapping for a run. Requires HMAC signature headers.
 
@@ -76,8 +82,24 @@ Only the user whose Telegram ID matches `ALLOWED_TELEGRAM_USER_ID` can store fee
 To discover your numeric user ID, message `@userinfobot` on Telegram and copy the `id` value.
 Other users will see `🚫 Not authorized`, the spinner will clear, and no KV entry is written.
 
+Telegram servers (not your phone) call the webhook, so IP allowlists based on a mobile device
+will block callbacks. Use the secret header + allowlisted user ID instead.
+
 ## Verification (manual)
 1. Run the dummy E2E pipeline to send a Telegram digest with feedback buttons.
 2. Tap 👍/👎/⭐/🧻 — the spinner should disappear immediately with a confirmation toast.
 3. In Cloudflare KV, confirm a key like `feedback:<run_id>:<short_id>:<user_id>` exists
    and contains the action + timestamp payload.
+
+## Logs & troubleshooting
+To view Worker logs in Cloudflare:
+1. Open **Workers & Pages → job-scout-telegram-feedback → Observability → Events/Logs**.
+2. Confirm `console.log`/`console.error` events are enabled (logs appear only when the Worker emits
+   console output).
+3. Filter by `event` (e.g., `telegram_webhook_rejected`, `kv_write_failed`) to debug the callback path.
+
+Optional local tail (no secrets printed):
+```bash
+wrangler tail --format json
+```
+Use your terminal history or exported environment to provide secrets; never echo tokens in shared logs.
