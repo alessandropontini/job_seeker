@@ -33,7 +33,7 @@ class MockKV {
   }
 }
 
-async function loadWorker() {
+async function loadWorkerModule() {
   const source = await readFile(workerPath, "utf8");
   const context = createContext({
     TextDecoder,
@@ -52,7 +52,7 @@ async function loadWorker() {
     throw new Error("Unexpected import in worker module");
   });
   await module.evaluate();
-  return module.namespace.default;
+  return module.namespace;
 }
 
 function buildEnv({ secret, kv }) {
@@ -96,25 +96,28 @@ function seedSession(nowMs) {
 }
 
 test("telegram webhook rejects missing secret header", async () => {
-  const worker = await loadWorker();
+  const module = await loadWorkerModule();
+  const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: null }), env);
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
   assert.equal(kv.putCalls.length, 0);
 });
 
 test("telegram webhook rejects wrong secret header", async () => {
-  const worker = await loadWorker();
+  const module = await loadWorkerModule();
+  const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: "wrong" }), env);
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
   assert.equal(kv.putCalls.length, 0);
 });
 
 test("telegram webhook accepts correct secret header and writes KV", async () => {
-  const worker = await loadWorker();
+  const module = await loadWorkerModule();
+  const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(
@@ -124,4 +127,17 @@ test("telegram webhook accepts correct secret header and writes KV", async () =>
   assert.equal(response.status, 200);
   assert.equal(kv.putCalls.length, 1);
   assert.ok(kv.store.has("feedback:run123:job1:42"));
+});
+
+test("parseCallbackData accepts the expected feedback payload format", async () => {
+  const module = await loadWorkerModule();
+  const { parseCallbackData } = module;
+  const parsed = parseCallbackData("fb|run123|job1|L|hash1");
+  assert.deepEqual(parsed, {
+    runId: "run123",
+    jobShortId: "job1",
+    action: "L",
+    jobHash: "hash1",
+  });
+  assert.equal(parseCallbackData("fb|run123|job1|bad|hash1"), null);
 });

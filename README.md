@@ -301,6 +301,7 @@ the digest payload and dedupe state. To perform an offline dry run, set
 Deploy the Worker in `cloudflare/worker/` and set repository secrets:
 - `JOB_SCOUT_WEBHOOK_BASE_URL` (Worker URL)
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret for HMAC + Telegram webhook authentication)
+- `TELEGRAM_WEBHOOK_SECRET` (optional override for Telegram `secret_token`; defaults to `JOB_SCOUT_WEBHOOK_SECRET`)
 - `TELEGRAM_BOT_TOKEN` (Telegram bot for feedback callbacks)
 - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
 Worker deploys run via **Actions → deploy-feedback-worker**. See
@@ -312,8 +313,13 @@ idempotent for both first-time and repeat deploys.
 
 **Secure webhook enabled checklist**
 - ✅ `JOB_SCOUT_WEBHOOK_SECRET` exists in GitHub Actions secrets and Cloudflare Worker secrets.
-- ✅ Telegram webhook configured with `secret_token` matching `JOB_SCOUT_WEBHOOK_SECRET`.
+- ✅ Telegram webhook configured with `secret_token` matching `TELEGRAM_WEBHOOK_SECRET` or `JOB_SCOUT_WEBHOOK_SECRET`.
 - ✅ `POST /telegram/feedback` rejects missing/invalid `X-Telegram-Bot-Api-Secret-Token`.
+
+**Manual feedback verification**
+1. Run the dummy E2E pipeline (see above) to send a Telegram digest with inline feedback buttons.
+2. Tap 👍/👎/⭐/🧻 and confirm the spinner disappears immediately with a “Feedback salvato” toast.
+3. In Cloudflare KV, verify a key like `feedback:<run_id>:<short_id>:<user_id>` was created/updated.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
