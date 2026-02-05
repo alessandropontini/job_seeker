@@ -109,3 +109,5 @@
   the authorization behavior for Telegram callbacks.
 - Phase 7 ops: added a helper script + docs to configure Telegram webhook to `/telegram/feedback`
   with non-sensitive verification output.
+- Phase 7 ops: added a manual GitHub Actions workflow to read Telegram webhook status (Phase 1)
+  and documented the expected `/telegram/feedback` URL.

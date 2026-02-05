@@ -1,0 +1,39 @@
+name: telegram_webhook_get
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-webhook-info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Fetch Telegram webhook info
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          response="$(curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo")"
+          printf '%s' "$response" | python - <<'PY'
+          import json
+          import sys
+
+          payload = sys.stdin.read().strip() or "{}"
+          data = json.loads(payload)
+          result = data.get("result", {})
+
+          print(f"url: {result.get('url', '')}")
+          print(f"pending_update_count: {result.get('pending_update_count', '')}")
+
+          last_error_message = result.get("last_error_message")
+          if last_error_message:
+              print(f"last_error_message: {last_error_message}")
+
+          ip_address = result.get("ip_address")
+          if ip_address:
+              print(f"ip_address: {ip_address}")
+
+          if "has_custom_certificate" in result:
+              print(f"has_custom_certificate: {result.get('has_custom_certificate')}")
+          PY
