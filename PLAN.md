@@ -94,3 +94,8 @@
 - Phase 7 kickoff: per-job Telegram UX with time-gated feedback via Cloudflare Worker + KV.
 - Phase 7 security: HMAC-signed Worker requests, idempotency checks, and 60-minute feedback window.
 - Phase 7 ops: stabilized Cloudflare Worker deploy workflow with staged deploy + secret upload.
+- Phase 7 security hardening: Telegram webhook secret-token auth, aligned secret naming, and
+  updated runbooks/tests for authenticated callbacks.
+- Phase 7 ops fix: ensured Node is installed in deploy workflow so Wrangler secrets upload succeeds.
+- Phase 7 ops fix: added explicit secret validation to fail fast when KV namespace ID is missing.
+- Phase 7 ops docs: clarified Wrangler action warnings and expected behavior in the runbook.

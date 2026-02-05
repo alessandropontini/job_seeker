@@ -6,7 +6,8 @@ feedback export endpoint for the Job Scout pipeline.
 ## Endpoints
 ### `POST /telegram/feedback`
 Receives Telegram `callback_query` updates, validates the run window, writes feedback to KV, and
-always responds with `answerCallbackQuery` to clear the loading spinner.
+always responds with `answerCallbackQuery` to clear the loading spinner. Requires
+`X-Telegram-Bot-Api-Secret-Token`; missing or invalid headers return **403**.
 
 ### `POST /window/open`
 Registers the feedback window and job mapping for a run. Requires HMAC signature headers.
@@ -23,7 +24,7 @@ Signed requests must include:
 ## Required secrets (Worker)
 Set these as Worker secrets in Cloudflare:
 - `TELEGRAM_BOT_TOKEN` (the same bot used by Job Scout)
-- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret used by Job Scout to sign requests)
+- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret used by Job Scout to sign requests and by Telegram webhook authentication)
 
 Optional Worker env vars:
 - `FEEDBACK_WINDOW_MINUTES` (default: 60)
@@ -41,11 +42,14 @@ Worker deploys are handled via GitHub Actions using `CLOUDFLARE_API_TOKEN` and `
 See `.github/workflows/deploy_worker.yml` and repository secrets setup in the main README.
 
 ## Configure Telegram webhook
-Point Telegram to the Worker endpoint:
+Point Telegram to the Worker endpoint and include the secret token header:
 ```bash
 curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://<your-worker-domain>/telegram/feedback"}'
+  -d '{
+    "url":"https://<your-worker-domain>/telegram/feedback",
+    "secret_token":"<JOB_SCOUT_WEBHOOK_SECRET>"
+  }'
 ```
 
 ## Job Scout integration

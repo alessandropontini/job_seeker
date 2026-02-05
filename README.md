@@ -300,9 +300,8 @@ the digest payload and dedupe state. To perform an offline dry run, set
 ### Cloudflare Worker setup (Phase 7)
 Deploy the Worker in `cloudflare/worker/` and set repository secrets:
 - `JOB_SCOUT_WEBHOOK_BASE_URL` (Worker URL)
-- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret)
+- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret for HMAC + Telegram webhook authentication)
 - `TELEGRAM_BOT_TOKEN` (Telegram bot for feedback callbacks)
-- `TELEGRAM_WEBHOOK_SECRET` (Telegram webhook secret)
 - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
 Worker deploys run via **Actions → deploy-feedback-worker**. See
 `cloudflare/worker/README.md` for deployment details.
@@ -310,6 +309,11 @@ The deploy workflow intentionally runs in multiple steps (bootstrap deploy, secr
 uploads, then a final deploy) to avoid the known wrangler-action issue where bulk
 secret uploads fail before the Worker script exists. This makes the workflow
 idempotent for both first-time and repeat deploys.
+
+**Secure webhook enabled checklist**
+- ✅ `JOB_SCOUT_WEBHOOK_SECRET` exists in GitHub Actions secrets and Cloudflare Worker secrets.
+- ✅ Telegram webhook configured with `secret_token` matching `JOB_SCOUT_WEBHOOK_SECRET`.
+- ✅ `POST /telegram/feedback` rejects missing/invalid `X-Telegram-Bot-Api-Secret-Token`.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:

@@ -16,11 +16,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_KV_NAMESPACE_ID:-}" ]; then
+            echo "::error::Missing CLOUDFLARE_KV_NAMESPACE_ID secret."
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+
       - name: Configure Worker namespace
         run: |
           sed -i "s/REPLACE_WITH_NAMESPACE_ID/${CLOUDFLARE_KV_NAMESPACE_ID}/" cloudflare/worker/wrangler.toml
         env:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+
+      - name: Setup Node.js for Wrangler CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Deploy Worker (bootstrap without secrets)
         # First deploy must NOT upload secrets. This avoids the wrangler-action bulk
@@ -40,12 +55,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
-          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
           printf "%s" "$TELEGRAM_BOT_TOKEN" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_BOT_TOKEN
           printf "%s" "$JOB_SCOUT_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put JOB_SCOUT_WEBHOOK_SECRET
-          printf "%s" "$TELEGRAM_WEBHOOK_SECRET" | npx --yes wrangler@${WRANGLER_VERSION} secret put TELEGRAM_WEBHOOK_SECRET
 
       - name: Deploy Worker (finalize bindings)
         # Re-deploy to ensure secrets/bindings are active and the deploy is idempotent.
