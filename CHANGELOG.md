@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 - Prevented duplicate daily digests from sending on the same UTC date.
 - Fixed empty Telegram digests by persisting the full digest payload in `out/last_run.json`
   and using the daily window digest for notifications.
+- Stabilized `last_run.json` digest schema (channel lists + counts aliases) and added a
+  fallback digest scope when the 24h window is empty to keep dummy E2E artifacts consistent.
 
 ### Breaking changes
 - None.

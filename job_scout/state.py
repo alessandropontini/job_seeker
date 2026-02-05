@@ -83,13 +83,19 @@ def save_run_state(
 ) -> None:
     """Persist snapshot data alongside the latest digest payload."""
 
+    digest_payload = dict(digest)
     payload = {
         "generated_at": snapshot.generated_at,
         "jobs": snapshot.jobs,
-        "digest": dict(digest),
+        "digest": digest_payload,
     }
     if summary:
-        payload["summary"] = dict(summary)
+        summary_payload = dict(summary)
+        payload["summary"] = summary_payload
+        payload["counts"] = summary_payload
+    digest_hash = digest_payload.get("digest_hash")
+    if digest_hash:
+        payload["digest_hash"] = digest_hash
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, sort_keys=True, indent=2),

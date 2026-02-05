@@ -50,6 +50,7 @@ def test_dual_channel_digest_includes_sections():
         [data_row],
         total_in_window=2,
         window_hours=24,
+        digest_scope="daily_window",
         data_only_reasons={
             notifications._snapshot_key(data_row): ["data keyword: data"]
         },
@@ -123,6 +124,8 @@ def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
     digest = last_run["digest"]
     assert digest["digest_hash"]
     assert digest["jobs"]
+    assert digest["top_matches"]
+    assert digest["data_only_best_picks"] == []
     assert last_run["summary"]["digest_count"] == len(digest["jobs"])
     assert "dummy:alpha" in last_run["jobs"]
 
@@ -135,3 +138,28 @@ def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
         (output_dir / "telegram_payload.json").read_text(encoding="utf-8")
     )
     assert payload["text"]
+
+
+def test_fallback_digest_when_window_empty(tmp_path, monkeypatch):
+    fixed_now = datetime(2024, 2, 7, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    row = _make_row("gamma", 105, [])
+    row.posting.posted_at = fixed_now - timedelta(days=3)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["dry_run"] = True
+
+    result = notifications.maybe_notify([row], output_dir, config)
+
+    assert result.notification_mode == "daily_window"
+
+    last_run = json.loads(
+        (output_dir / "last_run.json").read_text(encoding="utf-8")
+    )
+    digest = last_run["digest"]
+    assert digest["scope"] == "fallback_recent"
+    assert digest["jobs"]
+    assert last_run["summary"]["digest_count"] == len(digest["jobs"])

@@ -155,7 +155,14 @@ The pipeline writes reports to `out/`:
   - Accepted postings include a score line and score adjustments.
 - `out/last_run.json` stores the latest digest payload **and** the notification snapshot
   (job IDs + scores + notification timestamps). The digest section mirrors the report
-  content used for Telegram and includes summary counts plus a digest hash.
+  content used for Telegram and includes summary counts plus a digest hash. The digest
+  schema is stable and includes:
+  - `digest.jobs`: flattened list of jobs with `channel` values (`top_matches`,
+    `data_only_best_picks`).
+  - `digest.top_matches` / `digest.data_only_best_picks`: channel-specific lists.
+  - `digest.scope`: `daily_window` (default) or `fallback_recent` when no jobs fall
+    inside the 24h window.
+  - Top-level aliases: `counts` (run summary) and `digest_hash`.
 - `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
 - `out/preferences.json` stores the preference profile and last feedback cache.
 - `out/telegram_payload.json` stores the dry-run Telegram payload when

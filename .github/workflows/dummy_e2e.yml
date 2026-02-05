@@ -55,7 +55,13 @@ jobs:
               reader = csv.DictReader(handle)
               accepted = [row for row in reader if row.get("decision") == "accepted"]
           last_run = json.loads(last_run_path.read_text(encoding="utf-8"))
-          digest_jobs = last_run.get("digest", {}).get("jobs", [])
+          digest_payload = last_run.get("digest", {})
+          digest_jobs = digest_payload.get("jobs", [])
+          if not digest_jobs:
+              digest_jobs = (
+                  (digest_payload.get("top_matches") or [])
+                  + (digest_payload.get("data_only_best_picks") or [])
+              )
           if accepted and not digest_jobs:
               raise SystemExit("digest jobs missing despite accepted matches")
           print(f"Accepted matches: {len(accepted)}; digest jobs: {len(digest_jobs)}")
