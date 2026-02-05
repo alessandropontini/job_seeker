@@ -6,10 +6,27 @@ sources:
 notifications:
   telegram:
     enabled: true
-    dry_run: true
+    dry_run: false
+    send_per_job: true
+    send_header: true
+    persist_payload: true
   dedupe:
     enabled: true
     state_path: last_notified.json
+
+personalization:
+  enabled: true
+  feedback_enabled: true
+
+feedback:
+  enabled: true
+  window_minutes: 60
+
+channels:
+  top_matches:
+    top_n: 2
+  data_only_best_picks:
+    top_n: 3
 
 digest:
   mode: daily_window

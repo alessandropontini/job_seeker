@@ -11,6 +11,8 @@ on:
 jobs:
   run-dummy-e2e:
     runs-on: ubuntu-latest
+    env:
+      STATE_SUFFIX: dummy_e2e
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,24 +31,48 @@ jobs:
             echo "No runtime dependencies to install."
           fi
 
-      - name: Run dummy pipeline (dry-run notifier)
+      - name: Run dummy pipeline (Telegram)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+          FEEDBACK_WINDOW_MINUTES: "60"
         run: |
           SINCE_DAYS="${{ inputs.since_days || '7' }}"
+          echo "Click the Telegram feedback buttons within 1h, then re-run this workflow to observe feedback effects."
           python -m job_scout run \
             --config config/dummy_e2e.yaml \
             --since-days "$SINCE_DAYS" \
             --source dummy \
+            --state-suffix "$STATE_SUFFIX" \
             --output-dir out
+          cp out/last_run_"$STATE_SUFFIX".json out/last_run.json
+          if [ -f "out/last_notified_${STATE_SUFFIX}.json" ]; then
+            cp "out/last_notified_${STATE_SUFFIX}.json" out/last_notified.json
+          fi
+          if [ -f "out/preferences_${STATE_SUFFIX}.json" ]; then
+            cp "out/preferences_${STATE_SUFFIX}.json" out/preferences.json
+          fi
 
       - name: Assert digest state populated
         run: |
           python - <<'PY'
           import csv
           import json
+          import os
           from pathlib import Path
 
+          state_suffix = os.environ.get("STATE_SUFFIX", "")
+          def state_path(filename: str) -> Path:
+              path = Path(filename)
+              if not state_suffix:
+                  return Path("out") / path
+              return Path("out") / f"{path.stem}_{state_suffix}{path.suffix}"
+
           report_path = Path("out/report.csv")
-          last_run_path = Path("out/last_run.json")
+          last_run_path = state_path("last_run.json")
+          last_notified_path = state_path("last_notified.json")
           if not report_path.exists():
               raise SystemExit("report.csv missing")
           if not last_run_path.exists():
@@ -64,44 +90,96 @@ jobs:
               )
           if accepted and not digest_jobs:
               raise SystemExit("digest jobs missing despite accepted matches")
+          if digest_jobs:
+              if not last_notified_path.exists():
+                  raise SystemExit("last_notified.json missing despite digest jobs")
+              last_notified = json.loads(last_notified_path.read_text(encoding="utf-8"))
+              notified_ids = last_notified.get("notified_ids", [])
+              if not notified_ids:
+                  raise SystemExit("notified_ids missing despite digest jobs")
+              if len(notified_ids) != len(digest_jobs):
+                  raise SystemExit("notified_ids count does not match digest jobs")
           print(f"Accepted matches: {len(accepted)}; digest jobs: {len(digest_jobs)}")
           PY
 
-      - name: Assert dedupe on rerun (dry-run)
+      - name: Assert dedupe on rerun
         run: |
           python - <<'PY'
-          import hashlib
+          import json
+          import os
           from pathlib import Path
 
-          payload_path = Path("out/telegram_payload.json")
-          if not payload_path.exists():
-              raise SystemExit("telegram_payload.json missing after first run")
-          digest = hashlib.sha256(payload_path.read_bytes()).hexdigest()
-          Path("out/payload_hash.txt").write_text(digest, encoding="utf-8")
+          state_suffix = os.environ.get("STATE_SUFFIX", "")
+          def state_path(filename: str) -> Path:
+              path = Path(filename)
+              if not state_suffix:
+                  return Path("out") / path
+              return Path("out") / f"{path.stem}_{state_suffix}{path.suffix}"
+
+          last_notified_path = state_path("last_notified.json")
+          last_run_path = state_path("last_run.json")
+          if not last_notified_path.exists():
+              raise SystemExit("last_notified.json missing after first run")
+          if not last_run_path.exists():
+              raise SystemExit("last_run.json missing after first run")
+          last_notified = json.loads(last_notified_path.read_text(encoding="utf-8"))
+          Path("out/last_notified_snapshot.json").write_text(
+              json.dumps(last_notified, sort_keys=True),
+              encoding="utf-8",
+          )
           PY
           python -m job_scout run \
             --config config/dummy_e2e.yaml \
             --since-days "${{ inputs.since_days || '7' }}" \
             --source dummy \
+            --state-suffix "$STATE_SUFFIX" \
             --output-dir out
+          cp out/last_run_"$STATE_SUFFIX".json out/last_run.json
+          if [ -f "out/last_notified_${STATE_SUFFIX}.json" ]; then
+            cp "out/last_notified_${STATE_SUFFIX}.json" out/last_notified.json
+          fi
+          if [ -f "out/preferences_${STATE_SUFFIX}.json" ]; then
+            cp "out/preferences_${STATE_SUFFIX}.json" out/preferences.json
+          fi
           python - <<'PY'
-          import hashlib
+          import json
+          import os
           from pathlib import Path
 
-          payload_path = Path("out/telegram_payload.json")
-          last_notified_path = Path("out/last_notified.json")
-          hash_path = Path("out/payload_hash.txt")
+          state_suffix = os.environ.get("STATE_SUFFIX", "")
+          def state_path(filename: str) -> Path:
+              path = Path(filename)
+              if not state_suffix:
+                  return Path("out") / path
+              return Path("out") / f"{path.stem}_{state_suffix}{path.suffix}"
+
+          last_notified_path = state_path("last_notified.json")
+          last_run_path = state_path("last_run.json")
+          snapshot_path = Path("out/last_notified_snapshot.json")
           if not last_notified_path.exists():
               raise SystemExit("last_notified.json missing after rerun")
-          if not payload_path.exists():
-              raise SystemExit("telegram_payload.json missing after rerun")
-          if not hash_path.exists():
-              raise SystemExit("payload hash missing")
-          prior_hash = hash_path.read_text(encoding="utf-8").strip()
-          current_hash = hashlib.sha256(payload_path.read_bytes()).hexdigest()
-          if prior_hash != current_hash:
-              raise SystemExit("dedupe failed: payload changed on rerun")
+          if not last_run_path.exists():
+              raise SystemExit("last_run.json missing after rerun")
+          if not snapshot_path.exists():
+              raise SystemExit("last_notified snapshot missing")
+          prior_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+          current_payload = json.loads(last_notified_path.read_text(encoding="utf-8"))
+          if prior_payload != current_payload:
+              raise SystemExit("dedupe failed: last_notified changed on rerun")
+          last_run = json.loads(last_run_path.read_text(encoding="utf-8"))
+          summary = last_run.get("summary", {})
+          notified_count = summary.get("notified_count", 0)
+          if notified_count:
+              raise SystemExit("dedupe failed: notified_count should be 0 on rerun")
           PY
+      - name: Summarize feedback (if any)
+        run: |
+          if [ -f "out/feedback_summary_${STATE_SUFFIX}.json" ]; then
+            echo "Feedback summary:"
+            cat "out/feedback_summary_${STATE_SUFFIX}.json"
+          else
+            echo "No feedback summary found."
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -113,5 +191,10 @@ jobs:
             out/report.md
             out/last_run.json
             out/last_notified.json
+            out/preferences.json
+            out/last_run_dummy_e2e.json
+            out/last_notified_dummy_e2e.json
+            out/preferences_dummy_e2e.json
+            out/feedback_summary_dummy_e2e.json
             out/telegram_payload.json
             out/digest.md

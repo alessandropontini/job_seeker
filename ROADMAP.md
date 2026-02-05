@@ -14,6 +14,7 @@
 - Scoring is deterministic, configurable, and applied to accepted postings for ranking.
 - Offline tests are deterministic and run with `NO_NETWORK=1`; online integration tests are opt-in.
 - Phase 6 is live: scheduled daily automation with Telegram notifications always enabled.
+- Phase 7 is underway: per-job Telegram UX with time-gated feedback via Cloudflare Worker.
 - Daily digest runs at 08:00 Europe/Rome and uses a 24-hour window.
 - Data governance keyword boosts surface governance roles higher in ranking.
 - Phase 5 QA notes confirm deterministic outputs, golden snapshot tests, and offline support.
@@ -166,6 +167,24 @@ Add daily automation and notification delivery without changing matching or scor
 - No additional UI or dashboards.
 - No ML-based recommendations.
 - No scraping behind logins.
+
+## Phase 7 — Interactive Feedback (IN PROGRESS)
+### Objective
+Collect Telegram feedback via a time-gated Cloudflare Worker + KV pipeline and apply it to
+ranking/duplicate suppression without bypassing hard rejects.
+
+### Scope (what it changes conceptually)
+Shift feedback ingestion from Telegram polling to a webhook-backed Worker and send one message
+per job with compact feedback buttons (👍/👎/⭐/🧻).
+
+### Definition of Done (5–8 checkboxes)
+- [ ] Per-job Telegram messages with inline feedback buttons.
+- [ ] Cloudflare Worker receives callback queries and answers them immediately.
+- [ ] Feedback window time-gated to 1 hour post-send.
+- [ ] Worker requests are HMAC-signed with idempotency checks.
+- [ ] Feedback applied to ranking/duplicate suppression on next run.
+- [ ] Dummy E2E validates end-to-end feedback flow.
+- [ ] Documentation and QA runbook updated for Phase 7.
 
 ## “Good Enough” Stopping Point
 The project is “done enough” when multiple sources are supported, the decision engine is deterministic and explainable, scoring is deterministic with documented weights, and outputs are stable across runs. Automated digests are optional but desirable once scoring is in place.

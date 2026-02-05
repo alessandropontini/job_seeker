@@ -10,6 +10,7 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 4 — Scoring & Ranking.
 - **Done:** Phase 5 — Reliability & Extensibility (QA & hardening complete).
 - **Live:** Phase 6 — Refinement: dual-channel output, Telegram feedback, and anti-dup digest (08:00 Europe/Rome).
+- **In progress:** Phase 7 — Interactive Telegram feedback via Cloudflare Worker (time-gated) and per-job UX.
 
 Project docs:
 - [ROADMAP.md](ROADMAP.md)
@@ -58,6 +59,16 @@ Key sections:
 - `notifications.telegram.min_score`: minimum score required to notify.
 - `notifications.dedupe.enabled`: stateful daily digest de-duplication.
 - `notifications.dedupe.state_path`: file name for digest dedupe state (default: `out/last_notified.json`).
+- `notifications.telegram.send_per_job`: send one Telegram message per job (default: true).
+- `notifications.telegram.send_header`: send a digest header message before jobs (default: true).
+- `notifications.telegram.persist_payload`: persist the outgoing Telegram payload to disk.
+- `state.suffix`: suffix appended to state files (e.g., `last_run_dummy_e2e.json`).
+- `state.dir`: optional base directory for state files (relative paths resolve under `out/`).
+- `feedback.enabled`: enable the Cloudflare Worker feedback integration.
+- `feedback.webhook_base_url`: Worker base URL (or set `JOB_SCOUT_WEBHOOK_BASE_URL` env var).
+- `feedback.webhook_secret`: shared secret (or set `JOB_SCOUT_WEBHOOK_SECRET` env var).
+- `feedback.window_minutes`: open feedback window duration (default: 60m).
+- `feedback.use_telegram_updates`: optional legacy Telegram polling (default: false).
 - `digest.mode`: `daily_window` for the scheduled digest behavior.
 - `digest.window_hours`: size of the daily window (24 hours).
 - `digest.top_n`: number of items in the daily digest.
@@ -67,6 +78,11 @@ Run the pipeline (defaults to configured sources or `dummy`):
 ```bash
 python -m job_scout run
 python -m job_scout run --since-days 7
+```
+
+Run the pipeline with isolated state files:
+```bash
+python -m job_scout run --state-suffix dummy_e2e
 ```
 
 Run in strict mode (reject missing location data; salary gaps are still allowed):
@@ -104,7 +120,7 @@ python -m job_scout sources --test remotive --since-days 7
 
 ## Phase 6 — Automation & Notifications (live)
 - GitHub Actions runs daily at **08:00 Europe/Rome** (CET/CEST schedule in UTC).
-- Manual runs remain available via **Actions → job-scout → Run workflow**.
+- Manual runs remain available via **Actions → scheduled-remotive → Run workflow**.
 - CI tests and build workflows remain intentionally removed/disabled.
 - Daily digest uses a 24-hour window (UTC) based on `posted_at` timestamps.
 - Telegram notifications are always on and send exactly one message per run.
@@ -112,6 +128,29 @@ python -m job_scout sources --test remotive --since-days 7
 - Snapshot updates tolerate missing/malformed entries; warnings are logged and the
   run continues without crashing.
 - If secrets are missing or invalid, the run completes with a warning and no notification.
+
+## Phase 7 — Interactive feedback (Cloudflare Worker)
+- Each job is sent as its own Telegram message with a 4-button inline keyboard
+  (Mi piace, Forse, Non mi piace, Non rilevante).
+- A time-gated feedback window opens for 1 hour after the digest is sent.
+- Telegram callbacks are handled by a free Cloudflare Worker + KV store.
+- Feedback is applied on the next run to influence ranking and duplicate suppression (no hard rejects bypassed).
+- Callback data uses compact IDs (`fb|<run>|<short_job>|<act>|<hash>`) to stay under the 64-byte limit.
+- GitHub Actions requests to the Worker are signed with HMAC SHA-256 (no secrets in logs).
+
+Architecture (Phase 7 feedback flow):
+```
+job_scout run
+  -> build digest + short ids + open/close window
+  -> POST /window/open (Worker + KV, HMAC signed)
+  -> send per-job Telegram messages (buttons)
+  -> user taps button -> Worker /telegram/feedback
+  -> Worker stores feedback in KV
+  -> next run fetches POST /feedback (HMAC signed)
+  -> preferences updated (ranking/duplicate suppression)
+```
+See `docs/PHASE_7_SECURE_FEEDBACK.md` and the diagram in
+`docs/diagrams/phase7_feedback_flow.md` for the secure feedback flow.
 
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
@@ -162,15 +201,22 @@ The pipeline writes reports to `out/`:
   - `digest.top_matches` / `digest.data_only_best_picks`: channel-specific lists.
   - `digest.scope`: `daily_window` (default) or `fallback_recent` when no jobs fall
     inside the 24h window.
+  - `digest.run_id` and `digest.feedback_open_at` / `digest.feedback_close_at` for
+    time-gated feedback collection.
+  - `digest.jobs[].short_id` for compact feedback button identifiers.
   - Top-level aliases: `counts` (run summary) and `digest_hash`.
 - `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
 - `out/preferences.json` stores the preference profile and last feedback cache.
+- When `state.suffix` (or `--state-suffix`) is used, these state files are suffixed
+  (for example `out/last_run_dummy_e2e.json`).
 - `out/telegram_payload.json` stores the dry-run Telegram payload when
   `notifications.telegram.dry_run: true` is enabled (no network calls).
 - `out/digest.md` stores the plain-text digest in dry-run mode.
+- `out/feedback_summary.json` stores feedback action counts when feedback is applied.
+- `out/last_run.json` also includes `feedback_counts` when feedback is applied.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`,
-plus `telegram_payload.json`/`digest.md` for dummy dry-run workflows.
+plus `telegram_payload.json`/`digest.md` when dry-run mode is enabled.
 
 ## Source connectors
 - `dummy`: offline test data.
@@ -191,8 +237,8 @@ plus `telegram_payload.json`/`digest.md` for dummy dry-run workflows.
 - Configure GitHub Actions secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 - If secrets are missing or invalid, the run completes with a warning and skips
   the notification (no secrets are printed).
-- Each run sends exactly one daily digest message using the last 24 hours
-  (`digest.window_hours`) of `posted_at` timestamps in UTC. The daily window
+- Each run sends a header message (optional) and one message per job using the last
+  24 hours (`digest.window_hours`) of `posted_at` timestamps in UTC. The daily window
   always includes the full digest; dedupe prevents re-sending identical digests
   on the same date.
 - If there are no jobs in the 24h window, the message states:
@@ -205,11 +251,12 @@ plus `telegram_payload.json`/`digest.md` for dummy dry-run workflows.
   boolean `token_present`/`chat_id_present` indicators only.
 
 ## GitHub Actions workflows
-- **Daily (08:00 Europe/Rome)**: `.github/workflows/daily_job_scout.yml`
+- **Daily (08:00 Europe/Rome)**: `.github/workflows/scheduled_remotive.yml`
   runs `remotive` and sends the real Telegram digest (secrets required).
 - **Dummy E2E (manual-only)**: `.github/workflows/dummy_e2e.yml`
-  runs the dummy source with `notifications.telegram.dry_run: true` to validate
-  the full pipeline offline (no Telegram network calls).
+  runs the dummy source and sends a real Telegram digest to validate the full
+  pipeline end-to-end. State files are isolated with the `dummy_e2e` suffix and
+  the workflow executes twice to confirm dedupe without impacting production.
 
 ## Testing
 Run offline tests (default, deterministic):
@@ -237,13 +284,26 @@ export JOB_SCOUT_WHEELHOUSE_URL=path-or-url-to-wheelhouse-py311.zip
 bash tools/run_tests_integration.sh
 ```
 
-### Dummy E2E dry-run (local)
-Run the offline-safe dummy workflow locally without Telegram:
+### Dummy E2E (local, real Telegram)
+Run the dummy E2E configuration locally with real Telegram delivery:
 ```bash
-python -m job_scout run --config config/dummy_e2e.yaml --since-days 7 --source dummy --output-dir out
+export TELEGRAM_BOT_TOKEN=...
+export TELEGRAM_CHAT_ID=...
+export JOB_SCOUT_WEBHOOK_BASE_URL=...
+export JOB_SCOUT_WEBHOOK_SECRET=...
+python -m job_scout run --config config/dummy_e2e.yaml --since-days 7 --source dummy --state-suffix dummy_e2e --output-dir out
 ```
-Inspect `out/telegram_payload.json`, `out/digest.md`, and `out/last_run.json` to validate
-the digest payload and dedupe state.
+Inspect `out/last_run_dummy_e2e.json` and `out/last_notified_dummy_e2e.json` to validate
+the digest payload and dedupe state. To perform an offline dry run, set
+`notifications.telegram.dry_run: true` in `config/dummy_e2e.yaml`.
+
+### Cloudflare Worker setup (Phase 7)
+Deploy the Worker in `cloudflare/worker/` and set repository secrets:
+- `JOB_SCOUT_WEBHOOK_BASE_URL` (Worker URL)
+- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret)
+ - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
+Worker deploys run via **Actions → deploy-feedback-worker**. See
+`cloudflare/worker/README.md` for deployment details.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
@@ -294,10 +354,11 @@ python tools/update_goldens.py
 - `JOB_SCOUT_FIXTURE_DIR=tests/fixtures`: use fixture payloads instead of live APIs.
 - Pytest marker: `integration` for live-network tests.
 
-## Notifications (Phase 6)
+## Notifications (Phase 6 + Phase 7)
 Telegram notifications are always on by default. Configure in `config/config.yaml`:
 - `notifications.telegram.enabled`: keep Telegram enabled (default: true).
 - `notifications.telegram.dry_run`: write the payload to disk without sending to Telegram.
+- `notifications.telegram.send_per_job`: send one message per job.
 - `notifications.telegram.top_n`: fallback number of jobs to include in the digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
 - `digest.mode`: `daily_window` for the daily scheduled digest.
@@ -307,20 +368,24 @@ Telegram notifications are always on by default. Configure in `config/config.yam
 Telegram credentials must be set via environment variables (or GitHub Actions secrets):
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+- `JOB_SCOUT_WEBHOOK_BASE_URL` (Cloudflare Worker)
+- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret)
+- `FEEDBACK_WINDOW_MINUTES` (optional override, default 60)
 
 If credentials are missing or invalid, notifications are skipped with a warning and the run continues.
-Each run sends exactly one message; when there are no eligible jobs in the last 24 hours the message is:
+Each run sends one message per job (plus an optional header message); when there are no eligible jobs in the last 24 hours the message is:
 “No new job postings published in the last 24 hours.”
 
 ### GitHub Actions secrets & manual trigger
 Add repository secrets in GitHub:
 1. **Settings → Secrets and variables → Actions → New repository secret**
-2. Create `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+2. Create `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_BASE_URL`, and `JOB_SCOUT_WEBHOOK_SECRET`
+3. For Worker deploys, add `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_KV_NAMESPACE_ID`
 
 The daily workflow runs at 08:00 Europe/Rome. To run manually: go to
-**Actions → daily-job-scout** → **Run workflow** and set inputs
+**Actions → scheduled-remotive** → **Run workflow** and set inputs
 (`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
-`gh workflow run daily_job_scout.yml` (no secrets shown in CLI output).
+`gh workflow run scheduled_remotive.yml` (no secrets shown in CLI output).
 
 The dummy E2E workflow is manual-only:
 **Actions → dummy-e2e** → **Run workflow** or

@@ -6,18 +6,24 @@ snapshot tests validate CSV/Markdown outputs. External dependency failures (HTTP
 documented as environment limitations rather than project defects.
 
 ## Phase 6 Automation Notes
-GitHub Actions runs are scheduled daily via `daily_job_scout.yml`, and manual runs remain available.
-The dummy end-to-end workflow (`dummy_e2e.yml`) is manual-only and runs offline with a dry-run
-notifier that writes payload artifacts instead of calling Telegram.
+GitHub Actions runs are scheduled daily via `scheduled_remotive.yml`, and manual runs remain available.
+The dummy end-to-end workflow (`dummy_e2e.yml`) is manual-only and sends a real Telegram digest so
+the full pipeline (pipeline → digest → Telegram) is validated end-to-end. Dummy state files are
+isolated with a `dummy_e2e` suffix to avoid impacting the 08:00 Remotive run.
 Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
+Worker credentials are also required for feedback ingestion (`JOB_SCOUT_WEBHOOK_BASE_URL`,
+`JOB_SCOUT_WEBHOOK_SECRET`). Worker deploys require `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_KV_NAMESPACE_ID`.
 CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
 Phase 6 refinement adds dual-channel outputs, Telegram feedback buttons, and a stateful anti-dup digest
 (`last_notified.json`) persisted between runs via Actions cache.
+Phase 7 adds Cloudflare Worker-backed, time-gated feedback ingestion with per-job Telegram messages.
+Worker deployments are handled via the `deploy-feedback-worker` workflow.
 
 ## Production operations (live schedule)
 The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
-`.github/workflows/daily_job_scout.yml`:
+`.github/workflows/scheduled_remotive.yml`:
 - `0 7 * * *` → 08:00 CET (winter)
 - `0 6 * * *` → 08:00 CEST (summer)
 
@@ -42,18 +48,21 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Inline feedback buttons (👍/👎/⭐/🧻) are attached for preference learning.
 
 ### Temporarily disabling the schedule
-- Edit `.github/workflows/daily_job_scout.yml` and comment out or remove the `schedule` block.
+- Edit `.github/workflows/scheduled_remotive.yml` and comment out or remove the `schedule` block.
 - Keep `workflow_dispatch` to allow manual runs while the schedule is disabled.
 
 ### Phase 6 validation checklist
 - Confirm the daily workflow has only `workflow_dispatch` and `schedule` triggers.
 - Verify the cron schedule aligns with 08:00 Europe/Rome (CET/CEST).
-- Trigger a manual run via **Actions → daily-job-scout → Run workflow**.
+- Trigger a manual run via **Actions → scheduled-remotive → Run workflow**.
 - Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`,
   `last_notified.json`, `preferences.json`.
 - Trigger a manual run via **Actions → dummy-e2e → Run workflow** and verify
-  `telegram_payload.json` and `digest.md` artifacts exist.
-- Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
+  `last_run_dummy_e2e.json`, `last_notified_dummy_e2e.json`, and `report.*` artifacts exist.
+- Trigger a manual run with valid Telegram secrets and verify the dummy digest is delivered.
+- Click feedback buttons within 1 hour and rerun to validate feedback ingestion.
+- Confirm the workflow runs twice and the second run skips with `duplicate_digest`.
+- Verify `feedback_summary_dummy_e2e.json` is uploaded when feedback is applied.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
 - Confirm snapshot updates complete even if notification rows have missing fields
@@ -76,13 +85,36 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - If `digest.jobs` is present but Telegram is empty, verify the payload in
   `out/telegram_payload.json` (dry-run) or check action logs for send failures.
 
+### Troubleshooting: feedback buttons do nothing
+- Confirm the Telegram webhook is set to the Worker endpoint (`/telegram/feedback`).
+- Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `JOB_SCOUT_WEBHOOK_SECRET` configured.
+- Verify the callback arrives within the 1-hour feedback window; outside the window the Worker
+  answers with “⏱ Feedback window closed” and returns HTTP 410.
+- Check the Worker logs for `window` or `job` validation failures.
+
 ### Troubleshooting: dummy E2E artifact check failure
 - The guard-rail validates that accepted matches imply a non-empty digest.
-- Check `out/last_run.json` for `digest.jobs`, or the channel-specific lists
+- Check `out/last_run_dummy_e2e.json` for `digest.jobs`, or the channel-specific lists
   `digest.top_matches` / `digest.data_only_best_picks`.
 - If all digest lists are empty but `report.csv` shows accepted rows, inspect
   `posted_at` timestamps and the daily window; a fallback digest should be used
   when the 24h window is empty.
+
+### Troubleshooting: dummy E2E does not send Telegram
+- Ensure GitHub Actions secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` exist and are valid.
+- Confirm the dummy run is using the isolated state suffix (`dummy_e2e`) so a prior digest
+  from the daily workflow is not treated as a duplicate.
+- If the second (rerun) step skips with `duplicate_digest`, this is expected and confirms
+  dedupe is working for the dummy workflow only.
+
+### Troubleshooting: feedback not applied on next run
+- Confirm `JOB_SCOUT_WEBHOOK_BASE_URL` and `JOB_SCOUT_WEBHOOK_SECRET` are set in Actions secrets.
+- Check `out/last_run*.json` for a `digest.run_id` value.
+- Verify `POST /feedback` returns entries (Worker is storing feedback).
+- Ensure personalization is enabled (`personalization.enabled: true`) and that
+  `feedback_summary*.json` reports non-zero counts.
+- If Worker logs show “Invalid signature” or “Stale signature,” verify clock drift and the
+  shared secret used in GitHub Actions matches the Worker secret.
 
 ### Remotive validation & tuning (Phase 6)
 Use this checklist when Remotive runs return too few candidates or notifications feel empty.

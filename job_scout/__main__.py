@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import List
 
 from job_scout.config import load_config
+from job_scout.feedback import (
+    apply_feedback_items,
+    fetch_feedback,
+    load_previous_run,
+    record_feedback_in_last_run,
+    write_feedback_summary,
+)
 from job_scout.notifications import maybe_notify
 from job_scout.pipeline import run_pipeline
 from job_scout.preferences import (
@@ -41,6 +48,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=Path,
         default=Path("out"),
+    )
+    run_parser.add_argument(
+        "--state-suffix",
+        help="Suffix to isolate state files (last_run/last_notified/preferences).",
+    )
+    run_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help="Alternate base directory for state files.",
     )
     run_parser.add_argument(
         "--strict",
@@ -95,19 +111,76 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.command == "run":
         config = load_config(args.config)
+        state_config = config.get("state")
+        if not isinstance(state_config, dict):
+            state_config = {}
+        if args.state_suffix:
+            state_config["suffix"] = args.state_suffix
+        if args.state_dir:
+            state_config["dir"] = str(args.state_dir)
+        if state_config:
+            config["state"] = state_config
         preference_profile = None
         preference_path = None
         personalization = config.get("personalization", {})
         if isinstance(personalization, dict) and personalization.get(
             "enabled", False
         ):
+            state_suffix = None
+            state_dir = None
+            state_config = config.get("state")
+            if isinstance(state_config, dict):
+                state_suffix = state_config.get("suffix")
+                state_dir = state_config.get("dir")
             preference_path = resolve_profile_path(
-                config, args.output_dir
+                config,
+                args.output_dir,
+                state_dir=state_dir,
+                state_suffix=state_suffix,
             )
             preference_profile = load_profile(preference_path)
-            preference_profile = apply_telegram_feedback(
-                preference_profile, config
+            feedback_config = config.get("feedback", {})
+            feedback_use_updates = False
+            if isinstance(feedback_config, dict):
+                feedback_use_updates = bool(
+                    feedback_config.get("use_telegram_updates", False)
+                )
+            if feedback_use_updates:
+                preference_profile = apply_telegram_feedback(
+                    preference_profile, config
+                )
+            previous_run_id, job_lookup = load_previous_run(
+                args.output_dir, config
             )
+            if previous_run_id:
+                feedback_items, reason = fetch_feedback(
+                    run_id=previous_run_id, config=config
+                )
+                if reason:
+                    logging.getLogger(__name__).info(
+                        "Feedback fetch skipped: %s.", reason
+                    )
+                else:
+                    result = apply_feedback_items(
+                        preference_profile,
+                        feedback_items,
+                        job_lookup,
+                        config,
+                    )
+                    preference_profile = result.updated_profile
+                    write_feedback_summary(
+                        args.output_dir, config, result.counts
+                    )
+                    record_feedback_in_last_run(
+                        args.output_dir, config, result.counts
+                    )
+                    logging.getLogger(__name__).info(
+                        "Feedback applied: %s.",
+                        ", ".join(
+                            f"{key}={value}"
+                            for key, value in result.counts.items()
+                        ),
+                    )
             save_profile(preference_path, preference_profile)
         salary_rules = config.get("salary_rules", {})
         allow_missing_salary = salary_rules.get("allow_missing_salary")

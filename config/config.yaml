@@ -75,7 +75,7 @@ channels:
       - purview
 
 personalization:
-  enabled: false
+  enabled: true
   feedback_enabled: true
   profile_path: preferences.json
   token_weight_step: 2
@@ -131,9 +131,23 @@ notifications:
     top_n: 10
     min_score: 0
     min_score_improvement: 3
+    send_per_job: true
+    send_header: true
+    persist_payload: false
   dedupe:
     enabled: true
     state_path: last_notified.json
+
+state:
+  suffix: null
+  dir: null
+
+feedback:
+  enabled: true
+  webhook_base_url: null
+  webhook_secret: null
+  window_minutes: 60
+  use_telegram_updates: false
 
 digest:
   mode: daily_window

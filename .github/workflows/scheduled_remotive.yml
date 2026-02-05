@@ -1,4 +1,4 @@
-name: daily-job-scout
+name: scheduled-remotive
 
 on:
   workflow_dispatch:
@@ -59,6 +59,9 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+          FEEDBACK_WINDOW_MINUTES: "60"
         run: |
           SINCE_DAYS="${{ inputs.since_days || '7' }}"
           SOURCES="${{ inputs.sources || 'remotive' }}"

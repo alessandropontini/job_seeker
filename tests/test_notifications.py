@@ -93,7 +93,7 @@ def test_dedupe_skips_duplicate_digest(tmp_path, monkeypatch):
         return True, None
 
     monkeypatch.setattr(
-        notifications.telegram_notifier, "send_message", _fake_send
+        notifications.telegram_notifier, "send_messages", _fake_send
     )
 
     result = notifications.maybe_notify([row], output_dir, DEFAULT_CONFIG)
@@ -113,6 +113,7 @@ def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
 
     config = deepcopy(DEFAULT_CONFIG)
     config["notifications"]["telegram"]["dry_run"] = True
+    config["notifications"]["telegram"]["send_per_job"] = True
 
     result = notifications.maybe_notify([row], output_dir, config)
 
@@ -123,7 +124,12 @@ def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
     )
     digest = last_run["digest"]
     assert digest["digest_hash"]
+    assert digest["run_id"]
+    assert digest["feedback_open_at"]
+    assert digest["feedback_close_at"]
     assert digest["jobs"]
+    assert digest["jobs"][0]["short_id"]
+    assert digest["jobs"][0]["job_hash"]
     assert digest["top_matches"]
     assert digest["data_only_best_picks"] == []
     assert last_run["summary"]["digest_count"] == len(digest["jobs"])
@@ -137,7 +143,8 @@ def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
     payload = json.loads(
         (output_dir / "telegram_payload.json").read_text(encoding="utf-8")
     )
-    assert payload["text"]
+    assert payload["messages"]
+    assert payload["messages"][0]["text"]
 
 
 def test_fallback_digest_when_window_empty(tmp_path, monkeypatch):

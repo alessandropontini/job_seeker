@@ -67,3 +67,24 @@ def test_send_message_includes_reply_markup(monkeypatch):
     assert sent is True
     assert reason is None
     assert captured["payload"]["reply_markup"]["inline_keyboard"][0][0]["text"] == "👍"
+
+
+def test_send_messages_sends_multiple(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+    called = {"count": 0}
+
+    def _fake_urlopen(request, timeout=0):
+        assert request is not None
+        called["count"] += 1
+        return _FakeResponse(status=200)
+
+    monkeypatch.setattr(telegram.urllib.request, "urlopen", _fake_urlopen)
+
+    sent, reason = telegram.send_messages(
+        [{"text": "one"}, {"text": "two"}]
+    )
+
+    assert sent is True
+    assert reason is None
+    assert called["count"] == 3
