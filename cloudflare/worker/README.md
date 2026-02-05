@@ -46,7 +46,16 @@ The Worker name is `job-scout-telegram-feedback` (matches the Telegram webhook r
 The workflow pins Wrangler to the latest release so Worker code stays aligned with Cloudflare CLI updates.
 
 ## Configure Telegram webhook
-Point Telegram to the Worker endpoint and include the secret token header:
+Point Telegram to the Worker endpoint and include the secret token header. You can use the helper
+script to set + verify the webhook without printing secrets:
+```bash
+export TELEGRAM_BOT_TOKEN=...
+export JOB_SCOUT_WEBHOOK_SECRET=...
+export JOB_SCOUT_WEBHOOK_BASE_URL=https://<your-worker-domain>
+tools/telegram_set_webhook.sh
+```
+
+Manual curl (avoid printing secrets in logs):
 ```bash
 curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -H "Content-Type: application/json" \

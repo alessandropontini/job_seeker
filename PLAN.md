@@ -107,3 +107,5 @@
   non-sensitive deploy diagnostics to confirm the deployed worker.
 - Phase 7 security: enforce feedback allowlist via `ALLOWED_TELEGRAM_USER_ID` and document
   the authorization behavior for Telegram callbacks.
+- Phase 7 ops: added a helper script + docs to configure Telegram webhook to `/telegram/feedback`
+  with non-sensitive verification output.

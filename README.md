@@ -319,6 +319,17 @@ The Cloudflare Worker name is `job-scout-telegram-feedback` and should match the
 - ✅ Telegram webhook configured with `secret_token` matching `TELEGRAM_WEBHOOK_SECRET` or `JOB_SCOUT_WEBHOOK_SECRET`.
 - ✅ `POST /telegram/feedback` rejects missing/invalid `X-Telegram-Bot-Api-Secret-Token`.
 
+**Configure Telegram webhook**
+Run the helper script to configure + verify the Telegram webhook without logging secrets:
+```bash
+export TELEGRAM_BOT_TOKEN=...
+export JOB_SCOUT_WEBHOOK_SECRET=...
+export JOB_SCOUT_WEBHOOK_BASE_URL=https://<your-worker-domain>
+tools/telegram_set_webhook.sh
+```
+The script sets the webhook to `POST /telegram/feedback` and prints non-sensitive fields from
+`getWebhookInfo` so you can confirm the URL.
+
 **Manual feedback verification**
 1. Run the dummy E2E pipeline (see above) to send a Telegram digest with inline feedback buttons.
 2. Tap 👍/👎/⭐/🧻 and confirm the spinner disappears immediately with a “Feedback salvato” toast.
