@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -10,8 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping
-import urllib.parse
 import urllib.request
+import uuid
 
 from job_scout.preferences import PreferenceProfile, apply_feedback
 from job_scout.state import resolve_state_path
@@ -62,13 +63,22 @@ def build_short_id(job_key: str, used: set[str]) -> str:
         suffix += 1
 
 
-def build_callback_data(run_id: str, short_id: str, action: str) -> str:
+def build_callback_data(
+    run_id: str, short_id: str, action: str, job_hash: str
+) -> str:
     """Build compact callback data for Telegram feedback buttons."""
 
-    payload = f"fb|{run_id}|{short_id}|{action}"
+    payload = f"fb|{run_id}|{short_id}|{action}|{job_hash}"
     if len(payload.encode("utf-8")) >= 64:
         raise ValueError("callback_data exceeds Telegram limit")
     return payload
+
+
+def build_job_hash(job_key: str, digest_hash: str) -> str:
+    """Build a compact hash for job identifiers."""
+
+    payload = f"{job_key}:{digest_hash}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
 
 
 def build_feedback_window(
@@ -83,6 +93,21 @@ def build_feedback_window(
         open_at=open_at.isoformat(),
         close_at=close_at.isoformat(),
     )
+
+
+def is_window_open(
+    open_at: str, close_at: str, now: datetime
+) -> bool:
+    """Return True when the timestamp is within the feedback window."""
+
+    try:
+        open_dt = datetime.fromisoformat(open_at)
+        close_dt = datetime.fromisoformat(close_at)
+    except ValueError:
+        return False
+    if open_dt.tzinfo is None or close_dt.tzinfo is None:
+        return False
+    return open_dt <= now <= close_dt
 
 
 def load_previous_run(
@@ -146,11 +171,16 @@ def register_feedback_window(
         "close_at": close_at,
         "jobs": jobs,
     }
-    return _post_json(
+    status, _body = _post_json(
         f"{base_url.rstrip('/')}/window/open",
         payload,
         secret,
     )
+    if status is None:
+        return False, "connection_error"
+    if status != 200:
+        return False, f"status_{status}"
+    return True, None
 
 
 def fetch_feedback(
@@ -167,8 +197,14 @@ def fetch_feedback(
     secret = _resolve_feedback_secret(feedback_config)
     if not secret:
         return [], "missing_feedback_secret"
-    url = f"{base_url.rstrip('/')}/feedback?run_id={urllib.parse.quote(run_id)}"
-    status, body = _get_json(url, secret)
+    url = f"{base_url.rstrip('/')}/feedback"
+    payload = {"run_id": run_id}
+    status, body = _post_json(
+        url,
+        payload,
+        secret,
+        expect_json=True,
+    )
     if status is None:
         return [], "connection_error"
     if status != 200:
@@ -187,7 +223,13 @@ def apply_feedback_items(
 ) -> FeedbackResult:
     """Apply feedback to a preference profile."""
 
-    counts: dict[str, int] = {"like": 0, "dislike": 0, "love": 0, "duplicate": 0}
+    counts: dict[str, int] = {
+        "like": 0,
+        "maybe": 0,
+        "dislike": 0,
+        "love": 0,
+        "duplicate": 0,
+    }
     updated_profile = profile
     for entry in feedback_items:
         short_id = entry.get("job_short_id") or entry.get("job_id")
@@ -243,13 +285,42 @@ def write_feedback_summary(
     return path
 
 
+def record_feedback_in_last_run(
+    output_dir: Path,
+    config: Mapping[str, object],
+    counts: Mapping[str, int],
+) -> None:
+    """Persist feedback counts in last_run.json for traceability."""
+
+    state_config = _as_dict(config.get("state"))
+    path = resolve_state_path(
+        output_dir,
+        "last_run.json",
+        state_dir=state_config.get("dir"),
+        state_suffix=state_config.get("suffix"),
+    )
+    if not path.exists():
+        return
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    payload["feedback_counts"] = dict(counts)
+    path.write_text(
+        json.dumps(payload, sort_keys=True, indent=2),
+        encoding="utf-8",
+    )
+
+
 def _map_feedback_action(action: str) -> str | None:
     action_map = {
         "L": "like",
+        "M": "maybe",
         "D": "dislike",
         "S": "love",
         "X": "duplicate",
         "like": "like",
+        "maybe": "maybe",
         "dislike": "dislike",
         "love": "love",
         "duplicate": "duplicate",
@@ -272,41 +343,37 @@ def _resolve_feedback_secret(config: Mapping[str, object]) -> str | None:
 
 
 def _post_json(
-    url: str, payload: Mapping[str, object], secret: str
-) -> tuple[bool, str | None]:
+    url: str,
+    payload: Mapping[str, object],
+    secret: str,
+    *,
+    expect_json: bool = False,
+) -> tuple[int | None, object]:
     data = json.dumps(payload).encode("utf-8")
+    timestamp = str(int(datetime.now(timezone.utc).timestamp()))
+    request_id = str(uuid.uuid4())
+    signature = _sign_payload(secret, timestamp, data)
     request = urllib.request.Request(
         url,
         data=data,
         headers={
             "Content-Type": "application/json",
-            "X-Webhook-Secret": secret,
+            "X-Webhook-Timestamp": timestamp,
+            "X-Webhook-Id": request_id,
+            "X-Webhook-Signature": signature,
         },
         method="POST",
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
-            if response.status != 200:
-                return False, f"status_{response.status}"
-    except Exception as exc:
-        return False, f"error_{exc.__class__.__name__}"
-    return True, None
-
-
-def _get_json(url: str, secret: str) -> tuple[int | None, object]:
-    request = urllib.request.Request(
-        url,
-        headers={"X-Webhook-Secret": secret},
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
             body = response.read()
-            try:
-                parsed = json.loads(body.decode("utf-8"))
-            except json.JSONDecodeError:
-                parsed = {}
-            return response.status, parsed
+            if expect_json:
+                try:
+                    parsed = json.loads(body.decode("utf-8"))
+                except json.JSONDecodeError:
+                    parsed = {}
+                return response.status, parsed
+            return response.status, {}
     except Exception as exc:
         logger.warning("Feedback fetch failed (%s).", exc.__class__.__name__)
         return None, {}
@@ -322,3 +389,29 @@ def _string_or_none(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None
+
+
+def _sign_payload(secret: str, timestamp: str, body: bytes) -> str:
+    payload = timestamp.encode("utf-8") + b"." + body
+    digest = hmac.new(
+        secret.encode("utf-8"), payload, hashlib.sha256
+    ).hexdigest()
+    return digest
+
+
+def _feedback_window_minutes(config: Mapping[str, object]) -> int:
+    env_minutes = os.getenv("FEEDBACK_WINDOW_MINUTES")
+    if env_minutes:
+        try:
+            minutes = int(env_minutes)
+            return max(minutes, 1)
+        except ValueError:
+            pass
+    return _parse_int(config.get("window_minutes", 60), 60)
+
+
+def _parse_int(value: object, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default

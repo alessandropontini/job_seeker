@@ -92,3 +92,4 @@
 - Switched dummy E2E to real Telegram delivery with isolated state suffixing.
 - Expanded deterministic dummy postings to guarantee data-only picks for governance roles.
 - Phase 7 kickoff: per-job Telegram UX with time-gated feedback via Cloudflare Worker + KV.
+- Phase 7 security: HMAC-signed Worker requests, idempotency checks, and 60-minute feedback window.

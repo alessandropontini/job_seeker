@@ -1,0 +1,35 @@
+name: deploy-feedback-worker
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "cloudflare/worker/**"
+      - ".github/workflows/deploy_worker.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Worker namespace
+        run: |
+          sed -i "s/REPLACE_WITH_NAMESPACE_ID/${CLOUDFLARE_KV_NAMESPACE_ID}/" cloudflare/worker/wrangler.toml
+        env:
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: "cloudflare/worker"
+          secrets: |
+            TELEGRAM_BOT_TOKEN
+            JOB_SCOUT_WEBHOOK_SECRET
+        env:
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          FEEDBACK_WINDOW_MINUTES: "60"

@@ -146,7 +146,7 @@ feedback:
   enabled: true
   webhook_base_url: null
   webhook_secret: null
-  window_hours: 1
+  window_minutes: 60
   use_telegram_updates: false
 
 digest:

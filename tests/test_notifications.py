@@ -129,6 +129,7 @@ def test_last_run_state_includes_digest_payload(tmp_path, monkeypatch):
     assert digest["feedback_close_at"]
     assert digest["jobs"]
     assert digest["jobs"][0]["short_id"]
+    assert digest["jobs"][0]["job_hash"]
     assert digest["top_matches"]
     assert digest["data_only_best_picks"] == []
     assert last_run["summary"]["digest_count"] == len(digest["jobs"])

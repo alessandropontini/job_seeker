@@ -134,7 +134,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": False,
         "webhook_base_url": None,
         "webhook_secret": None,
-        "window_hours": 1,
+        "window_minutes": 60,
         "use_telegram_updates": False,
     },
     "digest": {

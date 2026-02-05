@@ -181,6 +181,7 @@ per job with compact feedback buttons (👍/👎/⭐/🧻).
 - [ ] Per-job Telegram messages with inline feedback buttons.
 - [ ] Cloudflare Worker receives callback queries and answers them immediately.
 - [ ] Feedback window time-gated to 1 hour post-send.
+- [ ] Worker requests are HMAC-signed with idempotency checks.
 - [ ] Feedback applied to ranking/duplicate suppression on next run.
 - [ ] Dummy E2E validates end-to-end feedback flow.
 - [ ] Documentation and QA runbook updated for Phase 7.

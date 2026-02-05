@@ -5,3 +5,6 @@ compatibility_date = "2024-10-01"
 kv_namespaces = [
   { binding = "JOB_SCOUT_KV", id = "REPLACE_WITH_NAMESPACE_ID" }
 ]
+
+[vars]
+FEEDBACK_WINDOW_MINUTES = "60"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from job_scout.feedback import (
     build_callback_data,
     build_run_id,
     build_short_id,
+    build_job_hash,
     register_feedback_window,
 )
 from job_scout.notifier import telegram as telegram_notifier
@@ -141,12 +143,12 @@ def maybe_notify(
     )
     run_id = build_run_id(now, digest_hash)
     feedback_config = _as_dict(config.get("feedback"))
-    feedback_window_hours = _parse_int(
-        feedback_config.get("window_hours", 1), 1
+    feedback_window_minutes = _feedback_window_minutes(
+        feedback_config
     )
     feedback_open_at = now.astimezone(timezone.utc)
     feedback_close_at = feedback_open_at + timedelta(
-        hours=feedback_window_hours
+        minutes=feedback_window_minutes
     )
     short_ids = _assign_short_ids(
         channel_selection.top_matches
@@ -235,6 +237,7 @@ def maybe_notify(
         digest_scope=digest_scope,
         run_id=run_id,
         short_ids=short_ids,
+        digest_hash=digest_hash,
         send_header=send_header,
         send_per_job=send_per_job,
     )
@@ -256,6 +259,7 @@ def maybe_notify(
             channel_selection.top_matches,
             channel_selection.data_only_best_picks,
             short_ids,
+            digest_hash,
         )
         if feedback_jobs:
             register_ok, register_reason = register_feedback_window(
@@ -506,14 +510,34 @@ def _snapshot_key(row: ReportRow) -> str:
 
 
 def _build_feedback_keyboard_for_job(
-    run_id: str, short_id: str
+    run_id: str, short_id: str, job_hash: str
 ) -> dict[str, object]:
     keyboard = [
         [
-            {"text": "👍", "callback_data": build_callback_data(run_id, short_id, "L")},
-            {"text": "👎", "callback_data": build_callback_data(run_id, short_id, "D")},
-            {"text": "⭐", "callback_data": build_callback_data(run_id, short_id, "S")},
-            {"text": "🧻", "callback_data": build_callback_data(run_id, short_id, "X")},
+            {
+                "text": "Mi piace",
+                "callback_data": build_callback_data(
+                    run_id, short_id, "L", job_hash
+                ),
+            },
+            {
+                "text": "Forse",
+                "callback_data": build_callback_data(
+                    run_id, short_id, "M", job_hash
+                ),
+            },
+            {
+                "text": "Non mi piace",
+                "callback_data": build_callback_data(
+                    run_id, short_id, "D", job_hash
+                ),
+            },
+            {
+                "text": "Non rilevante",
+                "callback_data": build_callback_data(
+                    run_id, short_id, "X", job_hash
+                ),
+            },
         ]
     ]
     return {"inline_keyboard": keyboard}
@@ -599,11 +623,23 @@ def _parse_int(value: object, default: int) -> int:
         return default
 
 
+def _feedback_window_minutes(config: Mapping[str, object]) -> int:
+    env_minutes = os.getenv("FEEDBACK_WINDOW_MINUTES")
+    if env_minutes:
+        try:
+            minutes = int(env_minutes)
+            return max(minutes, 1)
+        except ValueError:
+            pass
+    return _parse_int(config.get("window_minutes", 60), 60)
+
+
 def _serialize_digest_row(
     row: ReportRow,
     channel: str,
     reasons: Sequence[str] | None = None,
     short_id: str | None = None,
+    job_hash: str | None = None,
 ) -> dict[str, object]:
     posted_at = getattr(row.posting, "posted_at", None)
     job_key = _snapshot_key(row)
@@ -612,6 +648,7 @@ def _serialize_digest_row(
         "source": row.posting.source,
         "job_key": job_key,
         "short_id": short_id,
+        "job_hash": job_hash,
         "title": row.posting.title,
         "company": row.posting.company,
         "score": row.match.score or 0,
@@ -656,8 +693,9 @@ def _build_digest_payload(
         short_id = None
         if short_ids:
             short_id = short_ids.get(_snapshot_key(row))
+        job_hash = build_job_hash(_snapshot_key(row), digest_hash)
         serialized = _serialize_digest_row(
-            row, channel, reasons, short_id=short_id
+            row, channel, reasons, short_id=short_id, job_hash=job_hash
         )
         jobs.append(serialized)
         if channel == "top_matches":
@@ -716,6 +754,7 @@ def _build_message_payloads(
     digest_scope: str,
     run_id: str,
     short_ids: Mapping[str, str],
+    digest_hash: str,
     send_header: bool,
     send_per_job: bool,
 ) -> list[dict[str, object]]:
@@ -750,9 +789,11 @@ def _build_message_payloads(
         reasons = None
         if channel == "data_only_best_picks" and data_only_reasons:
             reasons = data_only_reasons.get(_snapshot_key(row))
-        short_id = short_ids.get(_snapshot_key(row))
+        job_key = _snapshot_key(row)
+        short_id = short_ids.get(job_key)
         if not short_id:
             continue
+        job_hash = build_job_hash(job_key, digest_hash)
         payloads.append(
             {
                 "text": _format_job_message(
@@ -761,7 +802,7 @@ def _build_message_payloads(
                     extra_reasons=reasons,
                 ),
                 "reply_markup": _build_feedback_keyboard_for_job(
-                    run_id, short_id
+                    run_id, short_id, job_hash
                 ),
             }
         )
@@ -812,6 +853,7 @@ def _build_feedback_job_map(
     top_rows: Sequence[ReportRow],
     data_only_rows: Sequence[ReportRow],
     short_ids: Mapping[str, str],
+    digest_hash: str,
 ) -> list[dict[str, object]]:
     jobs: list[dict[str, object]] = []
     for row in _unique_rows(list(top_rows) + list(data_only_rows)):
@@ -819,10 +861,13 @@ def _build_feedback_job_map(
         short_id = short_ids.get(key)
         if not short_id:
             continue
+        job_hash = build_job_hash(key, digest_hash)
         jobs.append(
             {
                 "short_id": short_id,
                 "job_key": key,
+                "job_hash": job_hash,
+                "source": row.posting.source,
                 "title": row.posting.title,
                 "url": row.posting.url,
             }

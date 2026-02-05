@@ -12,6 +12,7 @@ from job_scout.feedback import (
     apply_feedback_items,
     fetch_feedback,
     load_previous_run,
+    record_feedback_in_last_run,
     write_feedback_summary,
 )
 from job_scout.notifications import maybe_notify
@@ -168,6 +169,9 @@ def main(argv: List[str] | None = None) -> int:
                     )
                     preference_profile = result.updated_profile
                     write_feedback_summary(
+                        args.output_dir, config, result.counts
+                    )
+                    record_feedback_in_last_run(
                         args.output_dir, config, result.counts
                     )
                     logging.getLogger(__name__).info(

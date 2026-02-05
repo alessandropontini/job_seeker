@@ -67,7 +67,7 @@ Key sections:
 - `feedback.enabled`: enable the Cloudflare Worker feedback integration.
 - `feedback.webhook_base_url`: Worker base URL (or set `JOB_SCOUT_WEBHOOK_BASE_URL` env var).
 - `feedback.webhook_secret`: shared secret (or set `JOB_SCOUT_WEBHOOK_SECRET` env var).
-- `feedback.window_hours`: open feedback window duration (default: 1h).
+- `feedback.window_minutes`: open feedback window duration (default: 60m).
 - `feedback.use_telegram_updates`: optional legacy Telegram polling (default: false).
 - `digest.mode`: `daily_window` for the scheduled digest behavior.
 - `digest.window_hours`: size of the daily window (24 hours).
@@ -130,23 +130,27 @@ python -m job_scout sources --test remotive --since-days 7
 - If secrets are missing or invalid, the run completes with a warning and no notification.
 
 ## Phase 7 — Interactive feedback (Cloudflare Worker)
-- Each job is sent as its own Telegram message with a 4-button inline keyboard (👍 👎 ⭐ 🧻).
+- Each job is sent as its own Telegram message with a 4-button inline keyboard
+  (Mi piace, Forse, Non mi piace, Non rilevante).
 - A time-gated feedback window opens for 1 hour after the digest is sent.
 - Telegram callbacks are handled by a free Cloudflare Worker + KV store.
 - Feedback is applied on the next run to influence ranking and duplicate suppression (no hard rejects bypassed).
-- Callback data uses compact IDs (`fb|<run>|<short_job>|<act>`) to stay under the 64-byte limit.
+- Callback data uses compact IDs (`fb|<run>|<short_job>|<act>|<hash>`) to stay under the 64-byte limit.
+- GitHub Actions requests to the Worker are signed with HMAC SHA-256 (no secrets in logs).
 
 Architecture (Phase 7 feedback flow):
 ```
 job_scout run
   -> build digest + short ids + open/close window
-  -> POST /window/open (Worker + KV)
+  -> POST /window/open (Worker + KV, HMAC signed)
   -> send per-job Telegram messages (buttons)
-  -> user taps button -> Worker /telegram/webhook
+  -> user taps button -> Worker /telegram/feedback
   -> Worker stores feedback in KV
-  -> next run fetches GET /feedback?run_id=...
+  -> next run fetches POST /feedback (HMAC signed)
   -> preferences updated (ranking/duplicate suppression)
 ```
+See `docs/PHASE_7_SECURE_FEEDBACK.md` and the diagram in
+`docs/diagrams/phase7_feedback_flow.md` for the secure feedback flow.
 
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
@@ -209,6 +213,7 @@ The pipeline writes reports to `out/`:
   `notifications.telegram.dry_run: true` is enabled (no network calls).
 - `out/digest.md` stores the plain-text digest in dry-run mode.
 - `out/feedback_summary.json` stores feedback action counts when feedback is applied.
+- `out/last_run.json` also includes `feedback_counts` when feedback is applied.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`,
 plus `telegram_payload.json`/`digest.md` when dry-run mode is enabled.
@@ -293,10 +298,12 @@ the digest payload and dedupe state. To perform an offline dry run, set
 `notifications.telegram.dry_run: true` in `config/dummy_e2e.yaml`.
 
 ### Cloudflare Worker setup (Phase 7)
-Deploy the Worker in `cloudflare_worker/` and set repository secrets:
+Deploy the Worker in `cloudflare/worker/` and set repository secrets:
 - `JOB_SCOUT_WEBHOOK_BASE_URL` (Worker URL)
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret)
-See `cloudflare_worker/README.md` for deployment details.
+ - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_KV_NAMESPACE_ID`
+Worker deploys run via **Actions → deploy-feedback-worker**. See
+`cloudflare/worker/README.md` for deployment details.
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
@@ -363,6 +370,7 @@ Telegram credentials must be set via environment variables (or GitHub Actions se
 - `TELEGRAM_CHAT_ID`
 - `JOB_SCOUT_WEBHOOK_BASE_URL` (Cloudflare Worker)
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret)
+- `FEEDBACK_WINDOW_MINUTES` (optional override, default 60)
 
 If credentials are missing or invalid, notifications are skipped with a warning and the run continues.
 Each run sends one message per job (plus an optional header message); when there are no eligible jobs in the last 24 hours the message is:
@@ -372,6 +380,7 @@ Each run sends one message per job (plus an optional header message); when there
 Add repository secrets in GitHub:
 1. **Settings → Secrets and variables → Actions → New repository secret**
 2. Create `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_BASE_URL`, and `JOB_SCOUT_WEBHOOK_SECRET`
+3. For Worker deploys, add `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_KV_NAMESPACE_ID`
 
 The daily workflow runs at 08:00 Europe/Rome. To run manually: go to
 **Actions → scheduled-remotive** → **Run workflow** and set inputs

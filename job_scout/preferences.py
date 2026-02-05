@@ -353,6 +353,8 @@ def _feedback_delta(
     step = _parse_int(personalization.get(step_key), 2)
     if action == "like":
         return step
+    if action == "maybe":
+        return max(step // 2, 1)
     if action == "love":
         return step * 2
     if action == "dislike":

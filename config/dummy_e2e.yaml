@@ -20,7 +20,7 @@ personalization:
 
 feedback:
   enabled: true
-  window_hours: 1
+  window_minutes: 60
 
 channels:
   top_matches:

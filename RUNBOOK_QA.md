@@ -13,11 +13,13 @@ isolated with a `dummy_e2e` suffix to avoid impacting the 08:00 Remotive run.
 Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
 Worker credentials are also required for feedback ingestion (`JOB_SCOUT_WEBHOOK_BASE_URL`,
-`JOB_SCOUT_WEBHOOK_SECRET`).
+`JOB_SCOUT_WEBHOOK_SECRET`). Worker deploys require `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_KV_NAMESPACE_ID`.
 CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
 Phase 6 refinement adds dual-channel outputs, Telegram feedback buttons, and a stateful anti-dup digest
 (`last_notified.json`) persisted between runs via Actions cache.
 Phase 7 adds Cloudflare Worker-backed, time-gated feedback ingestion with per-job Telegram messages.
+Worker deployments are handled via the `deploy-feedback-worker` workflow.
 
 ## Production operations (live schedule)
 The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
@@ -84,8 +86,8 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
   `out/telegram_payload.json` (dry-run) or check action logs for send failures.
 
 ### Troubleshooting: feedback buttons do nothing
-- Confirm the Telegram webhook is set to the Worker endpoint (`/telegram/webhook`).
-- Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `WEBHOOK_SECRET` configured.
+- Confirm the Telegram webhook is set to the Worker endpoint (`/telegram/feedback`).
+- Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `JOB_SCOUT_WEBHOOK_SECRET` configured.
 - Verify the callback arrives within the 1-hour feedback window; outside the window the Worker
   answers with “⏱ Feedback window closed” and returns HTTP 410.
 - Check the Worker logs for `window` or `job` validation failures.
@@ -108,9 +110,11 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 ### Troubleshooting: feedback not applied on next run
 - Confirm `JOB_SCOUT_WEBHOOK_BASE_URL` and `JOB_SCOUT_WEBHOOK_SECRET` are set in Actions secrets.
 - Check `out/last_run*.json` for a `digest.run_id` value.
-- Verify `GET /feedback?run_id=...` returns entries (Worker is storing feedback).
+- Verify `POST /feedback` returns entries (Worker is storing feedback).
 - Ensure personalization is enabled (`personalization.enabled: true`) and that
   `feedback_summary*.json` reports non-zero counts.
+- If Worker logs show “Invalid signature” or “Stale signature,” verify clock drift and the
+  shared secret used in GitHub Actions matches the Worker secret.
 
 ### Remotive validation & tuning (Phase 6)
 Use this checklist when Remotive runs return too few candidates or notifications feel empty.
