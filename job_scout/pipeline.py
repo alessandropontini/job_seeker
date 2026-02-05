@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from job_scout.channels import select_channels
 from job_scout.matcher import match_posting
 from job_scout.normalize import (
     job_posting_from_normalized,
     normalize_source_job,
 )
+from job_scout.preferences import PreferenceProfile, apply_preferences
 from job_scout.regions import load_region_data
 from job_scout.sources import AVAILABLE_SOURCES
 from job_scout.scoring import apply_scoring
@@ -50,6 +52,7 @@ def run_pipeline(
     strict: bool,
     allow_missing_salary: bool,
     sources: Iterable[str] | None,
+    preference_profile: PreferenceProfile | None = None,
 ) -> tuple[list[ReportRow], PipelineSummary]:
     """Run the job scouting pipeline end-to-end."""
 
@@ -124,6 +127,10 @@ def run_pipeline(
                 allow_missing_salary,
             )
             scored_match = apply_scoring(updated_posting, match, config)
+            if preference_profile:
+                scored_match = apply_preferences(
+                    updated_posting, scored_match, preference_profile, config
+                )
             all_rows.append(
                 ReportRow(posting=updated_posting, match=scored_match)
             )
@@ -141,11 +148,26 @@ def run_pipeline(
         else:
             rejected.append(row)
 
+    exclude_ids = None
+    if preference_profile:
+        personalization = config.get("personalization", {})
+        if isinstance(personalization, Mapping) and personalization.get(
+            "duplicate_action", "skip"
+        ) == "skip":
+            exclude_ids = preference_profile.duplicate_ids
+    channel_selection = select_channels(
+        all_rows,
+        config,
+        exclude_ids=exclude_ids,
+    )
     write_reports(
         matches,
         missing_salary_allowed,
         rejected,
         output_dir,
+        top_matches=channel_selection.top_matches,
+        data_only_best_picks=channel_selection.data_only_best_picks,
+        channel_reasons=channel_selection.data_only_reasons,
         source_statuses=source_statuses,
     )
     logger.info("Wrote reports to %s", output_dir)

@@ -10,6 +10,8 @@ GitHub Actions runs are scheduled daily via `job_scout.yml`, and manual runs rem
 Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
 CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
+Phase 6 refinement adds dual-channel outputs, Telegram feedback buttons, and a stateful anti-dup digest
+(`last_notified.json`) persisted between runs via Actions cache.
 
 ## Production operations (live schedule)
 The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
@@ -21,6 +23,8 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Each scheduled run uses a UTC window of the last 24 hours (`now_utc - 24h → now_utc`).
 - Only jobs with valid `posted_at` timestamps are eligible for the digest.
 - Jobs already notified in previous runs are excluded to prevent duplicate alerts.
+- A daily digest hash is stored in `out/last_notified.json` to avoid re-sending the
+  same digest on the same UTC date.
 
 ### What happens when no jobs are found
 - A Telegram message is still sent with the exact text:
@@ -32,6 +36,8 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - “Total in window” reflects the number of eligible jobs in the last 24 hours.
 - Entries list job title, company, remote level, location, score, and rationale
   (bonuses/penalties, including data governance boosts).
+- Two sections are shown: **Top matches** and **Data-only best picks**.
+- Inline feedback buttons (👍/👎/⭐/🧻) are attached for preference learning.
 
 ### Temporarily disabling the schedule
 - Edit `.github/workflows/job_scout.yml` and comment out or remove the `schedule` block.
@@ -41,7 +47,8 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Confirm the workflow has only `workflow_dispatch` and `schedule` triggers.
 - Verify the cron schedule aligns with 08:00 Europe/Rome (CET/CEST).
 - Trigger a manual run via **Actions → job-scout → Run workflow**.
-- Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`.
+- Verify artifacts are uploaded: `report.csv`, `report.md`, `last_run.json`,
+  `last_notified.json`, `preferences.json`.
 - Trigger a manual run with valid Telegram secrets and verify the digest is delivered.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
@@ -87,6 +94,13 @@ Use this checklist when Remotive runs return too few candidates or notifications
   relevance for governance roles.
 - **Notifications:** raise/lower `digest.top_n` or `notifications.telegram.min_score`
   to control digest size and sensitivity.
+- **Dual-channel volume:** adjust `channels.top_matches.top_n` and
+  `channels.data_only_best_picks.top_n` plus the data keyword lists.
+
+### Feedback & personalization checks
+- Ensure `personalization.enabled: true` if you want ranking adjustments from feedback.
+- Confirm `out/preferences.json` is updated after receiving feedback buttons.
+- Use the 🧻 button to suppress duplicate items from future digests.
 
 ## A) OFFLINE (default)
 Use this path for reproducible, deterministic QA checks without network access.

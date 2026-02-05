@@ -13,6 +13,7 @@ def test_pipeline_groups_and_reports(tmp_path):
         strict=False,
         allow_missing_salary=True,
         sources=["dummy"],
+        preference_profile=None,
     )
 
     csv_path = output_dir / "report.csv"

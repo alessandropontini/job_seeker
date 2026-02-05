@@ -78,3 +78,9 @@
 - Enforced daily-window digest logic (last 24h UTC) and always-on Telegram.
 - Added snapshot de-duplication across days using notification timestamps.
 - Documented live operations and daily digest behavior.
+
+**Phase 6 refinement (current)**
+- Added dual-channel outputs: TOP_MATCHES (strict) + DATA_ONLY_BEST_PICKS (wide).
+- Implemented Telegram feedback buttons with a lightweight preference profile.
+- Added stateful digest dedupe (`last_notified.json`) and cache persistence in Actions.
+- Expanded documentation (README + runbook) and refreshed goldens/tests for no regressions.

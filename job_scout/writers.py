@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
@@ -82,6 +82,9 @@ def write_reports(
     missing_salary_allowed: Iterable[ReportRow],
     rejected: Iterable[ReportRow],
     output_dir: Path,
+    top_matches: Iterable[ReportRow] | None = None,
+    data_only_best_picks: Iterable[ReportRow] | None = None,
+    channel_reasons: Mapping[str, list[str]] | None = None,
     source_statuses: Iterable[SourceStatus] | None = None,
 ) -> None:
     """Write CSV and Markdown reports to the output directory."""
@@ -108,7 +111,20 @@ def write_reports(
         if not all_rows:
             handle.write("No postings found.\n")
             return
-
+        if top_matches is not None:
+            _write_section(
+                handle,
+                "TOP_MATCHES (strict)",
+                _sort_rows(top_matches),
+                channel_reasons=channel_reasons,
+            )
+        if data_only_best_picks is not None:
+            _write_section(
+                handle,
+                "DATA_ONLY_BEST_PICKS (wide)",
+                _sort_rows(data_only_best_picks),
+                channel_reasons=channel_reasons,
+            )
         _write_section(handle, "Matches", matches_list)
         _write_section(
             handle, "Missing Salary (allowed)", missing_salary_list
@@ -117,7 +133,10 @@ def write_reports(
 
 
 def _write_section(
-    handle, title: str, rows: Iterable[ReportRow]
+    handle,
+    title: str,
+    rows: Iterable[ReportRow],
+    channel_reasons: Mapping[str, list[str]] | None = None,
 ) -> None:
     handle.write(f"## {title}\n\n")
     rows_list = _sort_rows(rows)
@@ -161,6 +180,13 @@ def _write_section(
                 handle.write(
                     "  - Score adjustments: "
                     f"{'; '.join(adjustments)}\n"
+                )
+        if channel_reasons:
+            reasons = channel_reasons.get(_snapshot_key(row))
+            if reasons:
+                handle.write(
+                    "  - Channel reasons: "
+                    f"{'; '.join(reasons)}\n"
                 )
         if row.match.decision == "rejected":
             handle.write("  - Decision: rejected\n")
@@ -214,3 +240,7 @@ def _sort_rows(rows: Iterable[ReportRow]) -> list[ReportRow]:
     return sorted(
         rows_list, key=lambda r: r.posting.posted_at, reverse=True
     )
+
+
+def _snapshot_key(row: ReportRow) -> str:
+    return f"{row.posting.source}:{row.posting.id}"

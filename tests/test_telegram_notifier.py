@@ -1,3 +1,4 @@
+import json
 import os
 
 from job_scout.notifier import telegram
@@ -44,3 +45,25 @@ def test_send_message_uses_urlopen(monkeypatch):
     assert sent is True
     assert reason is None
     assert called["count"] == 2
+
+
+def test_send_message_includes_reply_markup(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+    captured = {"payload": None}
+
+    def _fake_urlopen(request, timeout=0):
+        if request.data:
+            captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return _FakeResponse(status=200)
+
+    monkeypatch.setattr(telegram.urllib.request, "urlopen", _fake_urlopen)
+
+    sent, reason = telegram.send_message(
+        "test",
+        reply_markup={"inline_keyboard": [[{"text": "👍", "callback_data": "x"}]]},
+    )
+
+    assert sent is True
+    assert reason is None
+    assert captured["payload"]["reply_markup"]["inline_keyboard"][0][0]["text"] == "👍"

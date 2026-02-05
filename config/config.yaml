@@ -38,6 +38,59 @@ salary_rules:
     USD: 0.92
     GBP: 1.17
 
+channels:
+  top_matches:
+    top_n: 10
+    min_score: 0
+    include_missing_salary: true
+  data_only_best_picks:
+    top_n: 10
+    min_score: 0
+    require_data_signal: true
+    exclude_top_matches: true
+    keywords:
+      - data
+      - data governance
+      - data quality
+      - data management
+      - data stewardship
+      - data catalog
+      - data lineage
+      - metadata
+      - master data
+      - reference data
+      - governance
+      - compliance
+      - bcbs 239
+      - collibra
+      - informatica
+      - alation
+    secondary_keywords:
+      - catalog
+      - lineage
+      - steward
+      - quality
+      - bigquery
+      - gcp
+      - purview
+
+personalization:
+  enabled: false
+  feedback_enabled: true
+  profile_path: preferences.json
+  token_weight_step: 2
+  tag_weight_step: 1
+  remote_level_step: 2
+  seniority_step: 1
+  max_abs_weight: 10
+  min_token_length: 3
+  cache_limit: 200
+  seniority_keywords:
+    - manager
+    - lead
+    - head
+  duplicate_action: skip
+
 scoring:
   base_score: 100
   penalty_weights:
@@ -77,6 +130,9 @@ notifications:
     top_n: 10
     min_score: 0
     min_score_improvement: 3
+  dedupe:
+    enabled: true
+    state_path: last_notified.json
 
 digest:
   mode: daily_window
