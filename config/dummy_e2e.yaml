@@ -7,9 +7,20 @@ notifications:
   telegram:
     enabled: true
     dry_run: false
+    send_per_job: true
+    send_header: true
+    persist_payload: true
   dedupe:
     enabled: true
     state_path: last_notified.json
+
+personalization:
+  enabled: true
+  feedback_enabled: true
+
+feedback:
+  enabled: true
+  window_hours: 1
 
 channels:
   top_matches:

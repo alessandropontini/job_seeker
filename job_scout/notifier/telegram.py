@@ -16,6 +16,14 @@ def send_message(
 ) -> tuple[bool, str | None]:
     """Send a Telegram message, returning (sent, reason)."""
 
+    return send_messages([{"text": text, "reply_markup": reply_markup}])
+
+
+def send_messages(
+    messages: list[dict[str, object]]
+) -> tuple[bool, str | None]:
+    """Send one or more Telegram messages in sequence."""
+
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     token_present = bool(bot_token)
@@ -40,38 +48,41 @@ def send_message(
         return False, "getMe failed"
     logger.info("Telegram token validated via getMe.")
 
-    message_payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "disable_web_page_preview": True,
-    }
-    if reply_markup:
-        message_payload["reply_markup"] = reply_markup
-    payload = json.dumps(message_payload).encode("utf-8")
-    status, description = _telegram_request(
-        bot_token, "sendMessage", payload=payload
-    )
-    if status is None:
-        logger.warning(
-            "Telegram sendMessage failed (connection error): %s.", description
+    for message in messages:
+        text = str(message.get("text", ""))
+        reply_markup = message.get("reply_markup")
+        message_payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "disable_web_page_preview": True,
+        }
+        if reply_markup:
+            message_payload["reply_markup"] = reply_markup
+        payload = json.dumps(message_payload).encode("utf-8")
+        status, description = _telegram_request(
+            bot_token, "sendMessage", payload=payload
         )
-        return False, "connection error"
-    if status != 200:
-        hint = _send_message_hint(description)
-        if hint:
+        if status is None:
             logger.warning(
-                "Telegram sendMessage failed (status=%s): %s. Hint: %s.",
-                status,
-                description,
-                hint,
+                "Telegram sendMessage failed (connection error): %s.", description
             )
-        else:
-            logger.warning(
-                "Telegram sendMessage failed (status=%s): %s.",
-                status,
-                description,
-            )
-        return False, "sendMessage failed"
+            return False, "connection error"
+        if status != 200:
+            hint = _send_message_hint(description)
+            if hint:
+                logger.warning(
+                    "Telegram sendMessage failed (status=%s): %s. Hint: %s.",
+                    status,
+                    description,
+                    hint,
+                )
+            else:
+                logger.warning(
+                    "Telegram sendMessage failed (status=%s): %s.",
+                    status,
+                    description,
+                )
+            return False, "sendMessage failed"
 
     logger.info("Telegram message sent.")
     return True, None

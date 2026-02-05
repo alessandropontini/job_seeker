@@ -12,9 +12,12 @@ the full pipeline (pipeline → digest → Telegram) is validated end-to-end. Du
 isolated with a `dummy_e2e` suffix to avoid impacting the 08:00 Remotive run.
 Telegram credentials must be stored as GitHub Actions secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 and are never printed in logs. If secrets are missing, notifications are skipped while the pipeline still runs.
+Worker credentials are also required for feedback ingestion (`JOB_SCOUT_WEBHOOK_BASE_URL`,
+`JOB_SCOUT_WEBHOOK_SECRET`).
 CI/build workflows are intentionally removed in Phase 6 due to environment constraints.
 Phase 6 refinement adds dual-channel outputs, Telegram feedback buttons, and a stateful anti-dup digest
 (`last_notified.json`) persisted between runs via Actions cache.
+Phase 7 adds Cloudflare Worker-backed, time-gated feedback ingestion with per-job Telegram messages.
 
 ## Production operations (live schedule)
 The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entries in
@@ -55,7 +58,9 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Trigger a manual run via **Actions → dummy-e2e → Run workflow** and verify
   `last_run_dummy_e2e.json`, `last_notified_dummy_e2e.json`, and `report.*` artifacts exist.
 - Trigger a manual run with valid Telegram secrets and verify the dummy digest is delivered.
+- Click feedback buttons within 1 hour and rerun to validate feedback ingestion.
 - Confirm the workflow runs twice and the second run skips with `duplicate_digest`.
+- Verify `feedback_summary_dummy_e2e.json` is uploaded when feedback is applied.
 - Trigger a manual run with missing or invalid Telegram secrets and verify logs warn about
   the specific missing/invalid secret(s) and that the run completes without a notification.
 - Confirm snapshot updates complete even if notification rows have missing fields
@@ -78,6 +83,13 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - If `digest.jobs` is present but Telegram is empty, verify the payload in
   `out/telegram_payload.json` (dry-run) or check action logs for send failures.
 
+### Troubleshooting: feedback buttons do nothing
+- Confirm the Telegram webhook is set to the Worker endpoint (`/telegram/webhook`).
+- Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `WEBHOOK_SECRET` configured.
+- Verify the callback arrives within the 1-hour feedback window; outside the window the Worker
+  answers with “⏱ Feedback window closed” and returns HTTP 410.
+- Check the Worker logs for `window` or `job` validation failures.
+
 ### Troubleshooting: dummy E2E artifact check failure
 - The guard-rail validates that accepted matches imply a non-empty digest.
 - Check `out/last_run_dummy_e2e.json` for `digest.jobs`, or the channel-specific lists
@@ -92,6 +104,13 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
   from the daily workflow is not treated as a duplicate.
 - If the second (rerun) step skips with `duplicate_digest`, this is expected and confirms
   dedupe is working for the dummy workflow only.
+
+### Troubleshooting: feedback not applied on next run
+- Confirm `JOB_SCOUT_WEBHOOK_BASE_URL` and `JOB_SCOUT_WEBHOOK_SECRET` are set in Actions secrets.
+- Check `out/last_run*.json` for a `digest.run_id` value.
+- Verify `GET /feedback?run_id=...` returns entries (Worker is storing feedback).
+- Ensure personalization is enabled (`personalization.enabled: true`) and that
+  `feedback_summary*.json` reports non-zero counts.
 
 ### Remotive validation & tuning (Phase 6)
 Use this checklist when Remotive runs return too few candidates or notifications feel empty.

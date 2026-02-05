@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from job_scout.channels import select_channels
+from job_scout.feedback import (
+    build_callback_data,
+    build_run_id,
+    build_short_id,
+    register_feedback_window,
+)
 from job_scout.notifier import telegram as telegram_notifier
 from job_scout.preferences import (
     PreferenceProfile,
@@ -55,6 +61,9 @@ def maybe_notify(
     dry_run = bool(telegram_config.get("dry_run", False))
 
     min_score = _parse_int(telegram_config.get("min_score", 0), 0)
+    send_per_job = bool(telegram_config.get("send_per_job", True))
+    send_header = bool(telegram_config.get("send_header", True))
+    persist_payload = bool(telegram_config.get("persist_payload", False))
     digest_config = _as_dict(config.get("digest"))
     digest_mode = str(digest_config.get("mode", "daily_window"))
     if digest_mode != "daily_window":
@@ -130,16 +139,33 @@ def maybe_notify(
         channel_selection.top_matches,
         channel_selection.data_only_best_picks,
     )
+    run_id = build_run_id(now, digest_hash)
+    feedback_config = _as_dict(config.get("feedback"))
+    feedback_window_hours = _parse_int(
+        feedback_config.get("window_hours", 1), 1
+    )
+    feedback_open_at = now.astimezone(timezone.utc)
+    feedback_close_at = feedback_open_at + timedelta(
+        hours=feedback_window_hours
+    )
+    short_ids = _assign_short_ids(
+        channel_selection.top_matches
+        + channel_selection.data_only_best_picks
+    )
     digest_payload = _build_digest_payload(
         now=now,
         digest_date=digest_date,
         digest_hash=digest_hash,
+        run_id=run_id,
+        feedback_open_at=feedback_open_at.isoformat(),
+        feedback_close_at=feedback_close_at.isoformat(),
         window_hours=window_hours,
         digest_scope=digest_scope,
         total_in_window=total_in_window,
         top_rows=channel_selection.top_matches,
         data_only_rows=channel_selection.data_only_best_picks,
         data_only_reasons=channel_selection.data_only_reasons,
+        short_ids=short_ids,
     )
     base_snapshot = Snapshot(
         generated_at=now.isoformat(),
@@ -200,24 +226,51 @@ def maybe_notify(
             skipped_reason="disabled",
         )
 
-    reply_markup = _build_feedback_keyboard(
-        _unique_rows(
-            channel_selection.top_matches
-            + channel_selection.data_only_best_picks
-        )
+    message_payloads = _build_message_payloads(
+        channel_selection.top_matches,
+        channel_selection.data_only_best_picks,
+        data_only_reasons=channel_selection.data_only_reasons,
+        total_in_window=total_in_window,
+        window_hours=window_hours,
+        digest_scope=digest_scope,
+        run_id=run_id,
+        short_ids=short_ids,
+        send_header=send_header,
+        send_per_job=send_per_job,
     )
+    if persist_payload:
+        _persist_payload(
+            output_dir=output_dir,
+            message_payloads=message_payloads,
+            digest_payload=digest_payload,
+        )
     if dry_run:
         sent, reason = _save_dry_run_payload(
             output_dir=output_dir,
-            digest=digest,
-            reply_markup=reply_markup,
+            message_payloads=message_payloads,
             digest_payload=digest_payload,
         )
         logger.info("Telegram send attempted: no; reason=dry_run.")
     else:
-        sent, reason = telegram_notifier.send_message(
-            digest, reply_markup=reply_markup
+        feedback_jobs = _build_feedback_job_map(
+            channel_selection.top_matches,
+            channel_selection.data_only_best_picks,
+            short_ids,
         )
+        if feedback_jobs:
+            register_ok, register_reason = register_feedback_window(
+                run_id=run_id,
+                open_at=feedback_open_at.isoformat(),
+                close_at=feedback_close_at.isoformat(),
+                jobs=feedback_jobs,
+                config=config,
+            )
+            if not register_ok and register_reason:
+                logger.info(
+                    "Feedback window registration skipped: %s.",
+                    register_reason,
+                )
+        sent, reason = telegram_notifier.send_messages(message_payloads)
         logger.info(
             "Telegram send attempted: yes; reason=%s.",
             reason or "sent",
@@ -452,20 +505,17 @@ def _snapshot_key(row: ReportRow) -> str:
     return f"{row.posting.source}:{row.posting.id}"
 
 
-def _build_feedback_keyboard(rows: Sequence[ReportRow]) -> dict | None:
-    if not rows:
-        return None
-    keyboard: list[list[dict[str, str]]] = []
-    for row in rows:
-        key = _snapshot_key(row)
-        keyboard.append(
-            [
-                {"text": "👍", "callback_data": f"pref:up:{key}"},
-                {"text": "👎", "callback_data": f"pref:down:{key}"},
-                {"text": "⭐", "callback_data": f"pref:star:{key}"},
-                {"text": "🧻", "callback_data": f"pref:dup:{key}"},
-            ]
-        )
+def _build_feedback_keyboard_for_job(
+    run_id: str, short_id: str
+) -> dict[str, object]:
+    keyboard = [
+        [
+            {"text": "👍", "callback_data": build_callback_data(run_id, short_id, "L")},
+            {"text": "👎", "callback_data": build_callback_data(run_id, short_id, "D")},
+            {"text": "⭐", "callback_data": build_callback_data(run_id, short_id, "S")},
+            {"text": "🧻", "callback_data": build_callback_data(run_id, short_id, "X")},
+        ]
+    ]
     return {"inline_keyboard": keyboard}
 
 
@@ -553,11 +603,15 @@ def _serialize_digest_row(
     row: ReportRow,
     channel: str,
     reasons: Sequence[str] | None = None,
+    short_id: str | None = None,
 ) -> dict[str, object]:
     posted_at = getattr(row.posting, "posted_at", None)
+    job_key = _snapshot_key(row)
     return {
         "id": row.posting.id,
         "source": row.posting.source,
+        "job_key": job_key,
+        "short_id": short_id,
         "title": row.posting.title,
         "company": row.posting.company,
         "score": row.match.score or 0,
@@ -570,6 +624,8 @@ def _serialize_digest_row(
         "missing_salary": row.match.missing_salary,
         "salary_text": row.posting.salary_text,
         "url": row.posting.url,
+        "description_snippet": row.posting.description_snippet,
+        "tags": list(row.posting.tags),
         "reasons": list(reasons) if reasons else [],
     }
 
@@ -579,12 +635,16 @@ def _build_digest_payload(
     now: datetime,
     digest_date: str,
     digest_hash: str,
+    run_id: str,
+    feedback_open_at: str,
+    feedback_close_at: str,
     window_hours: int,
     digest_scope: str,
     total_in_window: int,
     top_rows: Sequence[ReportRow],
     data_only_rows: Sequence[ReportRow],
     data_only_reasons: Mapping[str, list[str]] | None = None,
+    short_ids: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     jobs: list[dict[str, object]] = []
     top_matches_payload: list[dict[str, object]] = []
@@ -593,7 +653,12 @@ def _build_digest_payload(
         reasons = None
         if channel == "data_only_best_picks" and data_only_reasons:
             reasons = data_only_reasons.get(_snapshot_key(row))
-        serialized = _serialize_digest_row(row, channel, reasons)
+        short_id = None
+        if short_ids:
+            short_id = short_ids.get(_snapshot_key(row))
+        serialized = _serialize_digest_row(
+            row, channel, reasons, short_id=short_id
+        )
         jobs.append(serialized)
         if channel == "top_matches":
             top_matches_payload.append(serialized)
@@ -602,6 +667,9 @@ def _build_digest_payload(
     return {
         "generated_at": now.isoformat(),
         "date": digest_date,
+        "run_id": run_id,
+        "feedback_open_at": feedback_open_at,
+        "feedback_close_at": feedback_close_at,
         "window_hours": window_hours,
         "scope": digest_scope,
         "total_in_window": total_in_window,
@@ -629,29 +697,175 @@ def _build_run_summary(
         "notified_count": notified_count,
     }
 
+def _assign_short_ids(rows: Sequence[ReportRow]) -> dict[str, str]:
+    used: set[str] = set()
+    short_ids: dict[str, str] = {}
+    for row in _unique_rows(rows):
+        key = _snapshot_key(row)
+        short_ids[key] = build_short_id(key, used)
+    return short_ids
+
+
+def _build_message_payloads(
+    top_rows: Sequence[ReportRow],
+    data_only_rows: Sequence[ReportRow],
+    *,
+    data_only_reasons: Mapping[str, list[str]] | None,
+    total_in_window: int,
+    window_hours: int,
+    digest_scope: str,
+    run_id: str,
+    short_ids: Mapping[str, str],
+    send_header: bool,
+    send_per_job: bool,
+) -> list[dict[str, object]]:
+    if total_in_window == 0:
+        return [{"text": "No new job postings published in the last 24 hours."}]
+    payloads: list[dict[str, object]] = []
+    if send_header:
+        payloads.append(
+            {
+                "text": _format_digest_header(
+                    total_in_window=total_in_window,
+                    window_hours=window_hours,
+                    digest_scope=digest_scope,
+                )
+            }
+        )
+    if not send_per_job:
+        payloads.append(
+            {
+                "text": _format_dual_channel_digest(
+                    top_rows,
+                    data_only_rows,
+                    total_in_window=total_in_window,
+                    window_hours=window_hours,
+                    digest_scope=digest_scope,
+                    data_only_reasons=data_only_reasons,
+                )
+            }
+        )
+        return payloads
+    for channel, row in _channel_rows(top_rows, data_only_rows):
+        reasons = None
+        if channel == "data_only_best_picks" and data_only_reasons:
+            reasons = data_only_reasons.get(_snapshot_key(row))
+        short_id = short_ids.get(_snapshot_key(row))
+        if not short_id:
+            continue
+        payloads.append(
+            {
+                "text": _format_job_message(
+                    row,
+                    channel=channel,
+                    extra_reasons=reasons,
+                ),
+                "reply_markup": _build_feedback_keyboard_for_job(
+                    run_id, short_id
+                ),
+            }
+        )
+    return payloads
+
+
+def _format_digest_header(
+    *, total_in_window: int, window_hours: int, digest_scope: str
+) -> str:
+    if digest_scope == "fallback_recent":
+        return (
+            "Job Scout — Daily Digest (fallback)\n"
+            f"Total in digest: {total_in_window}"
+        )
+    return (
+        f"Job Scout — Daily Digest (last {window_hours}h)\n"
+        f"Total in window: {total_in_window}"
+    )
+
+
+def _format_job_message(
+    row: ReportRow,
+    *,
+    channel: str,
+    extra_reasons: Sequence[str] | None = None,
+) -> str:
+    posting = row.posting
+    score = row.match.score or 0
+    channel_label = channel.upper()
+    salary_line = (
+        f"Salary: {posting.salary_text}"
+        if posting.salary_text
+        else "Salary: missing"
+    )
+    details = (
+        f"{posting.title} — {posting.company}\n"
+        f"Remote: {row.match.remote_level} | "
+        f"Location: {posting.location_text or 'Unknown location'} | "
+        f"{salary_line} | Score: {score}\n"
+        f"Channel: {channel_label}\n"
+        f"{_format_rationale(row, extra_reasons=extra_reasons)}\n"
+        f"{posting.url}"
+    )
+    return details
+
+
+def _build_feedback_job_map(
+    top_rows: Sequence[ReportRow],
+    data_only_rows: Sequence[ReportRow],
+    short_ids: Mapping[str, str],
+) -> list[dict[str, object]]:
+    jobs: list[dict[str, object]] = []
+    for row in _unique_rows(list(top_rows) + list(data_only_rows)):
+        key = _snapshot_key(row)
+        short_id = short_ids.get(key)
+        if not short_id:
+            continue
+        jobs.append(
+            {
+                "short_id": short_id,
+                "job_key": key,
+                "title": row.posting.title,
+                "url": row.posting.url,
+            }
+        )
+    return jobs
+
+
+def _persist_payload(
+    *,
+    output_dir: Path,
+    message_payloads: Sequence[Mapping[str, object]],
+    digest_payload: Mapping[str, object],
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload_path = output_dir / "telegram_payload.json"
+    payload_path.write_text(
+        json.dumps(
+            {"messages": list(message_payloads), "digest": dict(digest_payload)},
+            sort_keys=True,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    digest_path = output_dir / "digest.md"
+    digest_path.write_text(
+        "\n\n".join(
+            str(payload.get("text", ""))
+            for payload in message_payloads
+        ),
+        encoding="utf-8",
+    )
+
 
 def _save_dry_run_payload(
     *,
     output_dir: Path,
-    digest: str,
-    reply_markup: dict | None,
+    message_payloads: Sequence[Mapping[str, object]],
     digest_payload: Mapping[str, object],
 ) -> tuple[bool, str | None]:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    payload_path = output_dir / "telegram_payload.json"
-    digest_path = output_dir / "digest.md"
-    payload = {
-        "chat_id": "dry-run",
-        "text": digest,
-        "disable_web_page_preview": True,
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    payload["digest"] = dict(digest_payload)
-    payload_path.write_text(
-        json.dumps(payload, sort_keys=True, indent=2),
-        encoding="utf-8",
+    _persist_payload(
+        output_dir=output_dir,
+        message_payloads=message_payloads,
+        digest_payload=digest_payload,
     )
-    digest_path.write_text(digest + "\n", encoding="utf-8")
-    logger.info("Dry-run payload written to %s.", payload_path)
+    logger.info("Dry-run payload written to %s.", output_dir)
     return True, "dry_run"

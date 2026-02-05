@@ -35,14 +35,24 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+          JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
         run: |
           SINCE_DAYS="${{ inputs.since_days || '7' }}"
+          echo "Click the Telegram feedback buttons within 1h, then re-run this workflow to observe feedback effects."
           python -m job_scout run \
             --config config/dummy_e2e.yaml \
             --since-days "$SINCE_DAYS" \
             --source dummy \
             --state-suffix "$STATE_SUFFIX" \
             --output-dir out
+          cp out/last_run_"$STATE_SUFFIX".json out/last_run.json
+          if [ -f "out/last_notified_${STATE_SUFFIX}.json" ]; then
+            cp "out/last_notified_${STATE_SUFFIX}.json" out/last_notified.json
+          fi
+          if [ -f "out/preferences_${STATE_SUFFIX}.json" ]; then
+            cp "out/preferences_${STATE_SUFFIX}.json" out/preferences.json
+          fi
 
       - name: Assert digest state populated
         run: |
@@ -123,6 +133,13 @@ jobs:
             --source dummy \
             --state-suffix "$STATE_SUFFIX" \
             --output-dir out
+          cp out/last_run_"$STATE_SUFFIX".json out/last_run.json
+          if [ -f "out/last_notified_${STATE_SUFFIX}.json" ]; then
+            cp "out/last_notified_${STATE_SUFFIX}.json" out/last_notified.json
+          fi
+          if [ -f "out/preferences_${STATE_SUFFIX}.json" ]; then
+            cp "out/preferences_${STATE_SUFFIX}.json" out/preferences.json
+          fi
           python - <<'PY'
           import json
           import os
@@ -154,6 +171,14 @@ jobs:
           if notified_count:
               raise SystemExit("dedupe failed: notified_count should be 0 on rerun")
           PY
+      - name: Summarize feedback (if any)
+        run: |
+          if [ -f "out/feedback_summary_${STATE_SUFFIX}.json" ]; then
+            echo "Feedback summary:"
+            cat "out/feedback_summary_${STATE_SUFFIX}.json"
+          else
+            echo "No feedback summary found."
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -163,8 +188,12 @@ jobs:
           path: |
             out/report.csv
             out/report.md
+            out/last_run.json
+            out/last_notified.json
+            out/preferences.json
             out/last_run_dummy_e2e.json
             out/last_notified_dummy_e2e.json
             out/preferences_dummy_e2e.json
+            out/feedback_summary_dummy_e2e.json
             out/telegram_payload.json
             out/digest.md

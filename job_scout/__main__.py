@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import List
 
 from job_scout.config import load_config
+from job_scout.feedback import (
+    apply_feedback_items,
+    fetch_feedback,
+    load_previous_run,
+    write_feedback_summary,
+)
 from job_scout.notifications import maybe_notify
 from job_scout.pipeline import run_pipeline
 from job_scout.preferences import (
@@ -132,9 +138,45 @@ def main(argv: List[str] | None = None) -> int:
                 state_suffix=state_suffix,
             )
             preference_profile = load_profile(preference_path)
-            preference_profile = apply_telegram_feedback(
-                preference_profile, config
+            feedback_config = config.get("feedback", {})
+            feedback_use_updates = False
+            if isinstance(feedback_config, dict):
+                feedback_use_updates = bool(
+                    feedback_config.get("use_telegram_updates", False)
+                )
+            if feedback_use_updates:
+                preference_profile = apply_telegram_feedback(
+                    preference_profile, config
+                )
+            previous_run_id, job_lookup = load_previous_run(
+                args.output_dir, config
             )
+            if previous_run_id:
+                feedback_items, reason = fetch_feedback(
+                    run_id=previous_run_id, config=config
+                )
+                if reason:
+                    logging.getLogger(__name__).info(
+                        "Feedback fetch skipped: %s.", reason
+                    )
+                else:
+                    result = apply_feedback_items(
+                        preference_profile,
+                        feedback_items,
+                        job_lookup,
+                        config,
+                    )
+                    preference_profile = result.updated_profile
+                    write_feedback_summary(
+                        args.output_dir, config, result.counts
+                    )
+                    logging.getLogger(__name__).info(
+                        "Feedback applied: %s.",
+                        ", ".join(
+                            f"{key}={value}"
+                            for key, value in result.counts.items()
+                        ),
+                    )
             save_profile(preference_path, preference_profile)
         salary_rules = config.get("salary_rules", {})
         allow_missing_salary = salary_rules.get("allow_missing_salary")
