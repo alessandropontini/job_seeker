@@ -171,6 +171,8 @@ help you pinpoint the issue:
 - `response_bytes`: size of the raw response body.
 - `raw_response`: the raw JSON (or text) response returned by Telegram.
 - `ok`, `error_code`, `description`: parsed fields from the Telegram API response.
+- `token_sha256_prefix`: a non-reversible hash prefix of the bot token (useful to
+  confirm `telegram_webhook_set` and `telegram_webhook_get` are using the same secret).
 
 **Troubleshooting checklist**
 - **`http_code: 404`** → bot token is incorrect or points to a non-existent bot.
@@ -180,6 +182,15 @@ help you pinpoint the issue:
   or Telegram API unreachable.
 - Ensure `JOB_SCOUT_WEBHOOK_BASE_URL` starts with `https://` and contains no spaces
   (Telegram requires HTTPS).
+
+**Webhook troubleshooting (getWebhookInfo)**
+- If `telegram_webhook_set` reports success but `getWebhookInfo.url` is empty, compare
+  `token_sha256_prefix` from both workflows. A mismatch indicates a different secret
+  or environment is in use.
+- `raw_response` should be valid JSON. If it is empty or not JSON, inspect `curl_stderr`
+  to identify network errors, DNS issues, or TLS failures.
+- `http_code` and `raw_response` together indicate Telegram-side errors (e.g., 401/403
+  invalid token) vs. transport problems (empty response + curl stderr).
 
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
