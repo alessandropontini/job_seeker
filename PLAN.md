@@ -78,6 +78,7 @@
 - Enforced daily-window digest logic (last 24h UTC) and always-on Telegram.
 - Added snapshot de-duplication across days using notification timestamps.
 - Documented live operations and daily digest behavior.
+- Hardened Telegram callback smoke workflow YAML with bash-only body truncation and curl retry/timeout diagnostics.
 
 **Phase 6 refinement (current)**
 - Added dual-channel outputs: TOP_MATCHES (strict) + DATA_ONLY_BEST_PICKS (wide).
