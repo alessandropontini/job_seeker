@@ -165,6 +165,22 @@ Run the workflows from **GitHub Actions**:
 3. Click 👍 in a Telegram digest message and confirm Cloudflare logs show
    `POST /telegram/feedback`.
 
+If `telegram_webhook_set` fails, the logs now include non-sensitive diagnostics to
+help you pinpoint the issue:
+- `http_code`: HTTP response code returned by the Telegram API.
+- `response_bytes`: size of the raw response body.
+- `raw_response`: the raw JSON (or text) response returned by Telegram.
+- `ok`, `error_code`, `description`: parsed fields from the Telegram API response.
+
+**Troubleshooting checklist**
+- **`http_code: 404`** → bot token is incorrect or points to a non-existent bot.
+- **`http_code: 400`** → invalid request (often non-HTTPS URL or invalid `secret_token`).
+- **`http_code: 401/403`** → invalid or unauthorized bot token.
+- **`ERROR: empty response` + curl stderr** → network/egress blocked, DNS failure,
+  or Telegram API unreachable.
+- Ensure `JOB_SCOUT_WEBHOOK_BASE_URL` starts with `https://` and contains no spaces
+  (Telegram requires HTTPS).
+
 ## Matching rules overview
 - **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
 - **Role:** only manager/lead/head titles are accepted.
