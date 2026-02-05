@@ -1,4 +1,4 @@
-name: job-scout
+name: daily-job-scout
 
 on:
   workflow_dispatch:
@@ -55,7 +55,7 @@ jobs:
             echo "No runtime dependencies to install."
           fi
 
-      - name: Run pipeline
+      - name: Run pipeline (remotive + Telegram)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
