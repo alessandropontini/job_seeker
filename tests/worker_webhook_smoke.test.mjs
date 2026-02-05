@@ -36,7 +36,7 @@ class MockKV {
   }
 }
 
-async function loadWorkerModule() {
+async function loadWorkerModule({ consoleOverride, fetchOverride } = {}) {
   if (!supportsVmModules) {
     throw new Error("SourceTextModule not available in this Node runtime");
   }
@@ -48,7 +48,8 @@ async function loadWorkerModule() {
     Request,
     Response,
     crypto,
-    fetch,
+    fetch: fetchOverride ?? fetch,
+    console: consoleOverride ?? console,
   });
   const module = new SourceTextModule(source, {
     context,
@@ -61,10 +62,10 @@ async function loadWorkerModule() {
   return module.namespace;
 }
 
-function buildEnv({ secret, kv, allowedUserId }) {
+function buildEnv({ secret, kv, allowedUserId, telegramToken }) {
   return {
     JOB_SCOUT_WEBHOOK_SECRET: secret,
-    TELEGRAM_BOT_TOKEN: undefined,
+    TELEGRAM_BOT_TOKEN: telegramToken,
     FEEDBACK_WINDOW_MINUTES: 60,
     JOB_SCOUT_KV: kv,
     ALLOWED_TELEGRAM_USER_ID: allowedUserId,
@@ -103,30 +104,43 @@ function seedSession(nowMs) {
 }
 
 maybeTest("telegram webhook rejects missing secret header", async () => {
-  const module = await loadWorkerModule();
+  const { consoleMock, logs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
   const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: null }), env);
   assert.equal(response.status, 401);
   assert.equal(kv.putCalls.length, 0);
+  assert.ok(findLogEvent(logs, "auth_fail"));
 });
 
 maybeTest("telegram webhook rejects wrong secret header", async () => {
-  const module = await loadWorkerModule();
+  const { consoleMock, logs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
   const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: "wrong" }), env);
   assert.equal(response.status, 401);
   assert.equal(kv.putCalls.length, 0);
+  assert.ok(findLogEvent(logs, "auth_fail"));
 });
 
 maybeTest("telegram webhook accepts correct secret header and writes KV", async () => {
-  const module = await loadWorkerModule();
+  const { consoleMock, logs } = createConsoleMock();
+  const fetchMock = createFetchMock();
+  const module = await loadWorkerModule({
+    consoleOverride: consoleMock,
+    fetchOverride: fetchMock.fetch,
+  });
   const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
-  const env = buildEnv({ secret: "topsecret", kv });
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    telegramToken: "token",
+  });
   const response = await worker.fetch(
     buildRequest({ secretHeader: "topsecret" }),
     env
@@ -134,10 +148,18 @@ maybeTest("telegram webhook accepts correct secret header and writes KV", async 
   assert.equal(response.status, 200);
   assert.equal(kv.putCalls.length, 1);
   assert.ok(kv.store.has("feedback:run123:job1:42"));
+  assert.ok(findLogEvent(logs, "request_received"));
+  assert.ok(findLogEvent(logs, "request_handled"));
+  assert.equal(fetchMock.calls.length, 1);
+  assert.equal(
+    fetchMock.calls[0].url,
+    "https://api.telegram.org/bottoken/answerCallbackQuery"
+  );
 });
 
 maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
-  const module = await loadWorkerModule();
+  const { consoleMock, logs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
   const worker = module.default;
   const kv = new MockKV(seedSession(Date.now()));
   const env = buildEnv({
@@ -151,6 +173,21 @@ maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
   );
   assert.equal(response.status, 200);
   assert.equal(kv.putCalls.length, 0);
+  assert.ok(findLogEvent(logs, "unauthorized_user"));
+});
+
+maybeTest("telegram webhook GET probe returns ok", async () => {
+  const { consoleMock, logs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
+  const worker = module.default;
+  const kv = new MockKV();
+  const env = buildEnv({ secret: "topsecret", kv });
+  const response = await worker.fetch(
+    new Request("https://example.com/telegram/feedback", { method: "GET" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  assert.ok(findLogEvent(logs, "telegram_webhook_probe"));
 });
 
 maybeTest("parseCallbackData accepts the expected feedback payload format", async () => {
@@ -165,3 +202,52 @@ maybeTest("parseCallbackData accepts the expected feedback payload format", asyn
   });
   assert.equal(parseCallbackData("fb|run123|job1|bad|hash1"), null);
 });
+
+maybeTest("logs route_not_found for unknown paths", async () => {
+  const { consoleMock, logs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
+  const worker = module.default;
+  const kv = new MockKV();
+  const env = buildEnv({ secret: "topsecret", kv });
+  const response = await worker.fetch(
+    new Request("https://example.com/unknown", { method: "GET" }),
+    env
+  );
+  assert.equal(response.status, 404);
+  assert.ok(findLogEvent(logs, "route_not_found"));
+});
+
+function createFetchMock() {
+  const calls = [];
+  const fetchMock = async (url, options = {}) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  return { fetch: fetchMock, calls };
+}
+
+function createConsoleMock() {
+  const logs = [];
+  return {
+    logs,
+    consoleMock: {
+      log: (line) => logs.push(line),
+      error: (line) => logs.push(line),
+      warn: (line) => logs.push(line),
+    },
+  };
+}
+
+function findLogEvent(logs, eventName) {
+  return logs.some((line) => {
+    try {
+      const parsed = JSON.parse(line);
+      return parsed.event === eventName;
+    } catch {
+      return false;
+    }
+  });
+}

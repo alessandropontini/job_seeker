@@ -2,62 +2,226 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
-    if (path === "/telegram/feedback" || path === "/telegram/webhook") {
-      return handleTelegramWebhook(request, env, ctx);
+    const method = request.method;
+    const start = Date.now();
+    const cfRay = request.headers.get("cf-ray");
+    const requestId = cfRay || crypto.randomUUID();
+    const baseLog = { request_id: requestId, cf_ray: cfRay, method, path };
+
+    logInfo("request_received", {
+      ...baseLog,
+      user_agent: request.headers.get("user-agent"),
+      header_names: getHeaderNames(request.headers),
+    });
+
+    let result;
+    try {
+      if (path === "/telegram/feedback" || path === "/telegram/webhook") {
+        result = await handleTelegramWebhook(request, env, ctx, baseLog);
+      } else if (path === "/feedback") {
+        result = await handleFeedback(request, env, baseLog);
+      } else if (path === "/window/open") {
+        result = await handleWindowOpen(request, env, baseLog);
+      } else if (path === "/healthz") {
+        result = {
+          response: new Response("OK", { status: 200 }),
+          outcome: "ok",
+          reason: "health_check",
+        };
+      } else {
+        logInfo("route_not_found", { ...baseLog });
+        result = {
+          response: new Response("Not found", { status: 404 }),
+          outcome: "blocked",
+          reason: "route_not_found",
+        };
+      }
+    } catch (error) {
+      logError("request_error", {
+        ...baseLog,
+        error: serializeError(error),
+        outcome: "error",
+        reason: "exception",
+      });
+      result = {
+        response: new Response("Internal error", { status: 500 }),
+        outcome: "error",
+        reason: "exception",
+      };
     }
-    if (path === "/feedback") {
-      return handleFeedback(request, env);
-    }
-    if (path === "/window/open") {
-      return handleWindowOpen(request, env);
-    }
-    return new Response("Not found", { status: 404 });
+
+    const latencyMs = Date.now() - start;
+    logInfo("request_handled", {
+      ...baseLog,
+      status: result.response.status,
+      latency_ms: latencyMs,
+      outcome: result.outcome,
+      reason: result.reason,
+      telegram_update_type: result.telegram_update_type,
+      kv_key: result.kv_key,
+    });
+
+    return result.response;
   },
 };
 
-async function handleTelegramWebhook(request, env, ctx) {
+async function handleTelegramWebhook(request, env, ctx, baseLog) {
+  if (request.method === "GET") {
+    logInfo("telegram_webhook_probe", {
+      ...baseLog,
+      outcome: "ok",
+      reason: "probe_get",
+    });
+    return {
+      response: new Response("ok", { status: 200 }),
+      outcome: "ok",
+      reason: "probe_get",
+    };
+  }
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_method",
+    });
+    return {
+      response: new Response("Method not allowed", { status: 405 }),
+      outcome: "blocked",
+      reason: "invalid_method",
+    };
   }
   const authError = ensureTelegramWebhookAuthorized(request, env);
   if (authError) {
-    return authError;
+    const reason =
+      authError.status === 500 ? "missing_secret" : "auth_fail";
+    const logFn = authError.status === 500 ? logError : logWarn;
+    logFn(reason, {
+      ...baseLog,
+      outcome: "blocked",
+      reason,
+    });
+    return {
+      response: authError,
+      outcome: "blocked",
+      reason,
+    };
   }
+  logInfo("telegram_webhook_authorized", { ...baseLog, outcome: "ok" });
   let payload;
+  let telegramUpdateType = "unknown";
   try {
     payload = await request.json();
   } catch {
-    return new Response("Invalid JSON", { status: 400 });
+    logWarn("telegram_webhook_bad_json", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "bad_json",
+    });
+    return {
+      response: new Response("Invalid JSON", { status: 400 }),
+      outcome: "blocked",
+      reason: "bad_json",
+    };
   }
+  if (payload?.callback_query) {
+    telegramUpdateType = "callback_query";
+  } else if (payload?.message) {
+    telegramUpdateType = "message";
+  }
+  logInfo("telegram_webhook_parsed", {
+    ...baseLog,
+    telegram_update_type: telegramUpdateType,
+  });
   const callback = payload?.callback_query;
   if (!callback) {
-    return new Response("No callback", { status: 200 });
+    logInfo("telegram_webhook_no_callback", {
+      ...baseLog,
+      outcome: "ok",
+      reason: "no_callback",
+      telegram_update_type: telegramUpdateType,
+    });
+    return {
+      response: new Response("No callback", { status: 200 }),
+      outcome: "ok",
+      reason: "no_callback",
+      telegram_update_type: telegramUpdateType,
+    };
   }
   const allowedUserId = env.ALLOWED_TELEGRAM_USER_ID;
   const callbackUserId = callback.from?.id;
+  const messageUserId = payload?.message?.from?.id;
+  const updateUserId = callbackUserId ?? messageUserId;
   if (
     allowedUserId &&
-    String(callbackUserId ?? "") !== String(allowedUserId)
+    String(updateUserId ?? "") !== String(allowedUserId)
   ) {
     await answerCallback(env, callback.id, "🚫 Not authorized");
-    return new Response("OK", { status: 200 });
+    logWarn("unauthorized_user", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "unauthorized_user",
+      telegram_update_type: telegramUpdateType,
+      telegram_user_id: updateUserId ?? "unknown",
+    });
+    return {
+      response: jsonResponse({ ok: true, ignored: true }),
+      outcome: "blocked",
+      reason: "unauthorized_user",
+      telegram_update_type: telegramUpdateType,
+    };
   }
   const data = callback.data;
   if (typeof data !== "string") {
     scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
-    return new Response("Invalid data", { status: 200 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_data",
+      telegram_update_type: telegramUpdateType,
+    });
+    return {
+      response: new Response("Invalid data", { status: 200 }),
+      outcome: "blocked",
+      reason: "invalid_data",
+      telegram_update_type: telegramUpdateType,
+    };
   }
   const parsed = parseCallbackData(data);
   if (!parsed) {
     scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
-    return new Response("Invalid callback data", { status: 200 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_callback_data",
+      telegram_update_type: telegramUpdateType,
+    });
+    return {
+      response: new Response("Invalid callback data", { status: 200 }),
+      outcome: "blocked",
+      reason: "invalid_callback_data",
+      telegram_update_type: telegramUpdateType,
+    };
   }
   const { runId, jobShortId, action, jobHash } = parsed;
   const sessionKey = `session:${runId}`;
+  logInfo("kv_read", { ...baseLog, kv_key: sessionKey });
   const windowRaw = await env.JOB_SCOUT_KV.get(sessionKey, "json");
   if (!windowRaw) {
     scheduleAnswer(env, ctx, callback.id, "⏱ Session scaduta");
-    return new Response("Session missing", { status: 200 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "session_missing",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    });
+    return {
+      response: new Response("Session missing", { status: 200 }),
+      outcome: "blocked",
+      reason: "session_missing",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    };
   }
   const now = Date.now();
   const openAt = Date.parse(windowRaw.open_at);
@@ -67,17 +231,56 @@ async function handleTelegramWebhook(request, env, ctx) {
   const effectiveCloseAt = Math.min(closeAt, maxCloseAt);
   if (!Number.isFinite(openAt) || !Number.isFinite(closeAt)) {
     scheduleAnswer(env, ctx, callback.id, "Feedback non valido");
-    return new Response("Window invalid", { status: 200 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "window_invalid",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    });
+    return {
+      response: new Response("Window invalid", { status: 200 }),
+      outcome: "blocked",
+      reason: "window_invalid",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    };
   }
   if (now < openAt || now > effectiveCloseAt) {
     scheduleAnswer(env, ctx, callback.id, "⏱ Session scaduta");
-    return new Response("Window closed", { status: 200 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "window_closed",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    });
+    return {
+      response: new Response("Window closed", { status: 200 }),
+      outcome: "blocked",
+      reason: "window_closed",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    };
   }
   const jobs = Array.isArray(windowRaw.jobs) ? windowRaw.jobs : [];
   const jobEntry = jobs.find((job) => job?.short_id === jobShortId);
   if (!jobEntry || jobEntry?.job_hash !== jobHash) {
     scheduleAnswer(env, ctx, callback.id, "Job non riconosciuto");
-    return new Response("Job not found", { status: 200 });
+    logWarn("telegram_webhook_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "job_not_found",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    });
+    return {
+      response: new Response("Job not found", { status: 200 }),
+      outcome: "blocked",
+      reason: "job_not_found",
+      telegram_update_type: telegramUpdateType,
+      kv_key: sessionKey,
+    };
   }
   const userId = callback.from?.id ?? "unknown";
   const messageId = callback.message?.message_id ?? null;
@@ -93,10 +296,26 @@ async function handleTelegramWebhook(request, env, ctx) {
   };
   const writePromise = env.JOB_SCOUT_KV.put(key, JSON.stringify(value), {
     expirationTtl: 60 * 60 * 24 * 7,
-  }).catch(() => {});
+  }).catch((error) => {
+    logError("kv_write_failed", {
+      ...baseLog,
+      kv_key: key,
+      error: serializeError(error),
+    });
+  });
   const ackPromise = answerCallback(env, callback.id, "✅ Feedback salvato").catch(
-    () => {}
+    (error) => {
+      logError("telegram_callback_failed", {
+        ...baseLog,
+        error: serializeError(error),
+      });
+    }
   );
+  logInfo("kv_write_scheduled", {
+    ...baseLog,
+    kv_key: key,
+    telegram_update_type: telegramUpdateType,
+  });
   if (ctx) {
     ctx.waitUntil(writePromise);
     ctx.waitUntil(ackPromise);
@@ -104,12 +323,17 @@ async function handleTelegramWebhook(request, env, ctx) {
     await writePromise;
     await ackPromise;
   }
-  return new Response("OK", { status: 200 });
+  return {
+    response: jsonResponse({ ok: true }),
+    outcome: "ok",
+    reason: "feedback_recorded",
+    telegram_update_type: telegramUpdateType,
+    kv_key: key,
+  };
 }
 
 function ensureTelegramWebhookAuthorized(request, env) {
-  const secret =
-    env.TELEGRAM_WEBHOOK_SECRET || env.JOB_SCOUT_WEBHOOK_SECRET;
+  const secret = env.JOB_SCOUT_WEBHOOK_SECRET;
   if (!secret) {
     return new Response("Missing webhook secret", { status: 500 });
   }
@@ -120,17 +344,44 @@ function ensureTelegramWebhookAuthorized(request, env) {
   return null;
 }
 
-async function handleFeedback(request, env) {
+async function handleFeedback(request, env, baseLog) {
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    logWarn("feedback_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_method",
+    });
+    return {
+      response: new Response("Method not allowed", { status: 405 }),
+      outcome: "blocked",
+      reason: "invalid_method",
+    };
   }
   const payload = await readSignedJson(request, env);
   if (!payload.ok) {
-    return payload.response;
+    logWarn("feedback_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "signature_invalid",
+    });
+    return {
+      response: payload.response,
+      outcome: "blocked",
+      reason: "signature_invalid",
+    };
   }
   const runId = payload.body?.run_id;
   if (!runId) {
-    return new Response("Missing run_id", { status: 400 });
+    logWarn("feedback_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "missing_run_id",
+    });
+    return {
+      response: new Response("Missing run_id", { status: 400 }),
+      outcome: "blocked",
+      reason: "missing_run_id",
+    };
   }
   const prefix = `feedback:${runId}:`;
   const list = await env.JOB_SCOUT_KV.list({ prefix });
@@ -141,37 +392,95 @@ async function handleFeedback(request, env) {
       items.push(value);
     }
   }
-  return new Response(JSON.stringify(items), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return {
+    response: new Response(JSON.stringify(items), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+    outcome: "ok",
+    reason: "feedback_listed",
+  };
 }
 
-async function handleWindowOpen(request, env) {
+async function handleWindowOpen(request, env, baseLog) {
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    logWarn("window_open_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_method",
+    });
+    return {
+      response: new Response("Method not allowed", { status: 405 }),
+      outcome: "blocked",
+      reason: "invalid_method",
+    };
   }
   const payload = await readSignedJson(request, env);
   if (!payload.ok) {
-    return payload.response;
+    logWarn("window_open_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "signature_invalid",
+    });
+    return {
+      response: payload.response,
+      outcome: "blocked",
+      reason: "signature_invalid",
+    };
   }
   const runId = payload.body?.run_id;
   if (!runId) {
-    return new Response("Missing run_id", { status: 400 });
+    logWarn("window_open_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "missing_run_id",
+    });
+    return {
+      response: new Response("Missing run_id", { status: 400 }),
+      outcome: "blocked",
+      reason: "missing_run_id",
+    };
   }
   const openAt = payload.body?.open_at;
   const closeAt = payload.body?.close_at;
   if (!openAt || !closeAt) {
-    return new Response("Missing window", { status: 400 });
+    logWarn("window_open_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "missing_window",
+    });
+    return {
+      response: new Response("Missing window", { status: 400 }),
+      outcome: "blocked",
+      reason: "missing_window",
+    };
   }
   const openAtMs = Date.parse(openAt);
   const closeAtMs = Date.parse(closeAt);
   if (!Number.isFinite(openAtMs) || !Number.isFinite(closeAtMs)) {
-    return new Response("Invalid window timestamps", { status: 400 });
+    logWarn("window_open_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_window",
+    });
+    return {
+      response: new Response("Invalid window timestamps", { status: 400 }),
+      outcome: "blocked",
+      reason: "invalid_window",
+    };
   }
   const maxWindowMs = feedbackWindowMs(env);
   if (closeAtMs - openAtMs > maxWindowMs) {
-    return new Response("Window exceeds max duration", { status: 400 });
+    logWarn("window_open_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "window_exceeds_max",
+    });
+    return {
+      response: new Response("Window exceeds max duration", { status: 400 }),
+      outcome: "blocked",
+      reason: "window_exceeds_max",
+    };
   }
   const windowPayload = {
     run_id: runId,
@@ -184,7 +493,16 @@ async function handleWindowOpen(request, env) {
     JSON.stringify(windowPayload),
     { expirationTtl: 60 * 60 * 2 }
   );
-  return new Response("OK", { status: 200 });
+  logInfo("window_open_recorded", {
+    ...baseLog,
+    kv_key: `session:${runId}`,
+  });
+  return {
+    response: new Response("OK", { status: 200 }),
+    outcome: "ok",
+    reason: "window_open_recorded",
+    kv_key: `session:${runId}`,
+  };
 }
 
 export function parseCallbackData(data) {
@@ -324,9 +642,82 @@ async function answerCallback(env, callbackId, text) {
     text,
     show_alert: false,
   };
-  await fetch(url, {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  let responseBody;
+  try {
+    responseBody = await response.json();
+  } catch {
+    responseBody = null;
+  }
+  if (!response.ok) {
+    logWarn("telegram_callback_failed", {
+      status: response.status,
+      description: responseBody?.description,
+    });
+  } else {
+    logInfo("telegram_callback_sent", { status: response.status });
+  }
+}
+
+function logInfo(event, fields = {}) {
+  console.log(JSON.stringify({ level: "info", event, ...fields }));
+}
+
+function logWarn(event, fields = {}) {
+  console.log(JSON.stringify({ level: "warn", event, ...fields }));
+}
+
+function logError(event, fields = {}) {
+  console.error(JSON.stringify({ level: "error", event, ...fields }));
+}
+
+function redactHeaders(headers) {
+  const redacted = {};
+  if (!headers) {
+    return redacted;
+  }
+  for (const [key, value] of headers.entries()) {
+    if (shouldRedactHeader(key)) {
+      redacted[key] = "[REDACTED]";
+    } else {
+      redacted[key] = value;
+    }
+  }
+  return redacted;
+}
+
+function getHeaderNames(headers) {
+  if (!headers) {
+    return [];
+  }
+  return Array.from(headers.keys());
+}
+
+function jsonResponse(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function shouldRedactHeader(headerName) {
+  const name = headerName.toLowerCase();
+  return [
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-telegram-bot-api-secret-token",
+    "x-webhook-signature",
+  ].includes(name);
+}
+
+function serializeError(error) {
+  if (error instanceof Error) {
+    return { message: error.message, stack: error.stack };
+  }
+  return { message: String(error) };
 }

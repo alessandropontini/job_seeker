@@ -117,3 +117,7 @@
   and HTTPS base URL validation for faster troubleshooting.
 - Phase 7 ops: expanded `telegram_webhook_get` diagnostics with HTTP status, raw response, curl
   stderr, and non-sensitive token fingerprinting to detect secret mismatches.
+- Phase 7 observability: structured Cloudflare Worker logs for Telegram feedback routes, with
+  privacy-safe fields, request correlation IDs, and troubleshooting guidance.
+- Phase 7 observability: added Telegram callback smoke workflow and hardened auth/GET probe for
+  webhook debugging without local tooling.
