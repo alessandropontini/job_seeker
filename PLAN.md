@@ -98,3 +98,4 @@
   updated runbooks/tests for authenticated callbacks.
 - Phase 7 ops fix: ensured Node is installed in deploy workflow so Wrangler secrets upload succeeds.
 - Phase 7 ops fix: added explicit secret validation to fail fast when KV namespace ID is missing.
+- Phase 7 ops docs: clarified Wrangler action warnings and expected behavior in the runbook.
