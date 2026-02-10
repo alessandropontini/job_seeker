@@ -28,33 +28,48 @@ jobs:
             exit 1
           fi
 
-          base_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}"
-          payload=$(jq -n \
-            --argjson user_id "${ALLOWED_TELEGRAM_USER_ID}" \
-            '{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":$user_id},"data":"smoke-invalid-callback-data","message":{"message_id":1}}}')
+          if ! [[ "${ALLOWED_TELEGRAM_USER_ID}" =~ ^[0-9]+$ ]]; then
+            echo "ALLOWED_TELEGRAM_USER_ID must be numeric."
+            exit 1
+          fi
 
-          response=$(curl -sS -w "\n%{http_code}" \
+          base_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}"
+          endpoint="${base_url}/telegram/feedback"
+          payload="{\"update_id\":1,\"callback_query\":{\"id\":\"smoke-callback\",\"from\":{\"id\":${ALLOWED_TELEGRAM_USER_ID}},\"data\":\"LIKE_TEST\",\"message\":{\"message_id\":1}}}"
+
+          response_file="$(mktemp)"
+          curl_error_file="$(mktemp)"
+          http_status=""
+
+          if ! http_status="$(curl -sS \
+            -o "${response_file}" \
+            -w "%{http_code}" \
             --connect-timeout 10 \
             --max-time 30 \
-            --retry 3 \
-            --retry-delay 2 \
-            --retry-connrefused \
             -H "Content-Type: application/json" \
             -H "X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}" \
             -d "${payload}" \
-            "${base_url}/telegram/feedback")
-
-          status=$(echo "${response}" | tail -n1)
-          body=$(echo "${response}" | sed '$d')
-          body_short="${body:0:200}"
-          if [ "${#body}" -gt 200 ]; then
-            body_short="${body_short}..."
+            "${endpoint}" \
+            2>"${curl_error_file}")"; then
+            echo "status=000"
+            echo "body=$(head -c 120 "${curl_error_file}" | tr '\n' ' ')"
+            echo "Smoke test failed: curl execution error."
+            exit 1
           fi
 
-          echo "status=${status}"
-          echo "body=${body_short}"
+          body_preview="$(head -c 120 "${response_file}" | tr '\n' ' ')"
+          echo "status=${http_status}"
+          echo "body=${body_preview}"
 
-          if [[ "${status}" == "401" || "${status}" == "403" || "${status}" == "404" ]]; then
+          if [[ "${http_status}" == "200" || "${http_status}" == "204" ]]; then
+            echo "Smoke test passed."
+            exit 0
+          fi
+
+          if [[ "${http_status}" == "401" || "${http_status}" == "403" || "${http_status}" == "404" || "${http_status}" == "405" ]]; then
             echo "Smoke test failed: endpoint/auth validation failed."
             exit 1
           fi
+
+          echo "Smoke test failed: unexpected HTTP status."
+          exit 1

@@ -20,6 +20,8 @@ Project docs:
 - [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md)
 - [docs/SECRETS.md](docs/SECRETS.md)
 
+> CI note: cron-based notification workflows are disabled; operations run manual-only via `workflow_dispatch`. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
+
 ## Requirements
 - Python 3.11
 - Runtime dependencies: **stdlib-only**
@@ -498,7 +500,7 @@ Each run sends one message per job (plus an optional header message); when there
 Repository secrets are documented in [`docs/SECRETS.md`](docs/SECRETS.md).
 Workflow operations are documented in [`docs/CI_RUNBOOK.md`](docs/CI_RUNBOOK.md).
 
-The remotive notification workflow is manual-only. To run manually: go to
+The remotive notification workflow is manual-only (`workflow_dispatch` only) and cron is disabled. To run manually: go to
 **Actions → scheduled-remotive** → **Run workflow** and set inputs
 (`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
 `gh workflow run scheduled_remotive.yml` (no secrets shown in CLI output).

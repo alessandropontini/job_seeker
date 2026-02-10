@@ -19,3 +19,4 @@ This repository uses GitHub Actions secrets by name only. Never commit or print 
 - Never print full environment dumps (`env`, `printenv`) in CI.
 - Prefer non-sensitive diagnostics (HTTP code, response size, masked identifiers).
 - Use GitHub Actions secret store only; do not hardcode credentials in repository files.
+
