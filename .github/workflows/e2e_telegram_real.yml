@@ -1,0 +1,211 @@
+name: e2e-telegram-real
+
+on:
+  workflow_dispatch:
+    inputs:
+      callback_mode:
+        description: "Callback test mode: manual requires a real button click; automatic replays a Telegram-like callback payload."
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - automatic
+      manual_wait_seconds:
+        description: "Seconds to wait for manual click before failing."
+        required: false
+        default: "120"
+
+jobs:
+  e2e-telegram-real:
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+      JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+      ALLOWED_TELEGRAM_USER_ID: ${{ secrets.ALLOWED_TELEGRAM_USER_ID }}
+      JOB_SCOUT_TELEGRAM_MODE: real
+      JOB_SCOUT_E2E_REAL_TELEGRAM: "1"
+      STATE_SUFFIX: e2e_telegram_real
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate required inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID JOB_SCOUT_WEBHOOK_BASE_URL JOB_SCOUT_WEBHOOK_SECRET ALLOWED_TELEGRAM_USER_ID; do
+            if [[ -z "${!key}" ]]; then
+              echo "$key is required."
+              exit 1
+            fi
+          done
+          if ! [[ "${ALLOWED_TELEGRAM_USER_ID}" =~ ^[0-9]+$ ]]; then
+            echo "ALLOWED_TELEGRAM_USER_ID must be numeric."
+            exit 1
+          fi
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [[ -f requirements.txt ]]; then
+            python -m pip install -r requirements.txt
+          fi
+
+      - name: Run fixture pipeline and send real Telegram messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m job_scout run \
+            --config config/e2e_fake.yaml \
+            --source dummy \
+            --since-days 3650 \
+            --state-suffix "${STATE_SUFFIX}" \
+            --output-dir out \
+            --fixture-file tests/fixtures/e2e_fake_jobs.json \
+            --telegram-real
+          cp "out/last_run_${STATE_SUFFIX}.json" out/last_run.json
+
+      - name: Verify feedback registration and extract callback payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f out/feedback_registration_result.log
+          if ! grep -q '^ok=true$' out/feedback_registration_result.log; then
+            echo "Feedback registration failed"
+            cat out/feedback_registration_result.log
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("out/telegram_payload.json").read_text(encoding="utf-8"))
+          callback_data = None
+          for message in payload.get("messages", []):
+              keyboard = (message.get("reply_markup") or {}).get("inline_keyboard") or []
+              if keyboard and keyboard[0] and keyboard[0][0].get("callback_data"):
+                  callback_data = keyboard[0][0]["callback_data"]
+                  break
+          if not callback_data:
+              raise SystemExit("Unable to find callback_data")
+          if len(callback_data.encode("utf-8")) > 64:
+              raise SystemExit("callback_data exceeds Telegram limit")
+          request_payload = {
+              "update_id": 202,
+              "callback_query": {
+                  "id": "e2e-callback-1",
+                  "from": {"id": int(__import__("os").environ["ALLOWED_TELEGRAM_USER_ID"])},
+                  "data": callback_data,
+                  "message": {"message_id": 1},
+              },
+          }
+          Path("out/feedback_request.json").write_text(json.dumps(request_payload, indent=2), encoding="utf-8")
+          Path("out/callback_data.txt").write_text(callback_data + "\n", encoding="utf-8")
+          print("callback_data extracted")
+          PY
+
+      - name: Manual callback mode (click in Telegram)
+        if: ${{ inputs.callback_mode != 'automatic' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          wait_seconds="${{ inputs.manual_wait_seconds || '120' }}"
+          echo "Open Telegram and click the first feedback button within ${wait_seconds}s."
+          sleep "${wait_seconds}"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from job_scout.feedback import fetch_feedback
+
+          last_run = json.loads(Path("out/last_run.json").read_text(encoding="utf-8"))
+          run_id = last_run.get("digest", {}).get("run_id")
+          if not run_id:
+              raise SystemExit("Missing run_id in out/last_run.json")
+          items, reason = fetch_feedback(run_id=run_id, config={"feedback": {"enabled": True}})
+          if reason:
+              raise SystemExit(f"Feedback fetch failed: {reason}")
+          if not items:
+              raise SystemExit("No feedback found after manual click wait")
+          Path("out/manual_feedback_items.json").write_text(json.dumps(items, indent=2), encoding="utf-8")
+          print(f"feedback_items={len(items)}")
+          PY
+
+      - name: Automatic callback mode (Telegram-like webhook replay)
+        if: ${{ inputs.callback_mode == 'automatic' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${JOB_SCOUT_WEBHOOK_BASE_URL%/}/telegram/feedback"
+          status="$(curl -sS -o out/feedback_response.txt -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}" \
+            --data-binary @out/feedback_request.json \
+            "${endpoint}")"
+          echo "status=${status}" > out/feedback_result.log
+          echo "body=$(cat out/feedback_response.txt)" >> out/feedback_result.log
+          if [[ "${status}" != "200" ]]; then
+            echo "Unexpected status ${status}"
+            exit 1
+          fi
+          if ! grep -q '{"ok":true}' out/feedback_response.txt; then
+            echo "Expected JSON body {\"ok\":true}"
+            exit 1
+          fi
+
+      - name: Assert callback response semantics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in out/feedback_response.txt out/feedback_result.log; do
+            if [[ -f "${file}" ]]; then
+              if grep -q "Invalid callback data" "${file}"; then
+                echo "Invalid callback data detected"
+                exit 1
+              fi
+              if grep -q "Session missing" "${file}"; then
+                echo "Session missing detected"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Assert run state consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("out/last_run.json")
+          if not path.exists():
+              raise SystemExit("Missing out/last_run.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          digest = data.get("digest") or {}
+          if not digest.get("run_id"):
+              raise SystemExit("Missing digest.run_id")
+          jobs = digest.get("jobs") or []
+          if not jobs:
+              raise SystemExit("Missing digest.jobs")
+          print(f"run_id={digest['run_id']} jobs={len(jobs)}")
+          PY
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-scout-e2e-telegram-real
+          if-no-files-found: error
+          path: |
+            out/

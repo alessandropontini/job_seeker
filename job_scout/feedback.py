@@ -89,7 +89,7 @@ def build_callback_data(
     """Build compact callback data for Telegram feedback buttons."""
 
     payload = f"fb|{run_id}|{short_id}|{action}|{job_hash}"
-    if len(payload.encode("utf-8")) >= 64:
+    if len(payload.encode("utf-8")) > 64:
         raise ValueError("callback_data exceeds Telegram limit")
     return payload
 

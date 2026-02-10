@@ -62,7 +62,7 @@ def maybe_notify(
     dedupe_config = _as_dict(notifications.get("dedupe"))
     telegram_enabled = bool(telegram_config.get("enabled", True))
     dry_run = bool(telegram_config.get("dry_run", False))
-    send_mode = str(telegram_config.get("send_mode", "live")).strip().lower()
+    send_mode = _resolve_telegram_send_mode(telegram_config)
 
     min_score = _parse_int(telegram_config.get("min_score", 0), 0)
     send_per_job = bool(telegram_config.get("send_per_job", True))
@@ -255,7 +255,8 @@ def maybe_notify(
         short_ids,
         digest_hash,
     )
-    if feedback_jobs and send_mode in {"live", "fake"}:
+    feedback_enabled = bool(feedback_config.get("enabled", False))
+    if feedback_jobs and feedback_enabled and send_mode in {"real", "fake"}:
         registration_result = register_feedback_window(
             run_id=run_id,
             open_at=feedback_open_at.isoformat(),
@@ -645,6 +646,26 @@ def _parse_int(value: object, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _resolve_telegram_send_mode(
+    telegram_config: Mapping[str, object],
+) -> str:
+    configured_mode = str(
+        telegram_config.get("send_mode", "fake")
+    ).strip().lower()
+    env_mode = os.getenv("JOB_SCOUT_TELEGRAM_MODE", "").strip().lower()
+    send_mode = configured_mode
+    if env_mode in {"fake", "real"}:
+        send_mode = env_mode
+    if send_mode == "real" and os.getenv("JOB_SCOUT_E2E_REAL_TELEGRAM") != "1":
+        logger.warning(
+            "JOB_SCOUT_TELEGRAM_MODE=real ignored because JOB_SCOUT_E2E_REAL_TELEGRAM!=1; falling back to fake mode."
+        )
+        return "fake"
+    if send_mode not in {"fake", "real"}:
+        return "fake"
+    return send_mode
 
 
 def _feedback_window_minutes(config: Mapping[str, object]) -> int:

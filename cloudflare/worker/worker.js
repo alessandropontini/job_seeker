@@ -799,7 +799,7 @@ function jsonResponse(payload, status = 200) {
 
 function buildCallbackData(runId, jobShortId, action, jobHash) {
   const payload = `fb|${runId}|${jobShortId}|${action}|${jobHash}`;
-  if (new TextEncoder().encode(payload).length >= 64) {
+  if (new TextEncoder().encode(payload).length > 64) {
     throw new Error("callback_data exceeds Telegram limit");
   }
   return payload;
