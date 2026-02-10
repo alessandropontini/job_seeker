@@ -65,16 +65,16 @@
 - External dependency failures (HTTP 403/429, NO_NETWORK) documented as environment limits.
 
 ### Phase 6 — Automation & Notifications
-**Status:** ✅ LIVE — Scheduled daily digest @ 08:00 Europe/Rome with Telegram
+**Status:** ✅ LIVE — Manual dispatch workflows for Telegram + feedback operations
 **Acceptance Criteria**
-- Scheduled GitHub Actions workflow (workflow_dispatch + CET/CEST cron).
+- Manual GitHub Actions workflow dispatch (`workflow_dispatch` only; cron disabled).
 - Telegram notifications enabled by default with explicit logs for sent vs skipped.
 - Missing/invalid secrets yield warnings without failing the run.
 - Daily digest uses the last 24 hours of `posted_at` timestamps in UTC.
 - State snapshot tracks notified job IDs and prevents duplicate alerts.
 
 **Recent updates**
-- Enabled daily scheduled runs at 08:00 Europe/Rome (CET/CEST-aware cron).
+- Disabled notification cron; remotive workflow now runs only via manual dispatch.
 - Enforced daily-window digest logic (last 24h UTC) and always-on Telegram.
 - Added snapshot de-duplication across days using notification timestamps.
 - Documented live operations and daily digest behavior.
@@ -130,3 +130,4 @@
   smoke to authenticated reachability validation against `/telegram/feedback`.
 - Phase 7 CI/ops: disabled scheduled notification cron to keep remotive dispatch manual-only.
 - Phase 7 docs: added CI runbook + secrets matrix documentation for workflow usage and safe operations.
+- Phase 7 CI/ops: hardened `cf_worker_smoke` pass/fail logic (200/204 pass; explicit curl/status failure paths) with minimal callback payload and safe logs.

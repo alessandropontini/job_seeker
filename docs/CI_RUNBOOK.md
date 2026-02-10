@@ -30,13 +30,21 @@
 
 ### 2) Run webhook smoke check
 1. Open **Actions → cf_worker_smoke → Run workflow**.
-2. Validate logs show a returned HTTP status and body snippet.
+2. Validate logs show a returned HTTP status and body snippet (max 120 chars).
 3. Treat smoke as **PASS** when:
-   - Request reaches endpoint and returns a response.
-   - Status is not `401`, `403`, or `404`.
-   - No timeout/network failure occurred.
+   - Status is `200` or `204`.
+4. Treat smoke as **FAIL** when:
+   - Status is `401`, `403`, `404`, or `405`.
+   - `curl` fails (timeout, DNS error, connection refused, TLS/connect error).
+   - Any status other than `200`/`204` is returned.
 
-> This smoke is intentionally **not** a full E2E session flow. It verifies endpoint reachability and webhook secret auth guardrails.
+> The smoke workflow sends one POST to `${JOB_SCOUT_WEBHOOK_BASE_URL}/telegram/feedback`
+> with a minimal Telegram callback payload and the `X-Telegram-Bot-Api-Secret-Token`
+> header. Response body text such as `Invalid callback data` or `Session missing`
+> does **not** affect PASS/FAIL.
+
+> This smoke is intentionally **not** a full E2E session flow. It verifies endpoint
+> reachability + webhook auth only.
 
 ### 3) Run remotive pipeline manually
 1. Open **Actions → scheduled-remotive → Run workflow**.
