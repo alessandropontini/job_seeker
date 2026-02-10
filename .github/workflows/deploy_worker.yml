@@ -2,10 +2,6 @@ name: deploy-feedback-worker
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "cloudflare/worker/**"
-      - ".github/workflows/deploy_worker.yml"
 
 jobs:
   deploy:
@@ -87,4 +83,4 @@ jobs:
       - name: Diagnostics (post-deploy)
         run: |
           set -euo pipefail
-          echo "Deployed worker name: $(sed -n 's/^name = \"\\(.*\\)\"/\\1/p' cloudflare/worker/wrangler.toml)"
+          echo "Deployed worker name: $(sed -n 's/^name = "\\(.*\\)"/\\1/p' cloudflare/worker/wrangler.toml)"

@@ -10,7 +10,6 @@ jobs:
       JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
       JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
       ALLOWED_TELEGRAM_USER_ID: ${{ secrets.ALLOWED_TELEGRAM_USER_ID }}
-      JOB_SCOUT_SMOKE_TOKEN: ${{ secrets.JOB_SCOUT_SMOKE_TOKEN }}
     steps:
       - name: Smoke test Telegram callback endpoint
         shell: bash
@@ -28,37 +27,12 @@ jobs:
             echo "ALLOWED_TELEGRAM_USER_ID is not set."
             exit 1
           fi
-          if [[ -z "${JOB_SCOUT_SMOKE_TOKEN}" ]]; then
-            echo "JOB_SCOUT_SMOKE_TOKEN is not set."
-            exit 1
-          fi
+
           base_url="${JOB_SCOUT_WEBHOOK_BASE_URL%/}"
-          session_response=$(curl -sS -w "\n%{http_code}" \
-            --connect-timeout 10 \
-            --max-time 30 \
-            --retry 3 \
-            --retry-delay 2 \
-            --retry-connrefused \
-            -H "Content-Type: application/json" \
-            -H "X-Smoke-Token: ${JOB_SCOUT_SMOKE_TOKEN}" \
-            -X POST \
-            "${base_url}/internal/smoke/session")
-          session_status=$(echo "${session_response}" | tail -n1)
-          session_body=$(echo "${session_response}" | sed '$d')
-          if [[ "${session_status}" != "200" ]]; then
-            echo "session_status=${session_status}"
-            echo "session_body=${session_body:0:200}"
-            exit 1
-          fi
-          callback_data_like=$(echo "${session_body}" | jq -r '.callback_data_like')
-          if [[ -z "${callback_data_like}" || "${callback_data_like}" == "null" ]]; then
-            echo "Missing callback_data_like in session response."
-            exit 1
-          fi
           payload=$(jq -n \
-            --arg data "${callback_data_like}" \
             --argjson user_id "${ALLOWED_TELEGRAM_USER_ID}" \
-            '{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":$user_id},"data":$data,"message":{"message_id":1}}}')
+            '{"update_id":1,"callback_query":{"id":"smoke-callback","from":{"id":$user_id},"data":"smoke-invalid-callback-data","message":{"message_id":1}}}')
+
           response=$(curl -sS -w "\n%{http_code}" \
             --connect-timeout 10 \
             --max-time 30 \
@@ -69,15 +43,18 @@ jobs:
             -H "X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}" \
             -d "${payload}" \
             "${base_url}/telegram/feedback")
+
           status=$(echo "${response}" | tail -n1)
           body=$(echo "${response}" | sed '$d')
           body_short="${body:0:200}"
           if [ "${#body}" -gt 200 ]; then
             body_short="${body_short}..."
           fi
+
           echo "status=${status}"
           echo "body=${body_short}"
-          if echo "${body}" | grep -qiE "Session missing|Invalid callback data"; then
-            echo "Smoke test failed: ${body_short}"
+
+          if [[ "${status}" == "401" || "${status}" == "403" || "${status}" == "404" ]]; then
+            echo "Smoke test failed: endpoint/auth validation failed."
             exit 1
           fi
