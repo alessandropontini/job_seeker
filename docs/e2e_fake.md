@@ -5,8 +5,25 @@ Questo documento descrive il flusso E2E manuale che valida pipeline + notifica T
 ## Garanzie
 - **Manual-only**: il workflow usa solo `workflow_dispatch`.
 - **Dati finti**: la pipeline usa `tests/fixtures/e2e_fake_jobs.json`.
-- **No segreti in artifact/log applicativi**: vengono salvati solo report, payload Telegram fake, callback fake e risposta HTTP.
+- **No segreti in artifact/log applicativi**: vengono salvati report, payload Telegram fake, callback fake, risposta HTTP e log di registration con soli metadati tecnici.
 - **Nessun cambio pubblico del webhook**: `/telegram/feedback` resta invariato; il test invia un payload callback nel formato reale `fb|...`.
+
+## Registration feedback window (fake mode)
+Nel run con `notifications.telegram.send_mode: fake` la registration della sessione feedback è **obbligatoria**.
+
+Dettagli della chiamata Worker:
+- **Endpoint**: `POST <JOB_SCOUT_WEBHOOK_BASE_URL>/window/open`
+- **Headers firmati** (senza secret in chiaro):
+  - `Content-Type: application/json`
+  - `X-Webhook-Timestamp`
+  - `X-Webhook-Id`
+  - `X-Webhook-Signature` (HMAC SHA-256)
+
+Se la registration fallisce (errore rete o `status != 200`), `job_scout run` termina con errore in fake mode e scrive comunque `out/feedback_registration_result.log` con:
+- endpoint/metodo/header names
+- status code
+- primi 200 caratteri del body (`body_excerpt`)
+- esito (`ok=true|false`) e reason.
 
 ## Come lanciare
 1. Vai in **GitHub Actions**.
@@ -18,11 +35,10 @@ Questo documento descrive il flusso E2E manuale che valida pipeline + notifica T
 
 ## Cosa fa il workflow
 1. Esegue `python -m job_scout run` con `config/e2e_fake.yaml` e fixture deterministica.
-2. Genera report in `out/` e payload Telegram fake (`out/telegram_payload.json`, `out/digest.md`).
-3. Registra la sessione feedback nello stesso storage Worker/KV usato da `/telegram/feedback` (tramite `register_feedback_window` del flusso notifica).
-4. Estrae una `callback_data` valida dalla keyboard inline reale.
-5. Chiama `/telegram/feedback` con header `X-Telegram-Bot-Api-Secret-Token` e payload Telegram fake.
-6. Fallisce se trova `Invalid callback data` o `Session missing`.
+2. Verifica subito `out/feedback_registration_result.log` e fallisce se manca o contiene `ok=false`.
+3. Estrae una `callback_data` valida dalla keyboard inline reale.
+4. Chiama `/telegram/feedback` con header `X-Telegram-Bot-Api-Secret-Token` e payload Telegram fake.
+5. Fallisce se trova `Invalid callback data` o `Session missing`.
 
 ## Artifacts attesi
 - `out/report.csv`
@@ -30,6 +46,7 @@ Questo documento descrive il flusso E2E manuale che valida pipeline + notifica T
 - `out/last_run.json`
 - `out/telegram_payload.json`
 - `out/digest.md`
+- `out/feedback_registration_result.log`
 - `out/feedback_request.json`
 - `out/feedback_response.txt`
 - `out/feedback_result.log`
@@ -37,11 +54,16 @@ Questo documento descrive il flusso E2E manuale che valida pipeline + notifica T
 
 ## Troubleshooting
 
+### `Feedback registration failed`
+- Apri `out/feedback_registration_result.log` e controlla `status` + `body_excerpt`.
+- Verifica `JOB_SCOUT_WEBHOOK_BASE_URL` e `JOB_SCOUT_WEBHOOK_SECRET`.
+- Verifica che il Worker esponga il path `/window/open`.
+
 ### `Invalid callback data`
 - Controlla che `out/telegram_payload.json` contenga una keyboard con `callback_data` nel formato `fb|run_id|short_id|action|job_hash`.
 - Verifica che il workflow stia leggendo la prima riga della keyboard inline corretta.
 
 ### `Session missing`
-- Verifica che la registrazione finestra feedback sia abilitata (`feedback.enabled: true` in `config/e2e_fake.yaml`).
-- Verifica che il Worker sia raggiungibile con `JOB_SCOUT_WEBHOOK_BASE_URL` e che `JOB_SCOUT_WEBHOOK_SECRET` sia corretto.
+- Verifica che la registration sia `ok=true` nel file `out/feedback_registration_result.log`.
+- Conferma che callback e registration usino lo stesso `run_id`.
 - Conferma che la callback sia inviata poco dopo la pipeline (finestra feedback non scaduta).

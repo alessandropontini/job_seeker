@@ -132,3 +132,4 @@
 - Phase 7 docs: added CI runbook + secrets matrix documentation for workflow usage and safe operations.
 - Phase 7 CI/ops: hardened `cf_worker_smoke` pass/fail logic (200/204 pass; explicit curl/status failure paths) with minimal callback payload and safe logs.
 - Phase 7 CI/ops: added manual `e2e_fake` workflow with deterministic fixture pipeline run, Telegram fake-send payload artifacts, feedback session bootstrap, and `/telegram/feedback` callback validation against session/callback errors.
+- Phase 7 CI/ops: made fake-mode feedback registration fail-fast with explicit endpoint/method/status/body diagnostics in `out/feedback_registration_result.log`, added callback/session contract unit coverage, and enforced registration checks in `e2e_fake` workflow before webhook callback replay.

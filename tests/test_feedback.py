@@ -5,6 +5,8 @@ from job_scout.feedback import (
     build_callback_data,
     build_short_id,
     is_window_open,
+    parse_callback_data,
+    session_storage_key,
     _sign_payload,
 )
 from job_scout.preferences import PreferenceProfile
@@ -95,3 +97,17 @@ def test_apply_feedback_items_updates_profile():
     assert result.counts["love"] == 1
     assert result.counts["maybe"] == 1
     assert "dummy:beta" in result.updated_profile.duplicate_ids
+
+
+def test_callback_roundtrip_uses_worker_session_key_contract():
+    run_id = "26020508a1b2"
+    short_id = "dg01f3c9abcd"
+    action = "L"
+    job_hash = "a1b2c3d4"
+
+    payload = build_callback_data(run_id, short_id, action, job_hash)
+    parsed = parse_callback_data(payload)
+
+    assert parsed == (run_id, short_id, action, job_hash)
+    assert session_storage_key(parsed[0]) == f"session:{run_id}"
+

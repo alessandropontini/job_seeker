@@ -6,6 +6,7 @@ from job_scout.config import DEFAULT_CONFIG
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
 from job_scout import notifications
+from job_scout.feedback import FeedbackRegistrationResult
 from job_scout.writers import ReportRow
 
 
@@ -192,7 +193,20 @@ def test_fake_send_mode_registers_window_and_persists_payload(
 
     def _fake_register(**_kwargs):
         register_calls["count"] += 1
-        return True, None
+        return FeedbackRegistrationResult(
+            ok=True,
+            reason=None,
+            endpoint="https://worker.example/window/open",
+            method="POST",
+            headers=(
+                "Content-Type",
+                "X-Webhook-Timestamp",
+                "X-Webhook-Id",
+                "X-Webhook-Signature",
+            ),
+            status=200,
+            body_excerpt="OK",
+        )
 
     monkeypatch.setattr(notifications, "register_feedback_window", _fake_register)
 
