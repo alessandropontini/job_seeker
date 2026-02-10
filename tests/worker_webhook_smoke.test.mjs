@@ -62,13 +62,20 @@ async function loadWorkerModule({ consoleOverride, fetchOverride } = {}) {
   return module.namespace;
 }
 
-function buildEnv({ secret, kv, allowedUserId, telegramToken }) {
+function buildEnv({
+  secret,
+  kv,
+  allowedUserId,
+  telegramToken,
+  smokeToken,
+}) {
   return {
     JOB_SCOUT_WEBHOOK_SECRET: secret,
     TELEGRAM_BOT_TOKEN: telegramToken,
     FEEDBACK_WINDOW_MINUTES: 60,
     JOB_SCOUT_KV: kv,
     ALLOWED_TELEGRAM_USER_ID: allowedUserId,
+    JOB_SCOUT_SMOKE_TOKEN: smokeToken,
   };
 }
 
@@ -220,6 +227,59 @@ maybeTest("parseCallbackData accepts the expected feedback payload format", asyn
     jobHash: "hash1",
   });
   assert.equal(parseCallbackData("fb|run123|job1|bad|hash1"), null);
+});
+
+maybeTest("internal smoke session returns callback data for valid token", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV();
+  const env = buildEnv({ secret: "topsecret", kv, smokeToken: "smoke-123" });
+  const request = new Request("https://example.com/internal/smoke/session", {
+    method: "POST",
+    headers: new Headers({ "X-Smoke-Token": "smoke-123" }),
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(body.session_id);
+  assert.ok(body.callback_data_like);
+  assert.equal(body.job_id, "job-001");
+  const parsed = module.parseCallbackData(body.callback_data_like);
+  assert.ok(parsed);
+  assert.equal(parsed.runId, body.session_id);
+  assert.equal(parsed.jobShortId, body.job_id);
+  const session = await kv.get(`session:${body.session_id}`, "json");
+  assert.ok(session);
+  assert.equal(session.jobs[0].job_hash, parsed.jobHash);
+});
+
+maybeTest("internal smoke session hides when token is missing", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV();
+  const env = buildEnv({ secret: "topsecret", kv, smokeToken: "smoke-123" });
+  const response = await worker.fetch(
+    new Request("https://example.com/internal/smoke/session", {
+      method: "POST",
+    }),
+    env
+  );
+  assert.equal(response.status, 404);
+});
+
+maybeTest("internal smoke session hides when token is invalid", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV();
+  const env = buildEnv({ secret: "topsecret", kv, smokeToken: "smoke-123" });
+  const response = await worker.fetch(
+    new Request("https://example.com/internal/smoke/session", {
+      method: "POST",
+      headers: new Headers({ "X-Smoke-Token": "wrong" }),
+    }),
+    env
+  );
+  assert.equal(response.status, 404);
 });
 
 maybeTest("logs route_not_found for unknown paths", async () => {

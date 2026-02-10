@@ -124,3 +124,5 @@
   webhook debugging without local tooling.
 - Phase 7 ops: aligned Telegram callback smoke payload with the `fb|run|short|action|hash` contract
   and documented the callback format for webhook troubleshooting.
+- Phase 7 ops: added an internal CI-only smoke session endpoint plus two-step smoke workflow to
+  validate real feedback sessions end-to-end.
