@@ -13,10 +13,11 @@ from typing import Iterable, Mapping, Sequence
 
 from job_scout.channels import select_channels
 from job_scout.feedback import (
+    FeedbackRegistrationResult,
     build_callback_data,
+    build_job_hash,
     build_run_id,
     build_short_id,
-    build_job_hash,
     register_feedback_window,
 )
 from job_scout.notifier import telegram as telegram_notifier
@@ -255,17 +256,31 @@ def maybe_notify(
         digest_hash,
     )
     if feedback_jobs and send_mode in {"live", "fake"}:
-        register_ok, register_reason = register_feedback_window(
+        registration_result = register_feedback_window(
             run_id=run_id,
             open_at=feedback_open_at.isoformat(),
             close_at=feedback_close_at.isoformat(),
             jobs=feedback_jobs,
             config=config,
         )
-        if not register_ok and register_reason:
-            logger.info(
-                "Feedback window registration skipped: %s.",
-                register_reason,
+        _write_feedback_registration_result(
+            output_dir=output_dir,
+            result=registration_result,
+        )
+        logger.info(
+            "Feedback registration result: endpoint=%s method=%s status=%s reason=%s body=%s",
+            registration_result.endpoint,
+            registration_result.method,
+            registration_result.status,
+            registration_result.reason or "ok",
+            registration_result.body_excerpt,
+        )
+        if send_mode == "fake" and not registration_result.ok:
+            raise RuntimeError(
+                "Feedback window registration failed in fake mode: "
+                f"status={registration_result.status}; "
+                f"reason={registration_result.reason}; "
+                f"body={registration_result.body_excerpt}"
             )
 
     if dry_run:
@@ -908,6 +923,23 @@ def _persist_payload(
         ),
         encoding="utf-8",
     )
+
+
+def _write_feedback_registration_result(
+    *, output_dir: Path, result: FeedbackRegistrationResult
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    result_path = output_dir / "feedback_registration_result.log"
+    lines = [
+        f"ok={str(result.ok).lower()}",
+        f"reason={result.reason or 'ok'}",
+        f"endpoint={result.endpoint}",
+        f"method={result.method}",
+        f"headers={','.join(result.headers)}",
+        f"status={result.status if result.status is not None else 'none'}",
+        f"body_excerpt={result.body_excerpt}",
+    ]
+    result_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 

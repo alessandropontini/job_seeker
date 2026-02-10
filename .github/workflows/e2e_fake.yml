@@ -51,6 +51,8 @@ jobs:
           fi
 
       - name: Run fake pipeline on deterministic fixture
+        id: run_fake_pipeline
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -62,6 +64,27 @@ jobs:
             --output-dir out \
             --fixture-file tests/fixtures/e2e_fake_jobs.json
           cp "out/last_run_${STATE_SUFFIX}.json" out/last_run.json
+
+
+      - name: Verify feedback registration result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="out/feedback_registration_result.log"
+          if [[ ! -f "${log_file}" ]]; then
+            echo "Missing ${log_file}"
+            exit 1
+          fi
+          cat "${log_file}"
+          if ! grep -q '^ok=true$' "${log_file}"; then
+            echo "Feedback registration failed"
+            exit 1
+          fi
+          if [[ "${{ steps.run_fake_pipeline.outcome }}" != "success" ]]; then
+            echo "job_scout run step failed with outcome=${{ steps.run_fake_pipeline.outcome }}"
+            exit 1
+          fi
 
       - name: Build fake callback payload from generated keyboard
         shell: bash
@@ -163,3 +186,4 @@ jobs:
             out/feedback_response.txt
             out/feedback_result.log
             out/callback_data.txt
+            out/feedback_registration_result.log

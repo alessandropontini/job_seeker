@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping
+import urllib.error
 import urllib.request
 import uuid
 
@@ -35,6 +36,19 @@ class FeedbackResult:
 
     updated_profile: PreferenceProfile
     counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class FeedbackRegistrationResult:
+    """Structured result of feedback window registration calls."""
+
+    ok: bool
+    reason: str | None
+    endpoint: str
+    method: str
+    headers: tuple[str, ...]
+    status: int | None
+    body_excerpt: str
 
 
 def build_run_id(now: datetime, digest_hash: str) -> str:
@@ -153,34 +167,91 @@ def register_feedback_window(
     close_at: str,
     jobs: list[dict[str, object]],
     config: Mapping[str, object],
-) -> tuple[bool, str | None]:
+) -> FeedbackRegistrationResult:
     """Register the feedback window and job mapping with the worker."""
 
     feedback_config = _feedback_config(config)
+    endpoint = ""
+    method = "POST"
+    headers = (
+        "Content-Type",
+        "X-Webhook-Timestamp",
+        "X-Webhook-Id",
+        "X-Webhook-Signature",
+    )
     if not feedback_config.get("enabled", False):
-        return False, "feedback_disabled"
+        return FeedbackRegistrationResult(
+            ok=False,
+            reason="feedback_disabled",
+            endpoint=endpoint,
+            method=method,
+            headers=headers,
+            status=None,
+            body_excerpt="",
+        )
     base_url = _resolve_feedback_base_url(feedback_config)
     if not base_url:
-        return False, "missing_feedback_base_url"
+        return FeedbackRegistrationResult(
+            ok=False,
+            reason="missing_feedback_base_url",
+            endpoint=endpoint,
+            method=method,
+            headers=headers,
+            status=None,
+            body_excerpt="",
+        )
     secret = _resolve_feedback_secret(feedback_config)
     if not secret:
-        return False, "missing_feedback_secret"
+        return FeedbackRegistrationResult(
+            ok=False,
+            reason="missing_feedback_secret",
+            endpoint=endpoint,
+            method=method,
+            headers=headers,
+            status=None,
+            body_excerpt="",
+        )
+    endpoint = f"{base_url.rstrip('/')}/window/open"
     payload = {
         "run_id": run_id,
         "open_at": open_at,
         "close_at": close_at,
         "jobs": jobs,
     }
-    status, _body = _post_json(
-        f"{base_url.rstrip('/')}/window/open",
+    status, body = _post_json(
+        endpoint,
         payload,
         secret,
     )
     if status is None:
-        return False, "connection_error"
+        return FeedbackRegistrationResult(
+            ok=False,
+            reason="connection_error",
+            endpoint=endpoint,
+            method=method,
+            headers=headers,
+            status=None,
+            body_excerpt=_body_excerpt(body),
+        )
     if status != 200:
-        return False, f"status_{status}"
-    return True, None
+        return FeedbackRegistrationResult(
+            ok=False,
+            reason=f"status_{status}",
+            endpoint=endpoint,
+            method=method,
+            headers=headers,
+            status=status,
+            body_excerpt=_body_excerpt(body),
+        )
+    return FeedbackRegistrationResult(
+        ok=True,
+        reason=None,
+        endpoint=endpoint,
+        method=method,
+        headers=headers,
+        status=status,
+        body_excerpt=_body_excerpt(body),
+    )
 
 
 def fetch_feedback(
@@ -367,16 +438,46 @@ def _post_json(
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             body = response.read()
+            decoded = body.decode("utf-8", errors="replace")
             if expect_json:
                 try:
-                    parsed = json.loads(body.decode("utf-8"))
+                    parsed = json.loads(decoded)
                 except json.JSONDecodeError:
                     parsed = {}
                 return response.status, parsed
-            return response.status, {}
+            return response.status, decoded
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        if expect_json:
+            try:
+                parsed_body = json.loads(body)
+            except json.JSONDecodeError:
+                parsed_body = {}
+            return exc.code, parsed_body
+        return exc.code, body
     except Exception as exc:
-        logger.warning("Feedback fetch failed (%s).", exc.__class__.__name__)
+        logger.warning("Feedback request failed (%s).", exc.__class__.__name__)
         return None, {}
+
+
+def parse_callback_data(data: str) -> tuple[str, str, str, str] | None:
+    """Parse compact feedback callback payloads in the Worker-compatible format."""
+
+    if not data.startswith("fb|"):
+        return None
+    parts = data.split("|")
+    if len(parts) != 5:
+        return None
+    _, run_id, short_id, action, job_hash = parts
+    if not all((run_id, short_id, action, job_hash)):
+        return None
+    return run_id, short_id, action, job_hash
+
+
+def session_storage_key(run_id: str) -> str:
+    """Return the Worker KV key used for session windows."""
+
+    return f"session:{run_id}"
 
 
 def _as_dict(raw: object) -> dict[str, object]:
@@ -415,3 +516,11 @@ def _parse_int(value: object, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _body_excerpt(body: object, *, limit: int = 200) -> str:
+    if isinstance(body, str):
+        return body[:limit]
+    if isinstance(body, (dict, list)):
+        return json.dumps(body, sort_keys=True)[:limit]
+    return str(body)[:limit]

@@ -66,7 +66,7 @@ Key sections:
 - `notifications.telegram.send_per_job`: send one Telegram message per job (default: true).
 - `notifications.telegram.send_header`: send a digest header message before jobs (default: true).
 - `notifications.telegram.persist_payload`: persist the outgoing Telegram payload to disk.
-- `notifications.telegram.send_mode`: `live` (default) for real Telegram sends, `fake` for E2E payload generation + feedback session bootstrap without Telegram API calls.
+- `notifications.telegram.send_mode`: `live` (default) for real Telegram sends, `fake` for E2E payload generation + feedback session bootstrap without Telegram API calls. In fake mode, feedback window registration is mandatory and run fails if registration is not successful.
 - `state.suffix`: suffix appended to state files (e.g., `last_run_dummy_e2e.json`).
 - `state.dir`: optional base directory for state files (relative paths resolve under `out/`).
 - `feedback.enabled`: enable the Cloudflare Worker feedback integration.
@@ -265,6 +265,7 @@ The pipeline writes reports to `out/`:
   `notifications.telegram.dry_run: true` is enabled (no network calls).
 - `out/digest.md` stores the plain-text digest in dry-run mode.
 - `out/feedback_summary.json` stores feedback action counts when feedback is applied.
+- `out/feedback_registration_result.log` stores feedback window registration diagnostics (`ok`, `status`, endpoint/method/header names, and a short response excerpt).
 - `out/last_run.json` also includes `feedback_counts` when feedback is applied.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`,
@@ -516,5 +517,5 @@ The dummy E2E workflow is manual-only:
 `gh workflow run dummy_e2e.yml`.
 
 ## Fake E2E workflow (manual)
-- Use GitHub Actions workflow `e2e_fake` (manual `workflow_dispatch`) to run a full fake-data integration: pipeline + fake Telegram payload + feedback callback webhook validation.
+- Use GitHub Actions workflow `e2e_fake` (manual `workflow_dispatch`) to run a full fake-data integration: pipeline + mandatory feedback window registration verification + fake Telegram payload + feedback callback webhook validation.
 - Operational details, artifacts, and troubleshooting are documented in `docs/e2e_fake.md`.
