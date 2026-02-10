@@ -22,6 +22,8 @@ export default {
         result = await handleFeedback(request, env, baseLog);
       } else if (path === "/window/open") {
         result = await handleWindowOpen(request, env, baseLog);
+      } else if (path === "/internal/smoke/session") {
+        result = await handleSmokeSession(request, env, baseLog);
       } else if (path === "/healthz") {
         result = {
           response: new Response("OK", { status: 200 }),
@@ -332,6 +334,85 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   };
 }
 
+async function handleSmokeSession(request, env, baseLog) {
+  if (request.method !== "POST") {
+    logWarn("smoke_session_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: "invalid_method",
+    });
+    return {
+      response: new Response("Not found", { status: 404 }),
+      outcome: "blocked",
+      reason: "invalid_method",
+    };
+  }
+  const auth = ensureSmokeAuthorized(request, env);
+  if (!auth.ok) {
+    logWarn("smoke_session_rejected", {
+      ...baseLog,
+      outcome: "blocked",
+      reason: auth.reason,
+    });
+    return {
+      response: new Response("Not found", { status: 404 }),
+      outcome: "blocked",
+      reason: auth.reason,
+    };
+  }
+  const sessionId = crypto.randomUUID();
+  const jobId = "job-001";
+  const digestHash = await sha256Hex(sessionId);
+  const jobHash = await buildJobHash(jobId, digestHash);
+  const openAt = new Date().toISOString();
+  const closeAt = new Date(Date.now() + 600 * 1000).toISOString();
+  const windowPayload = {
+    run_id: sessionId,
+    open_at: openAt,
+    close_at: closeAt,
+    jobs: [
+      {
+        short_id: jobId,
+        job_hash: jobHash,
+        source: "smoke",
+      },
+    ],
+  };
+  const sessionKey = `session:${sessionId}`;
+  await env.JOB_SCOUT_KV.put(sessionKey, JSON.stringify(windowPayload), {
+    expirationTtl: 600,
+  });
+  logInfo("smoke_session_created", {
+    ...baseLog,
+    outcome: "ok",
+    reason: "session_created",
+    kv_key: sessionKey,
+  });
+  const callbackDataLike = buildCallbackData(
+    sessionId,
+    jobId,
+    "like",
+    jobHash
+  );
+  const callbackDataDislike = buildCallbackData(
+    sessionId,
+    jobId,
+    "dislike",
+    jobHash
+  );
+  return {
+    response: jsonResponse({
+      session_id: sessionId,
+      job_id: jobId,
+      callback_data_like: callbackDataLike,
+      callback_data_dislike: callbackDataDislike,
+    }),
+    outcome: "ok",
+    reason: "session_created",
+    kv_key: sessionKey,
+  };
+}
+
 function ensureTelegramWebhookAuthorized(request, env) {
   const secret = env.JOB_SCOUT_WEBHOOK_SECRET;
   if (!secret) {
@@ -342,6 +423,18 @@ function ensureTelegramWebhookAuthorized(request, env) {
     return new Response("Unauthorized", { status: 401 });
   }
   return null;
+}
+
+function ensureSmokeAuthorized(request, env) {
+  const secret = env.JOB_SCOUT_SMOKE_TOKEN;
+  if (!secret) {
+    return { ok: false, reason: "missing_smoke_secret" };
+  }
+  const provided = request.headers.get("X-Smoke-Token");
+  if (!provided || provided !== secret) {
+    return { ok: false, reason: "smoke_token_invalid" };
+  }
+  return { ok: true };
 }
 
 async function handleFeedback(request, env, baseLog) {
@@ -704,12 +797,37 @@ function jsonResponse(payload, status = 200) {
   });
 }
 
+function buildCallbackData(runId, jobShortId, action, jobHash) {
+  const payload = `fb|${runId}|${jobShortId}|${action}|${jobHash}`;
+  if (new TextEncoder().encode(payload).length >= 64) {
+    throw new Error("callback_data exceeds Telegram limit");
+  }
+  return payload;
+}
+
+async function buildJobHash(jobKey, digestHash) {
+  const payload = `${jobKey}:${digestHash}`;
+  const digest = await sha256Hex(payload);
+  return digest.slice(0, 8);
+}
+
+async function sha256Hex(payload) {
+  const buffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(payload)
+  );
+  return [...new Uint8Array(buffer)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function shouldRedactHeader(headerName) {
   const name = headerName.toLowerCase();
   return [
     "authorization",
     "cookie",
     "set-cookie",
+    "x-smoke-token",
     "x-telegram-bot-api-secret-token",
     "x-webhook-signature",
   ].includes(name);

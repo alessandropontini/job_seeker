@@ -90,12 +90,23 @@ The workflow now runs daily at **08:00 Europe/Rome** using UTC-based cron entrie
 - Ensure the Worker has `TELEGRAM_BOT_TOKEN` and `JOB_SCOUT_WEBHOOK_SECRET` configured.
 - Confirm the Telegram webhook was configured with `secret_token` matching `JOB_SCOUT_WEBHOOK_SECRET`.
 - Telegram callbacks come from Telegram servers, not the phone. Do not IP-whitelist a mobile device.
-- Run **Actions → cf_worker_smoke** to POST a safe callback test and confirm logs appear in Cloudflare.
+- Run **Actions → cf_worker_smoke** to create a short-lived smoke session and then POST a safe
+  callback test; confirm logs appear in Cloudflare.
 - Run **Actions → telegram_webhook_set** to confirm the webhook configuration points to
   `/telegram/feedback`.
 - Verify the callback arrives within the 1-hour feedback window; outside the window the Worker
   answers with “⏱ Feedback window closed” and returns HTTP 410.
 - Check the Worker logs for `window` or `job` validation failures.
+
+### CI smoke test (Worker + Telegram feedback)
+The smoke workflow performs a two-step end-to-end check:
+1. `POST /internal/smoke/session` with `X-Smoke-Token` to create a 10-minute session and return
+   `callback_data_like`.
+2. `POST /telegram/feedback` with that callback payload and
+   `X-Telegram-Bot-Api-Secret-Token`.
+
+Confirm `JOB_SCOUT_SMOKE_TOKEN` is set in GitHub Actions secrets, otherwise the internal endpoint
+responds with 404 to avoid exposing the route.
 
 ### Troubleshooting: deploy workflow fails before wrangler deploy
 - If logs show `kv_namespaces[0]... id:""` or `Missing CLOUDFLARE_KV_NAMESPACE_ID`, ensure the

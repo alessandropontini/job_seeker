@@ -26,6 +26,11 @@ Registers the feedback window and job mapping for a run. Requires HMAC signature
 ### `POST /feedback`
 Returns feedback entries for a run. Requires HMAC signature headers.
 
+### `POST /internal/smoke/session`
+CI-only endpoint that creates a short-lived feedback session and returns callback data for the
+smoke workflow. Requires `X-Smoke-Token` matching `JOB_SCOUT_SMOKE_TOKEN`. Missing/invalid tokens
+return 404.
+
 ### HMAC headers
 Signed requests must include:
 - `X-Webhook-Timestamp` (unix seconds)
@@ -38,6 +43,7 @@ Set these as Worker secrets in Cloudflare:
 - `JOB_SCOUT_WEBHOOK_SECRET` (shared secret used by Job Scout to sign requests and by Telegram webhook authentication)
 - `TELEGRAM_WEBHOOK_SECRET` (optional override for Telegram `secret_token`; falls back to `JOB_SCOUT_WEBHOOK_SECRET`)
 - `ALLOWED_TELEGRAM_USER_ID` (numeric Telegram user ID allowed to record feedback)
+- `JOB_SCOUT_SMOKE_TOKEN` (shared secret for the CI-only smoke session endpoint)
 
 Optional Worker env vars:
 - `FEEDBACK_WINDOW_MINUTES` (default: 60)

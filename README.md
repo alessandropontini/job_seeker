@@ -405,9 +405,23 @@ against `JOB_SCOUT_WEBHOOK_SECRET`) plus `ALLOWED_TELEGRAM_USER_ID` for callback
 
 **Debug flow (no local PC required)**
 1. Deploy the Worker (`deploy-feedback-worker` workflow).
-2. Run **Actions → cf_worker_smoke → Run workflow** to POST a safe test callback.
+2. Run **Actions → cf_worker_smoke → Run workflow** to create a short-lived smoke session and
+   POST a safe test callback.
 3. Run **Actions → telegram_webhook_set → Run workflow** to confirm the webhook configuration.
 4. Tap a feedback button in Telegram and verify the Worker logs + “OK” checkmark appear.
+
+**CI smoke test (Telegram feedback)**
+The GitHub Actions smoke test uses a two-step flow so the Worker validates a real session:
+1. `POST /internal/smoke/session` with `X-Smoke-Token: ${JOB_SCOUT_SMOKE_TOKEN}` to create a
+   10-minute session and return `callback_data_like`.
+2. `POST /telegram/feedback` with the returned `callback_data_like` and
+   `X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}`.
+
+Required secrets for the smoke workflow:
+- `JOB_SCOUT_WEBHOOK_BASE_URL`
+- `JOB_SCOUT_WEBHOOK_SECRET`
+- `ALLOWED_TELEGRAM_USER_ID`
+- `JOB_SCOUT_SMOKE_TOKEN`
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
