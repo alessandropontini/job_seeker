@@ -296,6 +296,41 @@ maybeTest("logs route_not_found for unknown paths", async () => {
   assert.ok(findLogEvent(logs, "route_not_found"));
 });
 
+
+
+maybeTest("yesterdayRomeDateStringFor handles CET and CEST boundaries", async () => {
+  const module = await loadWorkerModule();
+  const { yesterdayRomeDateStringFor } = module;
+  const cet = yesterdayRomeDateStringFor("2025-01-15T07:00:00.000Z");
+  const cest = yesterdayRomeDateStringFor("2025-07-15T06:00:00.000Z");
+  assert.equal(cet, "2025-01-14");
+  assert.equal(cest, "2025-07-14");
+});
+
+maybeTest("hasAlreadySentForDate detects dedupe state", async () => {
+  const module = await loadWorkerModule();
+  const { hasAlreadySentForDate } = module;
+  assert.equal(hasAlreadySentForDate("2025-08-10", "2025-08-10"), true);
+  assert.equal(hasAlreadySentForDate("2025-08-09", "2025-08-10"), false);
+  assert.equal(hasAlreadySentForDate(null, "2025-08-10"), false);
+});
+
+maybeTest("buildFeedbackValue includes run_id in stored payload", async () => {
+  const module = await loadWorkerModule();
+  const { buildFeedbackValue } = module;
+  const value = buildFeedbackValue({
+    runId: "run-live-01",
+    action: "L",
+    jobShortId: "abc123",
+    jobHash: "def45678",
+    messageId: 99,
+    userId: 42,
+    source: "remotive",
+  });
+  assert.equal(value.run_id, "run-live-01");
+  assert.equal(value.action, "L");
+  assert.equal(value.source, "remotive");
+});
 function createFetchMock() {
   const calls = [];
   const fetchMock = async (url, options = {}) => {
