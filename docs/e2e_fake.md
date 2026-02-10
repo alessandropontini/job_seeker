@@ -15,6 +15,9 @@ Dettagli della chiamata Worker:
 - **Endpoint**: `POST <JOB_SCOUT_WEBHOOK_BASE_URL>/window/open`
 - **Headers firmati** (senza secret in chiaro):
   - `Content-Type: application/json`
+  - `Accept: application/json`
+  - `Accept-Language: en-US,en;q=0.9`
+  - `User-Agent: Mozilla/5.0 ...` (browser-like, stabile)
   - `X-Webhook-Timestamp`
   - `X-Webhook-Id`
   - `X-Webhook-Signature` (HMAC SHA-256)
@@ -23,7 +26,17 @@ Se la registration fallisce (errore rete o `status != 200`), `job_scout run` ter
 - endpoint/metodo/header names
 - status code
 - primi 200 caratteri del body (`body_excerpt`)
+- flag diagnostico `user_agent_sent=true|false`
 - esito (`ok=true|false`) e reason.
+
+
+### Cloudflare 1010 su `/window/open`
+In alcuni ambienti CI, Cloudflare può bloccare la registration con `403` e `error code: 1010` sul path `/window/open`.
+
+Mitigazioni:
+- il client invia un `User-Agent` browser-like insieme agli header di firma;
+- in caso di errore, `out/feedback_registration_result.log` include `status`, `body_excerpt` (max 200 char) e `user_agent_sent=true|false` per diagnosi rapida;
+- lato Cloudflare, valutare una bypass rule su `/window/*` condizionata alla presenza di `X-Webhook-Signature` (senza allargare il bypass ad altri path).
 
 ## Come lanciare
 1. Vai in **GitHub Actions**.
