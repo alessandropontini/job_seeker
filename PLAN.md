@@ -126,3 +126,7 @@
   and documented the callback format for webhook troubleshooting.
 - Phase 7 ops: added an internal CI-only smoke session endpoint plus two-step smoke workflow to
   validate real feedback sessions end-to-end.
+- Phase 7 CI/security: removed `JOB_SCOUT_SMOKE_TOKEN` dependency from webhook smoke and converted
+  smoke to authenticated reachability validation against `/telegram/feedback`.
+- Phase 7 CI/ops: disabled scheduled notification cron to keep remotive dispatch manual-only.
+- Phase 7 docs: added CI runbook + secrets matrix documentation for workflow usage and safe operations.

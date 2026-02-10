@@ -9,7 +9,7 @@ Offline-first job scouting pipeline with configurable matching rules and reporti
 - **Done:** Phase 3 — Hard vs Soft Rules Separation.
 - **Done:** Phase 4 — Scoring & Ranking.
 - **Done:** Phase 5 — Reliability & Extensibility (QA & hardening complete).
-- **Live:** Phase 6 — Refinement: dual-channel output, Telegram feedback, and anti-dup digest (08:00 Europe/Rome).
+- **Live:** Phase 6 — Refinement: dual-channel output, Telegram feedback, and anti-dup digest (manual trigger).
 - **In progress:** Phase 7 — Interactive Telegram feedback via Cloudflare Worker (time-gated) and per-job UX.
 
 Project docs:
@@ -17,6 +17,8 @@ Project docs:
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [RUNBOOK_QA.md](RUNBOOK_QA.md)
+- [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md)
+- [docs/SECRETS.md](docs/SECRETS.md)
 
 ## Requirements
 - Python 3.11
@@ -119,8 +121,8 @@ python -m job_scout sources --test remotive --since-days 7
   environment limitations rather than project defects.
 
 ## Phase 6 — Automation & Notifications (live)
-- GitHub Actions runs daily at **08:00 Europe/Rome** (CET/CEST schedule in UTC).
-- Manual runs remain available via **Actions → scheduled-remotive → Run workflow**.
+- GitHub Actions notification workflows are **manual-only** (no cron-triggered sends).
+- Run notifications on demand via **Actions → scheduled-remotive → Run workflow**.
 - CI tests and build workflows remain intentionally removed/disabled.
 - Daily digest uses a 24-hour window (UTC) based on `posted_at` timestamps.
 - Telegram notifications are always on and send exactly one message per run.
@@ -293,8 +295,8 @@ plus `telegram_payload.json`/`digest.md` when dry-run mode is enabled.
   boolean `token_present`/`chat_id_present` indicators only.
 
 ## GitHub Actions workflows
-- **Daily (08:00 Europe/Rome)**: `.github/workflows/scheduled_remotive.yml`
-  runs `remotive` and sends the real Telegram digest (secrets required).
+- **Remotive (manual-only)**: `.github/workflows/scheduled_remotive.yml`
+  runs `remotive` and sends the real Telegram digest on explicit operator trigger (secrets required).
 - **Dummy E2E (manual-only)**: `.github/workflows/dummy_e2e.yml`
   runs the dummy source and sends a real Telegram digest to validate the full
   pipeline end-to-end. State files are isolated with the `dummy_e2e` suffix and
@@ -405,23 +407,21 @@ against `JOB_SCOUT_WEBHOOK_SECRET`) plus `ALLOWED_TELEGRAM_USER_ID` for callback
 
 **Debug flow (no local PC required)**
 1. Deploy the Worker (`deploy-feedback-worker` workflow).
-2. Run **Actions → cf_worker_smoke → Run workflow** to create a short-lived smoke session and
-   POST a safe test callback.
+2. Run **Actions → cf_worker_smoke → Run workflow** to send an authenticated webhook callback
+   payload and verify reachability/auth.
 3. Run **Actions → telegram_webhook_set → Run workflow** to confirm the webhook configuration.
 4. Tap a feedback button in Telegram and verify the Worker logs + “OK” checkmark appear.
 
 **CI smoke test (Telegram feedback)**
-The GitHub Actions smoke test uses a two-step flow so the Worker validates a real session:
-1. `POST /internal/smoke/session` with `X-Smoke-Token: ${JOB_SCOUT_SMOKE_TOKEN}` to create a
-   10-minute session and return `callback_data_like`.
-2. `POST /telegram/feedback` with the returned `callback_data_like` and
-   `X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}`.
+The GitHub Actions smoke test is an auth/reachability check (not a full E2E feedback session):
+1. `POST /telegram/feedback` using `X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}`.
+2. The payload is a minimal valid Telegram callback (`update_id`, `callback_query`, `from.id`).
+3. PASS conditions: non-401/403/404 response returned without timeout/network errors.
 
 Required secrets for the smoke workflow:
 - `JOB_SCOUT_WEBHOOK_BASE_URL`
 - `JOB_SCOUT_WEBHOOK_SECRET`
 - `ALLOWED_TELEGRAM_USER_ID`
-- `JOB_SCOUT_SMOKE_TOKEN`
 
 ### Troubleshooting (PyPI blocked)
 If PyPI is blocked or pip has no cache, provide a wheelhouse zip and rerun:
@@ -495,12 +495,10 @@ Each run sends one message per job (plus an optional header message); when there
 “No new job postings published in the last 24 hours.”
 
 ### GitHub Actions secrets & manual trigger
-Add repository secrets in GitHub:
-1. **Settings → Secrets and variables → Actions → New repository secret**
-2. Create `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_BASE_URL`, and `JOB_SCOUT_WEBHOOK_SECRET`
-3. For Worker deploys, add `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_KV_NAMESPACE_ID`
+Repository secrets are documented in [`docs/SECRETS.md`](docs/SECRETS.md).
+Workflow operations are documented in [`docs/CI_RUNBOOK.md`](docs/CI_RUNBOOK.md).
 
-The daily workflow runs at 08:00 Europe/Rome. To run manually: go to
+The remotive notification workflow is manual-only. To run manually: go to
 **Actions → scheduled-remotive** → **Run workflow** and set inputs
 (`since_days`, `sources`, `strict`, `allow_missing_salary`). You can also trigger via
 `gh workflow run scheduled_remotive.yml` (no secrets shown in CLI output).
