@@ -131,3 +131,4 @@
 - Phase 7 CI/ops: disabled scheduled notification cron to keep remotive dispatch manual-only.
 - Phase 7 docs: added CI runbook + secrets matrix documentation for workflow usage and safe operations.
 - Phase 7 CI/ops: hardened `cf_worker_smoke` pass/fail logic (200/204 pass; explicit curl/status failure paths) with minimal callback payload and safe logs.
+- Phase 7 CI/ops: added manual `e2e_fake` workflow with deterministic fixture pipeline run, Telegram fake-send payload artifacts, feedback session bootstrap, and `/telegram/feedback` callback validation against session/callback errors.

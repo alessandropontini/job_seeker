@@ -66,6 +66,7 @@ Key sections:
 - `notifications.telegram.send_per_job`: send one Telegram message per job (default: true).
 - `notifications.telegram.send_header`: send a digest header message before jobs (default: true).
 - `notifications.telegram.persist_payload`: persist the outgoing Telegram payload to disk.
+- `notifications.telegram.send_mode`: `live` (default) for real Telegram sends, `fake` for E2E payload generation + feedback session bootstrap without Telegram API calls.
 - `state.suffix`: suffix appended to state files (e.g., `last_run_dummy_e2e.json`).
 - `state.dir`: optional base directory for state files (relative paths resolve under `out/`).
 - `feedback.enabled`: enable the Cloudflare Worker feedback integration.
@@ -104,6 +105,11 @@ Run specific sources (repeatable or comma-separated):
 python -m job_scout run --source dummy
 python -m job_scout run --source remotive --source dummy
 python -m job_scout run --source remotive,dummy
+```
+
+Run with a deterministic dummy fixture file (useful for CI/E2E):
+```bash
+python -m job_scout run --config config/e2e_fake.yaml --source dummy --fixture-file tests/fixtures/e2e_fake_jobs.json --since-days 3650
 ```
 
 Inspect sources:
@@ -508,3 +514,7 @@ The remotive notification workflow is manual-only (`workflow_dispatch` only) and
 The dummy E2E workflow is manual-only:
 **Actions → dummy-e2e** → **Run workflow** or
 `gh workflow run dummy_e2e.yml`.
+
+## Fake E2E workflow (manual)
+- Use GitHub Actions workflow `e2e_fake` (manual `workflow_dispatch`) to run a full fake-data integration: pipeline + fake Telegram payload + feedback callback webhook validation.
+- Operational details, artifacts, and troubleshooting are documented in `docs/e2e_fake.md`.

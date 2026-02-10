@@ -1,0 +1,22 @@
+# Fake E2E configuration for manual GitHub Actions validation.
+sources:
+  enabled:
+    - dummy
+
+notifications:
+  telegram:
+    enabled: true
+    dry_run: false
+    send_mode: fake
+    send_per_job: true
+    send_header: true
+    persist_payload: true
+  dedupe:
+    enabled: false
+
+feedback:
+  enabled: true
+  window_minutes: 60
+
+personalization:
+  enabled: false
