@@ -195,12 +195,22 @@ def _filter_since_days(
 
 
 def _load_fixture_jobs() -> list[SourceJob] | None:
+    fixture_file = os.getenv("JOB_SCOUT_DUMMY_FIXTURE_FILE")
+    if fixture_file:
+        fixture_path = Path(fixture_file)
+        if fixture_path.exists():
+            return _parse_fixture_jobs(fixture_path)
+
     fixture_dir = os.getenv("JOB_SCOUT_FIXTURE_DIR")
     if not fixture_dir:
         return None
     fixture_path = Path(fixture_dir) / "dummy_jobs.json"
     if not fixture_path.exists():
         return None
+    return _parse_fixture_jobs(fixture_path)
+
+
+def _parse_fixture_jobs(fixture_path: Path) -> list[SourceJob]:
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
     jobs = payload if isinstance(payload, list) else payload.get("jobs", [])
     parsed_jobs: list[SourceJob] = []

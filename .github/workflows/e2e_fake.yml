@@ -1,0 +1,165 @@
+name: e2e_fake
+
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e-fake:
+    runs-on: ubuntu-latest
+    env:
+      JOB_SCOUT_WEBHOOK_BASE_URL: ${{ secrets.JOB_SCOUT_WEBHOOK_BASE_URL }}
+      JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
+      ALLOWED_TELEGRAM_USER_ID: ${{ secrets.ALLOWED_TELEGRAM_USER_ID }}
+      STATE_SUFFIX: e2e_fake
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate required inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${JOB_SCOUT_WEBHOOK_BASE_URL}" ]]; then
+            echo "JOB_SCOUT_WEBHOOK_BASE_URL is required."
+            exit 1
+          fi
+          if [[ -z "${JOB_SCOUT_WEBHOOK_SECRET}" ]]; then
+            echo "JOB_SCOUT_WEBHOOK_SECRET is required."
+            exit 1
+          fi
+          if [[ -z "${ALLOWED_TELEGRAM_USER_ID}" ]]; then
+            echo "ALLOWED_TELEGRAM_USER_ID is required."
+            exit 1
+          fi
+          if ! [[ "${ALLOWED_TELEGRAM_USER_ID}" =~ ^[0-9]+$ ]]; then
+            echo "ALLOWED_TELEGRAM_USER_ID must be numeric."
+            exit 1
+          fi
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [[ -f requirements.txt ]]; then
+            python -m pip install -r requirements.txt
+          fi
+
+      - name: Run fake pipeline on deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m job_scout run \
+            --config config/e2e_fake.yaml \
+            --source dummy \
+            --since-days 3650 \
+            --state-suffix "${STATE_SUFFIX}" \
+            --output-dir out \
+            --fixture-file tests/fixtures/e2e_fake_jobs.json
+          cp "out/last_run_${STATE_SUFFIX}.json" out/last_run.json
+
+      - name: Build fake callback payload from generated keyboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload_path = Path("out/telegram_payload.json")
+          if not payload_path.exists():
+              raise SystemExit("Missing out/telegram_payload.json")
+          payload = json.loads(payload_path.read_text(encoding="utf-8"))
+          messages = payload.get("messages", [])
+          callback_data = None
+          for message in messages:
+              keyboard = (message.get("reply_markup") or {}).get("inline_keyboard") or []
+              if keyboard and keyboard[0]:
+                  callback_data = keyboard[0][0].get("callback_data")
+                  break
+          if not callback_data:
+              raise SystemExit("Unable to find callback_data in payload")
+
+          webhook_payload = {
+              "update_id": 101,
+              "callback_query": {
+                  "id": "fake-callback-1",
+                  "from": {"id": int(__import__("os").environ["ALLOWED_TELEGRAM_USER_ID"])},
+                  "data": callback_data,
+                  "message": {"message_id": 1},
+              },
+          }
+          out_dir = Path("out")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          (out_dir / "feedback_request.json").write_text(
+              json.dumps(webhook_payload, indent=2, sort_keys=True),
+              encoding="utf-8",
+          )
+          (out_dir / "callback_data.txt").write_text(callback_data + "\n", encoding="utf-8")
+          PY
+
+      - name: Call feedback webhook with fake callback
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint="${JOB_SCOUT_WEBHOOK_BASE_URL%/}/telegram/feedback"
+          response_file="out/feedback_response.txt"
+          status="$(curl -sS \
+            -o "${response_file}" \
+            -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "X-Telegram-Bot-Api-Secret-Token: ${JOB_SCOUT_WEBHOOK_SECRET}" \
+            --data-binary @out/feedback_request.json \
+            "${endpoint}")"
+          echo "status=${status}" | tee out/feedback_result.log
+          body="$(cat "${response_file}")"
+          echo "body=${body}" | tee -a out/feedback_result.log
+          if grep -q "Invalid callback data" "${response_file}"; then
+            echo "Invalid callback data detected"
+            exit 1
+          fi
+          if grep -q "Session missing" "${response_file}"; then
+            echo "Session missing detected"
+            exit 1
+          fi
+          if [[ "${status}" != "200" ]]; then
+            echo "Unexpected status ${status}"
+            exit 1
+          fi
+
+      - name: Assert matched jobs are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          report = Path("out/report.csv")
+          if not report.exists():
+              raise SystemExit("Missing report.csv")
+          with report.open(newline="", encoding="utf-8") as handle:
+              accepted = [row for row in csv.DictReader(handle) if row.get("decision") == "accepted"]
+          if not accepted:
+              raise SystemExit("Matched jobs list is empty")
+          print(f"accepted_jobs={len(accepted)}")
+          PY
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-scout-e2e-fake
+          if-no-files-found: error
+          path: |
+            out/report.csv
+            out/report.md
+            out/last_run.json
+            out/telegram_payload.json
+            out/digest.md
+            out/feedback_request.json
+            out/feedback_response.txt
+            out/feedback_result.log
+            out/callback_data.txt

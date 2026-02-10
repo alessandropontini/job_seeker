@@ -170,3 +170,39 @@ def test_fallback_digest_when_window_empty(tmp_path, monkeypatch):
     assert digest["scope"] == "fallback_recent"
     assert digest["jobs"]
     assert last_run["summary"]["digest_count"] == len(digest["jobs"])
+
+
+def test_fake_send_mode_registers_window_and_persists_payload(
+    tmp_path, monkeypatch
+):
+    fixed_now = datetime(2024, 2, 8, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    row = _make_row("alpha", 110, [])
+    row.posting.posted_at = fixed_now - timedelta(hours=1)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+    config["notifications"]["telegram"]["persist_payload"] = True
+    config["feedback"]["enabled"] = True
+
+    register_calls = {"count": 0}
+
+    def _fake_register(**_kwargs):
+        register_calls["count"] += 1
+        return True, None
+
+    monkeypatch.setattr(notifications, "register_feedback_window", _fake_register)
+
+    result = notifications.maybe_notify([row], output_dir, config)
+
+    assert result.notification_mode == "daily_window"
+    assert register_calls["count"] == 1
+    payload_path = output_dir / "telegram_payload.json"
+    assert payload_path.exists()
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    keyboard = payload["messages"][1]["reply_markup"]["inline_keyboard"]
+    callback_data = keyboard[0][0]["callback_data"]
+    assert callback_data.startswith("fb|")

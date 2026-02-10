@@ -61,6 +61,7 @@ def maybe_notify(
     dedupe_config = _as_dict(notifications.get("dedupe"))
     telegram_enabled = bool(telegram_config.get("enabled", True))
     dry_run = bool(telegram_config.get("dry_run", False))
+    send_mode = str(telegram_config.get("send_mode", "live")).strip().lower()
 
     min_score = _parse_int(telegram_config.get("min_score", 0), 0)
     send_per_job = bool(telegram_config.get("send_per_job", True))
@@ -247,6 +248,26 @@ def maybe_notify(
             message_payloads=message_payloads,
             digest_payload=digest_payload,
         )
+    feedback_jobs = _build_feedback_job_map(
+        channel_selection.top_matches,
+        channel_selection.data_only_best_picks,
+        short_ids,
+        digest_hash,
+    )
+    if feedback_jobs and send_mode in {"live", "fake"}:
+        register_ok, register_reason = register_feedback_window(
+            run_id=run_id,
+            open_at=feedback_open_at.isoformat(),
+            close_at=feedback_close_at.isoformat(),
+            jobs=feedback_jobs,
+            config=config,
+        )
+        if not register_ok and register_reason:
+            logger.info(
+                "Feedback window registration skipped: %s.",
+                register_reason,
+            )
+
     if dry_run:
         sent, reason = _save_dry_run_payload(
             output_dir=output_dir,
@@ -254,26 +275,14 @@ def maybe_notify(
             digest_payload=digest_payload,
         )
         logger.info("Telegram send attempted: no; reason=dry_run.")
-    else:
-        feedback_jobs = _build_feedback_job_map(
-            channel_selection.top_matches,
-            channel_selection.data_only_best_picks,
-            short_ids,
-            digest_hash,
+    elif send_mode == "fake":
+        sent, reason = _save_fake_run_payload(
+            output_dir=output_dir,
+            message_payloads=message_payloads,
+            digest_payload=digest_payload,
         )
-        if feedback_jobs:
-            register_ok, register_reason = register_feedback_window(
-                run_id=run_id,
-                open_at=feedback_open_at.isoformat(),
-                close_at=feedback_close_at.isoformat(),
-                jobs=feedback_jobs,
-                config=config,
-            )
-            if not register_ok and register_reason:
-                logger.info(
-                    "Feedback window registration skipped: %s.",
-                    register_reason,
-                )
+        logger.info("Telegram send attempted: no; reason=fake_run.")
+    else:
         sent, reason = telegram_notifier.send_messages(message_payloads)
         logger.info(
             "Telegram send attempted: yes; reason=%s.",
@@ -899,6 +908,23 @@ def _persist_payload(
         ),
         encoding="utf-8",
     )
+
+
+
+
+def _save_fake_run_payload(
+    *,
+    output_dir: Path,
+    message_payloads: Sequence[Mapping[str, object]],
+    digest_payload: Mapping[str, object],
+) -> tuple[bool, str | None]:
+    _persist_payload(
+        output_dir=output_dir,
+        message_payloads=message_payloads,
+        digest_payload=digest_payload,
+    )
+    logger.info("Fake Telegram run payload written to %s.", output_dir)
+    return True, "fake_run"
 
 
 def _save_dry_run_payload(

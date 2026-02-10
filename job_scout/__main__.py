@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 from typing import List
 
@@ -74,6 +75,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         help="Source name(s), repeatable or comma-separated.",
     )
+    run_parser.add_argument(
+        "--fixture-file",
+        type=Path,
+        help=(
+            "Path to a dummy-source fixture JSON file. "
+            "When provided, the dummy source uses this file."
+        ),
+    )
 
     sources_parser = subparsers.add_parser(
         "sources", help="Inspect available sources"
@@ -110,6 +119,10 @@ def main(argv: List[str] | None = None) -> int:
         parser.error("sources requires --list or --test")
 
     if args.command == "run":
+        if args.fixture_file:
+            os.environ["JOB_SCOUT_DUMMY_FIXTURE_FILE"] = str(
+                args.fixture_file
+            )
         config = load_config(args.config)
         state_config = config.get("state")
         if not isinstance(state_config, dict):
