@@ -224,3 +224,21 @@ def test_fake_send_mode_registers_window_and_persists_payload(
 
     registration_log = (output_dir / "feedback_registration_result.log").read_text(encoding="utf-8")
     assert "user_agent_sent=true" in registration_log
+
+
+def test_env_real_mode_requires_e2e_gate(monkeypatch):
+    monkeypatch.setenv("JOB_SCOUT_TELEGRAM_MODE", "real")
+    monkeypatch.delenv("JOB_SCOUT_E2E_REAL_TELEGRAM", raising=False)
+
+    mode = notifications._resolve_telegram_send_mode({"send_mode": "fake"})
+
+    assert mode == "fake"
+
+
+def test_env_real_mode_enabled_with_e2e_gate(monkeypatch):
+    monkeypatch.setenv("JOB_SCOUT_TELEGRAM_MODE", "real")
+    monkeypatch.setenv("JOB_SCOUT_E2E_REAL_TELEGRAM", "1")
+
+    mode = notifications._resolve_telegram_send_mode({"send_mode": "fake"})
+
+    assert mode == "real"

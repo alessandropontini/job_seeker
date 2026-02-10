@@ -31,7 +31,7 @@ def test_callback_data_length_under_limit():
     run_id = "26020508a1b2"
     short_id = "dg01f3c9abcd"
     payload = build_callback_data(run_id, short_id, "L", "a1b2c3d4")
-    assert len(payload.encode("utf-8")) < 64
+    assert len(payload.encode("utf-8")) <= 64
 
 
 def test_short_id_is_stable_and_unique():

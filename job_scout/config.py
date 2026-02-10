@@ -126,6 +126,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "send_per_job": True,
             "send_header": True,
             "persist_payload": False,
+            "send_mode": "fake",
         },
         "dedupe": {"enabled": True, "state_path": "last_notified.json"},
     },

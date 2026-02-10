@@ -3,6 +3,8 @@
 Questo documento descrive il flusso E2E manuale che valida pipeline + notifica Telegram fake + callback su Cloudflare Worker senza usare dati reali.
 
 ## Garanzie
+
+> Nota: per invio Telegram reale con gli stessi fixture usare il workflow `e2e-telegram-real` descritto in `docs/e2e_telegram_real.md`.
 - **Manual-only**: il workflow usa solo `workflow_dispatch`.
 - **Dati finti**: la pipeline usa `tests/fixtures/e2e_fake_jobs.json`.
 - **No segreti in artifact/log applicativi**: vengono salvati report, payload Telegram fake, callback fake, risposta HTTP e log di registration con soli metadati tecnici.

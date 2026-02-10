@@ -20,6 +20,9 @@
 - `dummy-e2e` (`.github/workflows/dummy_e2e.yml`)
   - **Trigger:** `workflow_dispatch` only.
   - **Purpose:** Manual non-production validation flow.
+- `e2e-telegram-real` (`.github/workflows/e2e_telegram_real.yml`)
+  - **Trigger:** `workflow_dispatch` only.
+  - **Purpose:** Fixture-based E2E with real Telegram send and callback validation (manual click default, optional automatic replay).
 
 ## Manual operations
 

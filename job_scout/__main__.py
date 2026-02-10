@@ -83,6 +83,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "When provided, the dummy source uses this file."
         ),
     )
+    run_parser.add_argument(
+        "--telegram-real",
+        action="store_true",
+        help=(
+            "Enable real Telegram sends for this run only. "
+            "Requires JOB_SCOUT_E2E_REAL_TELEGRAM=1."
+        ),
+    )
 
     sources_parser = subparsers.add_parser(
         "sources", help="Inspect available sources"
@@ -119,6 +127,8 @@ def main(argv: List[str] | None = None) -> int:
         parser.error("sources requires --list or --test")
 
     if args.command == "run":
+        if args.telegram_real:
+            os.environ["JOB_SCOUT_TELEGRAM_MODE"] = "real"
         if args.fixture_file:
             os.environ["JOB_SCOUT_DUMMY_FIXTURE_FILE"] = str(
                 args.fixture_file

@@ -66,7 +66,7 @@ Key sections:
 - `notifications.telegram.send_per_job`: send one Telegram message per job (default: true).
 - `notifications.telegram.send_header`: send a digest header message before jobs (default: true).
 - `notifications.telegram.persist_payload`: persist the outgoing Telegram payload to disk.
-- `notifications.telegram.send_mode`: `live` (default) for real Telegram sends, `fake` for E2E payload generation + feedback session bootstrap without Telegram API calls. In fake mode, feedback window registration is mandatory and run fails if registration is not successful.
+- `notifications.telegram.send_mode`: `fake` (default, safety-first) or `real` for real Telegram sends. `JOB_SCOUT_TELEGRAM_MODE` can override this at runtime; `real` mode is accepted only when `JOB_SCOUT_E2E_REAL_TELEGRAM=1` is explicitly set. In fake mode, feedback window registration is mandatory and run fails if registration is not successful.
 - `state.suffix`: suffix appended to state files (e.g., `last_run_dummy_e2e.json`).
 - `state.dir`: optional base directory for state files (relative paths resolve under `out/`).
 - `feedback.enabled`: enable the Cloudflare Worker feedback integration.
@@ -516,6 +516,7 @@ The dummy E2E workflow is manual-only:
 **Actions → dummy-e2e** → **Run workflow** or
 `gh workflow run dummy_e2e.yml`.
 
-## Fake E2E workflow (manual)
-- Use GitHub Actions workflow `e2e_fake` (manual `workflow_dispatch`) to run a full fake-data integration: pipeline + mandatory feedback window registration verification + fake Telegram payload + feedback callback webhook validation.
-- Operational details, artifacts, and troubleshooting are documented in `docs/e2e_fake.md`.
+## E2E workflows (manual)
+- `e2e_fake`: full fake-data integration with fake Telegram send and webhook callback replay.
+- `e2e-telegram-real`: fake job fixtures + real Telegram send + callback validation (manual click by default, optional automatic replay mode).
+- Operational details, artifacts, and troubleshooting are documented in `docs/e2e_fake.md` and `docs/e2e_telegram_real.md`.
