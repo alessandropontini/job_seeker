@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from job_scout import feedback
 from job_scout.feedback import (
     apply_feedback_items,
     build_callback_data,
@@ -7,6 +8,7 @@ from job_scout.feedback import (
     is_window_open,
     parse_callback_data,
     session_storage_key,
+    register_feedback_window,
     _sign_payload,
 )
 from job_scout.preferences import PreferenceProfile
@@ -97,6 +99,89 @@ def test_apply_feedback_items_updates_profile():
     assert result.counts["love"] == 1
     assert result.counts["maybe"] == 1
     assert "dummy:beta" in result.updated_profile.duplicate_ids
+
+
+def test_register_feedback_window_sends_browser_like_headers(monkeypatch):
+    captured = {}
+
+    class _Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"OK"
+
+    def _fake_urlopen(request, timeout):
+        captured["headers"] = dict(request.header_items())
+        captured["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr(feedback.urllib.request, "urlopen", _fake_urlopen)
+
+    result = register_feedback_window(
+        run_id="26020508a1b2",
+        open_at="2024-01-01T00:00:00+00:00",
+        close_at="2024-01-01T01:00:00+00:00",
+        jobs=[],
+        config={
+            "feedback": {
+                "enabled": True,
+                "webhook_base_url": "https://worker.example",
+                "webhook_secret": "secret",
+            }
+        },
+    )
+
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert captured["timeout"] == 15
+    assert headers["user-agent"].startswith("Mozilla/5.0")
+    assert headers["accept"] == "application/json"
+    assert headers["accept-language"] == "en-US,en;q=0.9"
+    assert result.user_agent_sent is True
+
+
+def test_register_feedback_window_non_200_keeps_body_excerpt_limit(monkeypatch):
+    class _HttpErr(feedback.urllib.error.HTTPError):
+        def __init__(self):
+            super().__init__(
+                "https://worker.example/window/open",
+                403,
+                "Forbidden",
+                hdrs=None,
+                fp=None,
+            )
+
+        def read(self):
+            return ("x" * 300).encode("utf-8")
+
+    def _fake_urlopen(_request, timeout=0):
+        raise _HttpErr()
+
+    monkeypatch.setattr(feedback.urllib.request, "urlopen", _fake_urlopen)
+
+    result = register_feedback_window(
+        run_id="26020508a1b2",
+        open_at="2024-01-01T00:00:00+00:00",
+        close_at="2024-01-01T01:00:00+00:00",
+        jobs=[],
+        config={
+            "feedback": {
+                "enabled": True,
+                "webhook_base_url": "https://worker.example",
+                "webhook_secret": "secret",
+            }
+        },
+    )
+
+    assert result.ok is False
+    assert result.status == 403
+    assert len(result.body_excerpt) == 200
+    assert result.user_agent_sent is True
 
 
 def test_callback_roundtrip_uses_worker_session_key_contract():

@@ -265,7 +265,7 @@ The pipeline writes reports to `out/`:
   `notifications.telegram.dry_run: true` is enabled (no network calls).
 - `out/digest.md` stores the plain-text digest in dry-run mode.
 - `out/feedback_summary.json` stores feedback action counts when feedback is applied.
-- `out/feedback_registration_result.log` stores feedback window registration diagnostics (`ok`, `status`, endpoint/method/header names, and a short response excerpt).
+- `out/feedback_registration_result.log` stores feedback window registration diagnostics (`ok`, `status`, endpoint/method/header names, `user_agent_sent`, and a short response excerpt limited to 200 chars).
 - `out/last_run.json` also includes `feedback_counts` when feedback is applied.
 When running in GitHub Actions, these files are uploaded as workflow artifacts:
 `report.csv`, `report.md`, `last_run.json`, `last_notified.json`, `preferences.json`,

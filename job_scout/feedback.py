@@ -20,6 +20,11 @@ from job_scout.state import resolve_state_path
 
 logger = logging.getLogger(__name__)
 
+FEEDBACK_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
 
 @dataclass(frozen=True)
 class FeedbackWindow:
@@ -49,6 +54,7 @@ class FeedbackRegistrationResult:
     headers: tuple[str, ...]
     status: int | None
     body_excerpt: str
+    user_agent_sent: bool = False
 
 
 def build_run_id(now: datetime, digest_hash: str) -> str:
@@ -175,6 +181,9 @@ def register_feedback_window(
     method = "POST"
     headers = (
         "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "User-Agent",
         "X-Webhook-Timestamp",
         "X-Webhook-Id",
         "X-Webhook-Signature",
@@ -188,6 +197,7 @@ def register_feedback_window(
             headers=headers,
             status=None,
             body_excerpt="",
+            user_agent_sent=True,
         )
     base_url = _resolve_feedback_base_url(feedback_config)
     if not base_url:
@@ -199,6 +209,7 @@ def register_feedback_window(
             headers=headers,
             status=None,
             body_excerpt="",
+            user_agent_sent=True,
         )
     secret = _resolve_feedback_secret(feedback_config)
     if not secret:
@@ -210,6 +221,7 @@ def register_feedback_window(
             headers=headers,
             status=None,
             body_excerpt="",
+            user_agent_sent=True,
         )
     endpoint = f"{base_url.rstrip('/')}/window/open"
     payload = {
@@ -232,6 +244,7 @@ def register_feedback_window(
             headers=headers,
             status=None,
             body_excerpt=_body_excerpt(body),
+            user_agent_sent=True,
         )
     if status != 200:
         return FeedbackRegistrationResult(
@@ -242,6 +255,7 @@ def register_feedback_window(
             headers=headers,
             status=status,
             body_excerpt=_body_excerpt(body),
+            user_agent_sent=True,
         )
     return FeedbackRegistrationResult(
         ok=True,
@@ -251,6 +265,7 @@ def register_feedback_window(
         headers=headers,
         status=status,
         body_excerpt=_body_excerpt(body),
+        user_agent_sent=True,
     )
 
 
@@ -429,6 +444,9 @@ def _post_json(
         data=data,
         headers={
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": FEEDBACK_USER_AGENT,
             "X-Webhook-Timestamp": timestamp,
             "X-Webhook-Id": request_id,
             "X-Webhook-Signature": signature,

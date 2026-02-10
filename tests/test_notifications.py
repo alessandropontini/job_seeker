@@ -206,6 +206,7 @@ def test_fake_send_mode_registers_window_and_persists_payload(
             ),
             status=200,
             body_excerpt="OK",
+            user_agent_sent=True,
         )
 
     monkeypatch.setattr(notifications, "register_feedback_window", _fake_register)
@@ -220,3 +221,6 @@ def test_fake_send_mode_registers_window_and_persists_payload(
     keyboard = payload["messages"][1]["reply_markup"]["inline_keyboard"]
     callback_data = keyboard[0][0]["callback_data"]
     assert callback_data.startswith("fb|")
+
+    registration_log = (output_dir / "feedback_registration_result.log").read_text(encoding="utf-8")
+    assert "user_agent_sent=true" in registration_log

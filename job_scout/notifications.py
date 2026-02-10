@@ -938,6 +938,7 @@ def _write_feedback_registration_result(
         f"headers={','.join(result.headers)}",
         f"status={result.status if result.status is not None else 'none'}",
         f"body_excerpt={result.body_excerpt}",
+        f"user_agent_sent={str(result.user_agent_sent).lower()}",
     ]
     result_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
