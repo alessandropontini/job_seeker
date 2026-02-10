@@ -22,6 +22,26 @@ Project docs:
 
 > CI note: cron-based notification workflows are disabled; operations run manual-only via `workflow_dispatch`. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
 
+## Live mode (08:00 Europe/Rome)
+
+Production daily scheduling is executed on **Cloudflare Worker Cron Triggers**, not on GitHub Actions.
+
+- Worker cron: UTC schedules (`0 6 * * *` + `0 7 * * *`) with runtime Rome-hour guard (`08:00 Europe/Rome`).
+- Live send gate: `JOB_SCOUT_ENV=live` required, otherwise the Worker refuses sending.
+- Dedup: KV key `live:last_sent_date` prevents duplicate daily digest sends.
+- Daily window: digest is built from **yesterday** (`Europe/Rome`) postings; fallback is explicitly flagged if empty.
+- Feedback compatibility preserved with existing contracts: `/window/open`, `/telegram/feedback`, and `/feedback` (`fetch_feedback`).
+
+### Why GitHub Actions remain manual-only
+
+GitHub Actions are retained for operator-driven QA/deploy workflows only (`workflow_dispatch`).
+There is no `on.schedule` in repository workflows by design. Daily automation runs in Cloudflare,
+which is the runtime that already handles webhook feedback persistence and Telegram callback security.
+
+See:
+- [docs/runbook_live.md](docs/runbook_live.md)
+- [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md)
+
 ## Requirements
 - Python 3.11
 - Runtime dependencies: **stdlib-only**

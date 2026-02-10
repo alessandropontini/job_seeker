@@ -1,3 +1,6 @@
+const REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs";
+const LIVE_RUN_TTL_SECONDS = 60 * 60 * 24 * 14;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -24,6 +27,8 @@ export default {
         result = await handleWindowOpen(request, env, baseLog);
       } else if (path === "/internal/smoke/session") {
         result = await handleSmokeSession(request, env, baseLog);
+      } else if (path === "/run_daily") {
+        result = await handleRunDailyRoute(request, env, ctx, baseLog);
       } else if (path === "/healthz") {
         result = {
           response: new Response("OK", { status: 200 }),
@@ -65,7 +70,408 @@ export default {
 
     return result.response;
   },
+
+  async scheduled(controller, env, ctx) {
+    const scheduledAt = new Date(controller.scheduledTime);
+    const baseLog = {
+      request_id: crypto.randomUUID(),
+      trigger: "cron",
+      cron: controller.cron,
+      scheduled_time: scheduledAt.toISOString(),
+    };
+    if (!isRomeTargetHour(scheduledAt, 8)) {
+      logInfo("live_daily_cron_outside_target_hour", baseLog);
+      return;
+    }
+    const result = await runDailyLiveDigest(env, ctx, baseLog);
+    if (result.ok) {
+      logInfo("live_daily_scheduled_done", {
+        ...baseLog,
+        run_id: result.run_id,
+        sent_count: result.sent_count,
+      });
+    } else {
+      logWarn("live_daily_scheduled_skipped", {
+        ...baseLog,
+        reason: result.reason,
+      });
+    }
+  },
 };
+
+async function handleRunDailyRoute(request, env, ctx, baseLog) {
+  if (request.method !== "POST") {
+    return {
+      response: new Response("Method not allowed", { status: 405 }),
+      outcome: "blocked",
+      reason: "invalid_method",
+    };
+  }
+  const auth = ensureSmokeAuthorized(request, env);
+  if (!auth.ok) {
+    return {
+      response: new Response("Not found", { status: 404 }),
+      outcome: "blocked",
+      reason: auth.reason,
+    };
+  }
+  const result = await runDailyLiveDigest(env, ctx, { ...baseLog, trigger: "http" });
+  const status = result.ok ? 200 : 409;
+  return {
+    response: jsonResponse(result, status),
+    outcome: result.ok ? "ok" : "blocked",
+    reason: result.reason || "run_daily_completed",
+  };
+}
+
+async function runDailyLiveDigest(env, ctx, baseLog) {
+  if (String(env.JOB_SCOUT_ENV || "").toLowerCase() !== "live") {
+    logWarn("live_daily_blocked", {
+      ...baseLog,
+      reason: "env_not_live",
+    });
+    return { ok: false, reason: "env_not_live" };
+  }
+  const required = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "JOB_SCOUT_KV"];
+  for (const key of required) {
+    if (!env[key]) {
+      logError("live_daily_missing_binding", {
+        ...baseLog,
+        reason: "missing_binding",
+        binding: key,
+      });
+      return { ok: false, reason: `missing_${key.toLowerCase()}` };
+    }
+  }
+
+  const yesterday = yesterdayRomeDateString(new Date());
+  const lastSentKey = "live:last_sent_date";
+  const sentDate = await env.JOB_SCOUT_KV.get(lastSentKey);
+  if (sentDate === yesterday) {
+    logInfo("live_daily_skipped_already_sent", {
+      ...baseLog,
+      date_rome: yesterday,
+    });
+    return { ok: false, reason: "already_sent" };
+  }
+
+  const runId = await buildLiveRunId();
+  const jobs = await fetchRemotiveJobs(baseLog);
+  const filtered = selectLiveJobsForYesterday(jobs, yesterday);
+  const finalJobs = filtered.jobs.length > 0 ? filtered.jobs : selectLiveFallbackJobs(jobs);
+  const isFallback = filtered.jobs.length === 0;
+
+  if (finalJobs.length === 0) {
+    logWarn("live_daily_no_jobs", {
+      ...baseLog,
+      run_id: runId,
+      date_rome: yesterday,
+      reason: "empty_after_filter",
+    });
+    await persistLiveRun(env, {
+      run_id: runId,
+      date_rome: yesterday,
+      fallback_used: isFallback,
+      jobs: [],
+      sent: false,
+      reason: "empty_after_filter",
+    });
+    return { ok: false, reason: "no_jobs" };
+  }
+
+  const jobsWithIds = await buildDigestJobs(runId, finalJobs);
+  const digestHash = await sha256Hex(JSON.stringify(jobsWithIds.map((job) => job.id)));
+  const messageText = buildLiveDigestMessage({
+    dateRome: yesterday,
+    jobs: jobsWithIds,
+    fallbackUsed: isFallback,
+    missingSalaryCount: jobsWithIds.filter((job) => job.salary_missing).length,
+  });
+
+  const sendResult = await sendDigestTelegram(env, messageText, jobsWithIds);
+  if (!sendResult.ok) {
+    logError("live_daily_send_failed", {
+      ...baseLog,
+      run_id: runId,
+      reason: sendResult.reason,
+      sent_count: jobsWithIds.length,
+    });
+    return { ok: false, reason: "telegram_send_failed" };
+  }
+
+  const now = new Date();
+  const openAt = now.toISOString();
+  const closeAt = new Date(now.getTime() + feedbackWindowMs(env)).toISOString();
+  const sessionPayload = {
+    run_id: runId,
+    open_at: openAt,
+    close_at: closeAt,
+    jobs: jobsWithIds.map((job) => ({
+      short_id: job.short_id,
+      job_hash: job.job_hash,
+      source: job.source,
+    })),
+  };
+  await env.JOB_SCOUT_KV.put(`session:${runId}`, JSON.stringify(sessionPayload), {
+    expirationTtl: 60 * 60 * 2,
+  });
+
+  await persistLiveRun(env, {
+    run_id: runId,
+    digest_hash: digestHash,
+    date_rome: yesterday,
+    fallback_used: isFallback,
+    sent: true,
+    message_id: sendResult.message_id,
+    jobs: jobsWithIds,
+    sent_at: now.toISOString(),
+  });
+  await env.JOB_SCOUT_KV.put(lastSentKey, yesterday, { expirationTtl: LIVE_RUN_TTL_SECONDS });
+
+  logInfo("live_daily_sent", {
+    ...baseLog,
+    run_id: runId,
+    date_rome: yesterday,
+    jobs_count: jobsWithIds.length,
+    fallback_used: isFallback,
+  });
+  return { ok: true, run_id: runId, sent_count: jobsWithIds.length, fallback_used: isFallback };
+}
+
+async function fetchRemotiveJobs(baseLog) {
+  const response = await fetch(REMOTIVE_API_URL, {
+    method: "GET",
+    headers: { "Accept": "application/json" },
+  });
+  if (!response.ok) {
+    logWarn("live_source_failed", {
+      ...baseLog,
+      source: "remotive",
+      status: response.status,
+    });
+    return [];
+  }
+  const payload = await response.json();
+  if (!Array.isArray(payload?.jobs)) {
+    return [];
+  }
+  return payload.jobs.map((job) => normalizeRemotiveJob(job));
+}
+
+function normalizeRemotiveJob(job) {
+  const category = String(job?.category || "").toLowerCase();
+  const title = String(job?.title || "");
+  const location = String(job?.candidate_required_location || "");
+  const publicationDate = String(job?.publication_date || "");
+  const salaryRaw = String(job?.salary || "");
+  const salaryMinEur = extractSalaryMinEur(salaryRaw);
+  const roleKey = `${title} ${category}`.toLowerCase();
+  const isLeadRole = roleKey.includes("lead") || roleKey.includes("manager");
+  const locationKey = location.toLowerCase();
+  const includesUk = /(uk|united kingdom|england|scotland|wales|northern ireland|london)/i.test(locationKey);
+  const preferredLocation = /(europe|eu|italy|new york)/i.test(locationKey);
+  const isRemote = /remote|worldwide|anywhere/i.test(location);
+  const missingSalary = salaryMinEur === null;
+  return {
+    id: String(job?.id || ""),
+    title,
+    company: String(job?.company_name || "Unknown"),
+    url: String(job?.url || ""),
+    location,
+    publication_date: publicationDate,
+    source: "remotive",
+    category,
+    is_lead_role: isLeadRole,
+    includes_uk: includesUk,
+    preferred_location: preferredLocation,
+    remote: isRemote,
+    salary_min_eur: salaryMinEur,
+    salary_missing: missingSalary,
+  };
+}
+
+function selectLiveJobsForYesterday(jobs, yesterdayRome) {
+  const filtered = jobs
+    .filter((job) => job.id && job.url)
+    .filter((job) => job.is_lead_role)
+    .filter((job) => !job.includes_uk)
+    .filter((job) => job.preferred_location)
+    .filter((job) => job.salary_missing || (job.salary_min_eur ?? 0) >= 52000)
+    .filter((job) => publicationRomeDateString(job.publication_date) === yesterdayRome)
+    .sort((left, right) => scoreLiveJob(right) - scoreLiveJob(left))
+    .slice(0, 6);
+  return { jobs: filtered };
+}
+
+function selectLiveFallbackJobs(jobs) {
+  return jobs
+    .filter((job) => job.id && job.url)
+    .filter((job) => job.is_lead_role)
+    .filter((job) => !job.includes_uk)
+    .filter((job) => job.preferred_location)
+    .filter((job) => job.salary_missing || (job.salary_min_eur ?? 0) >= 52000)
+    .sort((left, right) => scoreLiveJob(right) - scoreLiveJob(left))
+    .slice(0, 4);
+}
+
+function scoreLiveJob(job) {
+  let score = 0;
+  if (job.remote) score += 3;
+  if (!job.salary_missing) score += 2;
+  if (job.location.toLowerCase().includes("italy")) score += 1;
+  if (job.location.toLowerCase().includes("new york")) score += 1;
+  return score;
+}
+
+async function buildDigestJobs(runId, jobs) {
+  const usedShortIds = new Set();
+  const digestHash = await sha256Hex(JSON.stringify(jobs.map((job) => job.id)));
+  const output = [];
+  for (const job of jobs) {
+    const shortId = buildShortId(job.id, usedShortIds);
+    const jobHash = await buildJobHash(job.id, digestHash);
+    output.push({ ...job, short_id: shortId, job_hash: jobHash, run_id: runId });
+  }
+  return output;
+}
+
+function buildLiveDigestMessage({ dateRome, jobs, fallbackUsed, missingSalaryCount }) {
+  const lines = [];
+  lines.push(`🧭 Job Scout LIVE — digest ${dateRome}`);
+  lines.push(
+    fallbackUsed
+      ? "⚠️ Finestra ieri vuota: invio fallback con migliori match recenti."
+      : "✅ Finestra giornaliera: offerte pubblicate ieri (Europe/Rome)."
+  );
+  if (missingSalaryCount > 0) {
+    lines.push(`ℹ️ ${missingSalaryCount} offerte senza salario dichiarato (flag: missing salary).`);
+  }
+  lines.push("");
+  jobs.forEach((job, index) => {
+    const salaryLabel = job.salary_missing ? "salary: missing" : `salary ≥ €${job.salary_min_eur}`;
+    lines.push(`${index + 1}. ${job.title} — ${job.company}`);
+    lines.push(`   📍 ${job.location} | ${salaryLabel}`);
+    lines.push(`   🔗 ${job.url}`);
+  });
+  lines.push("");
+  lines.push("Feedback rapido: 👍 interessante | 👎 no fit");
+  return lines.join("\n");
+}
+
+async function sendDigestTelegram(env, text, jobs) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID;
+  const keyboard = [];
+  for (const job of jobs) {
+    const likeData = buildCallbackData(job.run_id, job.short_id, "L", job.job_hash);
+    const dislikeData = buildCallbackData(job.run_id, job.short_id, "D", job.job_hash);
+    keyboard.push([
+      { text: `👍 ${job.short_id}`, callback_data: likeData },
+      { text: `👎 ${job.short_id}`, callback_data: dislikeData },
+    ]);
+  }
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: keyboard.slice(0, 8) },
+    }),
+  });
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok || payload?.ok !== true) {
+    return { ok: false, reason: "status_not_ok" };
+  }
+  return { ok: true, message_id: payload?.result?.message_id ?? null };
+}
+
+async function persistLiveRun(env, record) {
+  await env.JOB_SCOUT_KV.put(`live:run:${record.run_id}`, JSON.stringify(record), {
+    expirationTtl: LIVE_RUN_TTL_SECONDS,
+  });
+}
+
+
+function isRomeTargetHour(date, targetHour) {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Rome",
+      hour: "2-digit",
+      hour12: false,
+    }).format(date)
+  );
+  return hour === targetHour;
+}
+
+function yesterdayRomeDateString(now) {
+  const romeDate = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Rome" }));
+  romeDate.setDate(romeDate.getDate() - 1);
+  return [
+    romeDate.getFullYear(),
+    String(romeDate.getMonth() + 1).padStart(2, "0"),
+    String(romeDate.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function publicationRomeDateString(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function extractSalaryMinEur(rawSalary) {
+  if (!rawSalary) {
+    return null;
+  }
+  const normalized = rawSalary.toLowerCase();
+  const hasEuro = /€|eur/.test(normalized);
+  if (!hasEuro) {
+    return null;
+  }
+  const matches = normalized.match(/\d[\d.,]*/g);
+  if (!matches || matches.length === 0) {
+    return null;
+  }
+  const values = matches
+    .map((entry) => Number(entry.replace(/\./g, "").replace(",", ".")))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .map((value) => (value < 1000 ? value * 1000 : value));
+  if (values.length === 0) {
+    return null;
+  }
+  return Math.round(Math.min(...values));
+}
+
+async function buildLiveRunId() {
+  const now = new Date();
+  const compact = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  })
+    .format(now)
+    .replace(/[^0-9]/g, "")
+    .slice(0, 8);
+  const nonce = (await sha256Hex(`${now.toISOString()}-${crypto.randomUUID()}`)).slice(0, 4);
+  return `${compact}${nonce}`;
+}
 
 async function handleTelegramWebhook(request, env, ctx, baseLog) {
   if (request.method === "GET") {
@@ -94,8 +500,7 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   }
   const authError = ensureTelegramWebhookAuthorized(request, env);
   if (authError) {
-    const reason =
-      authError.status === 500 ? "missing_secret" : "auth_fail";
+    const reason = authError.status === 500 ? "missing_secret" : "auth_fail";
     const logFn = authError.status === 500 ? logError : logWarn;
     logFn(reason, {
       ...baseLog,
@@ -153,10 +558,7 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   const callbackUserId = callback.from?.id;
   const messageUserId = payload?.message?.from?.id;
   const updateUserId = callbackUserId ?? messageUserId;
-  if (
-    allowedUserId &&
-    String(updateUserId ?? "") !== String(allowedUserId)
-  ) {
+  if (allowedUserId && String(updateUserId ?? "") !== String(allowedUserId)) {
     await answerCallback(env, callback.id, "🚫 Not authorized");
     logWarn("unauthorized_user", {
       ...baseLog,
@@ -287,15 +689,15 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   const userId = callback.from?.id ?? "unknown";
   const messageId = callback.message?.message_id ?? null;
   const key = `feedback:${runId}:${jobShortId}:${userId}`;
-  const value = {
+  const value = buildFeedbackValue({
+    runId,
     action,
-    job_short_id: jobShortId,
-    job_hash: jobHash,
-    ts: new Date().toISOString(),
-    message_id: messageId,
-    user_id: userId,
+    jobShortId,
+    jobHash,
+    messageId,
+    userId,
     source: jobEntry?.source ?? "unknown",
-  };
+  });
   const writePromise = env.JOB_SCOUT_KV.put(key, JSON.stringify(value), {
     expirationTtl: 60 * 60 * 24 * 7,
   }).catch((error) => {
@@ -305,14 +707,12 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
       error: serializeError(error),
     });
   });
-  const ackPromise = answerCallback(env, callback.id, "✅ Feedback salvato").catch(
-    (error) => {
-      logError("telegram_callback_failed", {
-        ...baseLog,
-        error: serializeError(error),
-      });
-    }
-  );
+  const ackPromise = answerCallback(env, callback.id, "✅ Feedback salvato").catch((error) => {
+    logError("telegram_callback_failed", {
+      ...baseLog,
+      error: serializeError(error),
+    });
+  });
   logInfo("kv_write_scheduled", {
     ...baseLog,
     kv_key: key,
@@ -388,18 +788,8 @@ async function handleSmokeSession(request, env, baseLog) {
     reason: "session_created",
     kv_key: sessionKey,
   });
-  const callbackDataLike = buildCallbackData(
-    sessionId,
-    jobId,
-    "like",
-    jobHash
-  );
-  const callbackDataDislike = buildCallbackData(
-    sessionId,
-    jobId,
-    "dislike",
-    jobHash
-  );
+  const callbackDataLike = buildCallbackData(sessionId, jobId, "like", jobHash);
+  const callbackDataDislike = buildCallbackData(sessionId, jobId, "dislike", jobHash);
   return {
     response: jsonResponse({
       session_id: sessionId,
@@ -581,11 +971,9 @@ async function handleWindowOpen(request, env, baseLog) {
     close_at: closeAt,
     jobs: Array.isArray(payload.body.jobs) ? payload.body.jobs : [],
   };
-  await env.JOB_SCOUT_KV.put(
-    `session:${runId}`,
-    JSON.stringify(windowPayload),
-    { expirationTtl: 60 * 60 * 2 }
-  );
+  await env.JOB_SCOUT_KV.put(`session:${runId}`, JSON.stringify(windowPayload), {
+    expirationTtl: 60 * 60 * 2,
+  });
   logInfo("window_open_recorded", {
     ...baseLog,
     kv_key: `session:${runId}`,
@@ -614,6 +1002,27 @@ export function parseCallbackData(data) {
     return null;
   }
   return { runId, jobShortId, action, jobHash };
+}
+
+export function hasAlreadySentForDate(lastSentDate, targetDateRome) {
+  return Boolean(lastSentDate) && String(lastSentDate) === String(targetDateRome);
+}
+
+export function buildFeedbackValue({ runId, action, jobShortId, jobHash, messageId, userId, source }) {
+  return {
+    run_id: runId,
+    action,
+    job_short_id: jobShortId,
+    job_hash: jobHash,
+    ts: new Date().toISOString(),
+    message_id: messageId,
+    user_id: userId,
+    source,
+  };
+}
+
+export function yesterdayRomeDateStringFor(value) {
+  return yesterdayRomeDateString(new Date(value));
 }
 
 async function readSignedJson(request, env) {
@@ -681,9 +1090,7 @@ async function signPayload(secret, timestamp, bodyBuffer) {
     false,
     ["sign"]
   );
-  const payload = new Uint8Array(
-    encoder.encode(timestamp).length + 1 + bodyBuffer.byteLength
-  );
+  const payload = new Uint8Array(encoder.encode(timestamp).length + 1 + bodyBuffer.byteLength);
   payload.set(encoder.encode(timestamp), 0);
   payload.set([46], encoder.encode(timestamp).length);
   payload.set(new Uint8Array(bodyBuffer), encoder.encode(timestamp).length + 1);
@@ -702,18 +1109,7 @@ function feedbackWindowMs(env) {
 }
 
 function isValidAction(action) {
-  return [
-    "L",
-    "M",
-    "D",
-    "S",
-    "X",
-    "like",
-    "maybe",
-    "dislike",
-    "love",
-    "duplicate",
-  ].includes(action);
+  return ["L", "M", "D", "S", "X", "like", "maybe", "dislike", "love", "duplicate"].includes(action);
 }
 
 function scheduleAnswer(env, ctx, callbackId, text) {
@@ -768,21 +1164,6 @@ function logError(event, fields = {}) {
   console.error(JSON.stringify({ level: "error", event, ...fields }));
 }
 
-function redactHeaders(headers) {
-  const redacted = {};
-  if (!headers) {
-    return redacted;
-  }
-  for (const [key, value] of headers.entries()) {
-    if (shouldRedactHeader(key)) {
-      redacted[key] = "[REDACTED]";
-    } else {
-      redacted[key] = value;
-    }
-  }
-  return redacted;
-}
-
 function getHeaderNames(headers) {
   if (!headers) {
     return [];
@@ -805,6 +1186,26 @@ function buildCallbackData(runId, jobShortId, action, jobHash) {
   return payload;
 }
 
+function buildShortId(jobKey, used) {
+  const normalized = String(jobKey || "");
+  let counter = 0;
+  while (true) {
+    const digestBase = `${normalized}:${counter}`;
+    const digest = digestBase
+      .split("")
+      .reduce((acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) | 0, 0)
+      .toString(16)
+      .replace("-", "")
+      .padStart(8, "0")
+      .slice(0, 8);
+    if (!used.has(digest)) {
+      used.add(digest);
+      return digest;
+    }
+    counter += 1;
+  }
+}
+
 async function buildJobHash(jobKey, digestHash) {
   const payload = `${jobKey}:${digestHash}`;
   const digest = await sha256Hex(payload);
@@ -812,25 +1213,10 @@ async function buildJobHash(jobKey, digestHash) {
 }
 
 async function sha256Hex(payload) {
-  const buffer = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(payload)
-  );
+  const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
   return [...new Uint8Array(buffer)]
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function shouldRedactHeader(headerName) {
-  const name = headerName.toLowerCase();
-  return [
-    "authorization",
-    "cookie",
-    "set-cookie",
-    "x-smoke-token",
-    "x-telegram-bot-api-secret-token",
-    "x-webhook-signature",
-  ].includes(name);
 }
 
 function serializeError(error) {

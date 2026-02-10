@@ -137,3 +137,8 @@
 - Phase 7 CI/ops: added manual-only `e2e-telegram-real` workflow using deterministic fixture jobs with explicit E2E real-Telegram gate (`JOB_SCOUT_E2E_REAL_TELEGRAM=1` + `JOB_SCOUT_TELEGRAM_MODE=real`), plus manual/automatic callback validation paths and full `out/` artifact upload.
 - Phase 7 safety: introduced CLI `--telegram-real` and runtime send-mode resolution with fake-by-default behavior, requiring explicit E2E gate before real Telegram sends.
 - Phase 7 feedback contract: enforced callback payload byte limit as `<=64` (Python + Worker helper) and documented real Telegram E2E runbook in `docs/e2e_telegram_real.md`.
+- Phase 7 live ops: added Cloudflare Worker live runner (`/run_daily` + cron handler) for daily 08:00 Europe/Rome execution with runtime TZ guard.
+- Phase 7 live ops: implemented Worker-side dedup (`live:last_sent_date`), yesterday Rome daily window filtering, and explicit fallback labeling when window is empty.
+- Phase 7 contract hardening: feedback KV payload now persists `run_id` to improve correlation with `fetch_feedback(run_id)` diagnostics.
+- Phase 7 CI cleanup: removed redundant workflows (`dummy-e2e`, `scheduled-remotive`, `telegram_webhook_set/get`) and added manual-only `offline_qa` + `wheelhouse` workflows.
+- Phase 7 docs: added `docs/runbook_live.md`, refreshed E2E real runbook, and updated README/CI workflow inventory for Cloudflare-based live scheduling.

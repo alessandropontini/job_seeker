@@ -1,116 +1,52 @@
-# Cloudflare Worker — Telegram Feedback Gateway
+# Cloudflare Worker — Telegram Feedback Gateway + Live Runner
 
-This Worker provides a time-gated webhook endpoint for Telegram callback queries and a protected
-feedback export endpoint for the Job Scout pipeline.
+This Worker provides:
+- secure Telegram feedback webhook handling
+- signed feedback/session endpoints used by `job_scout`
+- live daily digest orchestration (Cron 08:00 Europe/Rome)
 
 ## Endpoints
+
 ### `POST /telegram/feedback`
-Receives Telegram `callback_query` updates, validates the run window, writes feedback to KV, and
-always responds with `answerCallbackQuery` to clear the loading spinner. Requires
-`X-Telegram-Bot-Api-Secret-Token`; missing or invalid headers return **401**.
+Receives Telegram `callback_query` updates, validates time window/session/job hash, and writes feedback to KV.
+Requires `X-Telegram-Bot-Api-Secret-Token`.
 
-Callback data contract (must be compact, under Telegram's ~64 byte limit):
-- Format: `fb|<run_id>|<job_short_id>|<action>|<job_hash>`
-- Valid actions: `L`, `M`, `D`, `S`, `X`, or their long forms (`like`, `maybe`, `dislike`, `love`, `duplicate`)
-- Any other value returns `Invalid callback data` (HTTP 200) and does not write KV.
-
-### `GET /telegram/feedback`
-Returns `200 OK` to verify reachability and generate logs without touching KV.
-
-### `GET /healthz`
-Returns `200 OK` for quick liveness checks (useful for log verification).
+Callback data contract:
+- `fb|<run_id>|<job_short_id>|<action>|<job_hash>`
+- max 64 bytes
 
 ### `POST /window/open`
-Registers the feedback window and job mapping for a run. Requires HMAC signature headers.
+Signed endpoint to register a feedback session (`run_id`, window, jobs).
 
 ### `POST /feedback`
-Returns feedback entries for a run. Requires HMAC signature headers.
+Signed endpoint to fetch feedback items by `run_id` (used by `fetch_feedback`).
 
-### `POST /internal/smoke/session`
-CI-only endpoint that creates a short-lived feedback session and returns callback data for the
-smoke workflow. Requires `X-Smoke-Token` matching `JOB_SCOUT_SMOKE_TOKEN`. Missing/invalid tokens
-return 404.
+### `POST /run_daily`
+Protected manual trigger (requires `X-Smoke-Token` / `JOB_SCOUT_SMOKE_TOKEN`) for the same live flow used by cron.
 
-### HMAC headers
-Signed requests must include:
-- `X-Webhook-Timestamp` (unix seconds)
-- `X-Webhook-Id` (unique per request)
-- `X-Webhook-Signature` (hex HMAC SHA-256 of `timestamp.body`)
+### `GET /healthz`
+Simple liveness endpoint.
 
-## Required secrets (Worker)
-Set these as Worker secrets in Cloudflare:
-- `TELEGRAM_BOT_TOKEN` (the same bot used by Job Scout)
-- `JOB_SCOUT_WEBHOOK_SECRET` (shared secret used by Job Scout to sign requests and by Telegram webhook authentication)
-- `TELEGRAM_WEBHOOK_SECRET` (optional override for Telegram `secret_token`; falls back to `JOB_SCOUT_WEBHOOK_SECRET`)
-- `ALLOWED_TELEGRAM_USER_ID` (numeric Telegram user ID allowed to record feedback)
-- `JOB_SCOUT_SMOKE_TOKEN` (shared secret for the CI-only smoke session endpoint)
+## Live scheduling at 08:00 Europe/Rome
 
-Optional Worker env vars:
-- `FEEDBACK_WINDOW_MINUTES` (default: 60)
+Cloudflare cron is UTC-based. Worker config uses:
+- `0 6 * * *`
+- `0 7 * * *`
 
-## KV Namespace
-Create a KV namespace and update `wrangler.toml`:
-```toml
-kv_namespaces = [
-  { binding = "JOB_SCOUT_KV", id = "REPLACE_WITH_NAMESPACE_ID" }
-]
-```
+The runtime applies a Rome local-hour guard and executes only when local hour is `08`.
+This avoids GitHub scheduled workflows and keeps scheduling in Cloudflare.
 
-## Deploy
-Worker deploys are handled via GitHub Actions using `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-See `.github/workflows/deploy_worker.yml` and repository secrets setup in the main README.
-The Worker name is `job-scout-telegram-feedback` (matches the Telegram webhook route binding).
-The workflow pins Wrangler to the latest release so Worker code stays aligned with Cloudflare CLI updates.
+## Live safety and dedupe
 
-## Configure Telegram webhook
-Point Telegram to the Worker endpoint and include the secret token header. You can use the helper
-script to set + verify the webhook without printing secrets:
-```bash
-export TELEGRAM_BOT_TOKEN=...
-export JOB_SCOUT_WEBHOOK_SECRET=...
-export JOB_SCOUT_WEBHOOK_BASE_URL=https://<your-worker-domain>
-tools/telegram_set_webhook.sh
-```
+- Live send is enabled only when `JOB_SCOUT_ENV=live`.
+- Dedup key `live:last_sent_date` prevents duplicate sends for the same digest date.
+- Daily window is `yesterday` in `Europe/Rome`; fallback is used and labeled if empty.
+- Live run state is stored in KV under `live:run:<run_id>`.
 
-Manual curl (avoid printing secrets in logs):
-```bash
-curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url":"https://<your-worker-domain>/telegram/feedback",
-    "secret_token":"<TELEGRAM_WEBHOOK_SECRET or JOB_SCOUT_WEBHOOK_SECRET>"
-  }'
-```
+## Required bindings/secrets
 
-## Job Scout integration
-Set these environment variables in GitHub Actions (or local shell):
-- `JOB_SCOUT_WEBHOOK_BASE_URL` (e.g., `https://<your-worker-domain>`)
-- `JOB_SCOUT_WEBHOOK_SECRET` (same as `JOB_SCOUT_WEBHOOK_SECRET` in Worker)
-- `FEEDBACK_WINDOW_MINUTES` (optional override, default 60)
+- KV binding: `JOB_SCOUT_KV`
+- Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_SECRET`, `ALLOWED_TELEGRAM_USER_ID`, `JOB_SCOUT_SMOKE_TOKEN`
+- Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES`
 
-## Allowlist behavior
-Only the user whose Telegram ID matches `ALLOWED_TELEGRAM_USER_ID` can store feedback.
-To discover your numeric user ID, message `@userinfobot` on Telegram and copy the `id` value.
-Other users will see `🚫 Not authorized`, the spinner will clear, and no KV entry is written.
-
-Telegram servers (not your phone) call the webhook, so IP allowlists based on a mobile device
-will block callbacks. Use the secret header + allowlisted user ID instead.
-
-## Verification (manual)
-1. Run the dummy E2E pipeline to send a Telegram digest with feedback buttons.
-2. Tap 👍/👎/⭐/🧻 — the spinner should disappear immediately with a confirmation toast.
-3. In Cloudflare KV, confirm a key like `feedback:<run_id>:<short_id>:<user_id>` exists
-   and contains the action + timestamp payload.
-
-## Logs & troubleshooting
-To view Worker logs in Cloudflare:
-1. Open **Workers & Pages → job-scout-telegram-feedback → Observability → Events/Logs**.
-2. Confirm `console.log`/`console.error` events are enabled (logs appear only when the Worker emits
-   console output).
-3. Filter by `event` (e.g., `telegram_webhook_rejected`, `kv_write_failed`) to debug the callback path.
-
-Optional local tail (no secrets printed):
-```bash
-wrangler tail --format json
-```
-Use your terminal history or exported environment to provide secrets; never echo tokens in shared logs.
+See `docs/runbook_live.md` for operational checklist and troubleshooting.
