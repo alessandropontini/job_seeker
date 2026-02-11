@@ -160,3 +160,7 @@
 - Phase 7 live diagnostics hardening: persisted Telegram API forensic artifacts (`telegram_send_response.json`, `telegram_chat_check.json`), added thread/topic support via `TELEGRAM_MESSAGE_THREAD_ID`, and expanded `run_summary.json` with explicit send acceptance/error fields for production triage.
 - Matcher tuning update: full-remote `Worldwide`/`Europe` locations are now accepted while UK and USA-only postings remain excluded, and role targeting now covers data governance/data quality/metadata/data management keywords to reduce false negatives from Remotive live runs.
 - Sources expansion update: added public RSS/API multi-source support (`--sources` + `all`) while keeping `--source` compatibility, introduced We Work Remotely RSS connector with normalized fields, and added tests for WWR parsing plus `run_summary.source_counts` coverage.
+
+- Phase 7 CV-driven targeting: enforced core keyword gate for TOP/DATA channels, hard-blocked marketing/brand titles, and added strong quant/trading soft penalties with rebalanced title/description-first scoring.
+- Phase 7 feedback durability: callback schema migrated to `fb|run|vote|short_job_id`, KV feedback keys changed to `feedback:<run_id>:<user_id>:<job_id>`, and `/feedback` now validated to return all per-job events for a run.
+- Added run summary counters (`gate_pass_count`, `hard_block_count`, `soft_penalty_count`) plus tests/docs updates for new targeting and feedback contracts.

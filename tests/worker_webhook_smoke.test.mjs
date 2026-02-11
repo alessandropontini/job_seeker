@@ -83,7 +83,7 @@ function buildRequest({ secretHeader, data } = {}) {
   const payload = {
     callback_query: {
       id: "cb1",
-      data: data ?? "fb|run123|job1|like|hash1",
+      data: data ?? "fb|run123|like|job1",
       from: { id: 42 },
       message: { message_id: 11 },
     },
@@ -156,7 +156,7 @@ maybeTest("telegram webhook accepts correct secret header and writes KV", async 
   const body = await response.json();
   assert.deepEqual(body, { ok: true });
   assert.equal(kv.putCalls.length, 1);
-  assert.ok(kv.store.has("feedback:run123:job1:42"));
+  assert.ok(kv.store.has("feedback:run123:42:job1"));
   assert.ok(findLogEvent(logs, "request_received"));
   assert.ok(findLogEvent(logs, "request_handled"));
   assert.equal(fetchMock.calls.length, 1);
@@ -219,12 +219,12 @@ maybeTest("telegram webhook GET probe returns ok", async () => {
 maybeTest("parseCallbackData accepts the expected feedback payload format", async () => {
   const module = await loadWorkerModule();
   const { parseCallbackData } = module;
-  const parsed = parseCallbackData("fb|run123|job1|L|hash1");
+  const parsed = parseCallbackData("fb|run123|L|job1");
   assert.deepEqual(parsed, {
     runId: "run123",
     jobShortId: "job1",
     action: "L",
-    jobHash: "hash1",
+    jobHash: "",
   });
   assert.equal(parseCallbackData("fb|run123|job1|bad|hash1"), null);
 });
@@ -364,4 +364,52 @@ function findLogEvent(logs, eventName) {
       return false;
     }
   });
+}
+
+
+maybeTest("feedback endpoint returns all events for same run", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV({
+    "feedback:run123:42:job1": JSON.stringify({ run_id: "run123", job_short_id: "job1", action: "L" }),
+    "feedback:run123:42:job2": JSON.stringify({ run_id: "run123", job_short_id: "job2", action: "D" }),
+  });
+  kv.list = async ({ prefix }) => ({
+    keys: [...kv.store.keys()].filter((name) => name.startsWith(prefix)).map((name) => ({ name })),
+  });
+  const env = buildEnv({ secret: "topsecret", kv });
+  const body = JSON.stringify({ run_id: "run123" });
+  const ts = String(Math.floor(Date.now() / 1000));
+  const requestId = "req-test-1";
+  const sig = await signForTest("topsecret", ts, body);
+  const response = await worker.fetch(
+    new Request("https://example.com/feedback", {
+      method: "POST",
+      headers: new Headers({
+        "Content-Type": "application/json",
+        "X-Webhook-Timestamp": ts,
+        "X-Webhook-Id": requestId,
+        "X-Webhook-Signature": sig,
+      }),
+      body,
+    }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.length, 2);
+});
+
+
+async function signForTest(secret, timestamp, body) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const payload = new TextEncoder().encode(`${timestamp}.${body}`);
+  const signature = await crypto.subtle.sign("HMAC", key, payload);
+  return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

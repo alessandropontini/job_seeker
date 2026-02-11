@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
+from job_scout.targeting import passes_core_gate
 from job_scout.writers import ReportRow
 
 
@@ -29,13 +30,13 @@ def select_channels(
     top_config = _as_dict(channel_config.get("top_matches"))
     data_config = _as_dict(channel_config.get("data_only_best_picks"))
     top_n = _parse_int(top_config.get("top_n", 10), 10)
-    top_min_score = _parse_int(top_config.get("min_score", 0), 0)
+    top_min_score = _parse_int(top_config.get("min_score", 70), 70)
     include_missing_salary = bool(
         top_config.get("include_missing_salary", True)
     )
 
     data_top_n = _parse_int(data_config.get("top_n", 10), 10)
-    data_min_score = _parse_int(data_config.get("min_score", 0), 0)
+    data_min_score = _parse_int(data_config.get("min_score", 40), 40)
     require_data_signal = bool(
         data_config.get("require_data_signal", True)
     )
@@ -49,6 +50,7 @@ def select_channels(
         row
         for row in rows
         if row.match.decision == "accepted"
+        and passes_core_gate(row.posting)
         and (row.match.score or 0) >= min(top_min_score, data_min_score)
         and _snapshot_key(row) not in exclude_ids
     ]

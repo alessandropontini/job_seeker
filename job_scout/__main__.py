@@ -221,6 +221,8 @@ def main(argv: List[str] | None = None) -> int:
             os.environ["JOB_SCOUT_DUMMY_FIXTURE_FILE"] = str(
                 args.fixture_file
             )
+        else:
+            os.environ.pop("JOB_SCOUT_DUMMY_FIXTURE_FILE", None)
         config = load_config(args.config)
         state_config = config.get("state")
         if not isinstance(state_config, dict):
@@ -369,6 +371,9 @@ def main(argv: List[str] | None = None) -> int:
             "reason": reason,
             "notification_mode": notification.notification_mode,
             "source_counts": summary.source_counts,
+            "gate_pass_count": summary.gate_pass_count,
+            "hard_block_count": summary.hard_block_count,
+            "soft_penalty_count": summary.soft_penalty_count,
             "telegram_attempted": notification.telegram_attempted,
             "telegram_ok": notification.telegram_ok,
             "telegram_message_id": notification.telegram_message_id,

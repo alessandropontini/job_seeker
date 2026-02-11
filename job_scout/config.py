@@ -54,12 +54,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "channels": {
         "top_matches": {
             "top_n": 10,
-            "min_score": 0,
+            "min_score": 70,
             "include_missing_salary": True,
         },
         "data_only_best_picks": {
             "top_n": 10,
-            "min_score": 0,
+            "min_score": 40,
             "require_data_signal": True,
             "exclude_top_matches": True,
             "keywords": [
@@ -106,41 +106,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "duplicate_action": "skip",
     },
     "scoring": {
-        "base_score": 100,
-        "penalty_weights": {
-            "prefer_full_remote": 15,
-            "missing_salary": 10,
-            "unknown_location": 8,
-        },
-        "bonus_weights": {
-            "full_remote": 5,
-        },
-        "data_governance_boost": 20,
-        "data_governance_secondary_boost": 5,
-        "data_governance_keywords": [
-            "data governance",
-            "data management",
-            "data quality",
-            "data stewardship",
-            "metadata",
-            "data lineage",
-            "data catalog",
-            "data ownership",
-            "mdm",
-            "master data",
-            "reference data",
-            "bcbs 239",
-            "dama-dmbok",
-            "collibra",
-            "informatica",
-            "alation",
-            "microsoft purview",
-        ],
-        "data_governance_secondary_keywords": [
-            "bigquery",
-            "gcp",
-            "cloud data platform",
-        ],
+        "title_keywords_weight": 60,
+        "description_keywords_weight": 30,
+        "remote_bonus": 5,
+        "salary_bonus": 5,
     },
     "notifications": {
         "telegram": {

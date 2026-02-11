@@ -13,6 +13,7 @@ from job_scout.normalize import (
     parse_salary_range,
 )
 from job_scout.regions import RegionData, normalize_country
+from job_scout.targeting import has_negative_hard_block
 
 
 @dataclass(frozen=True)
@@ -175,6 +176,8 @@ def evaluate_hard_constraints(
             hard_reject_reasons.append("location_not_allowed")
 
     title_lower = posting.title.lower()
+    if has_negative_hard_block(posting):
+        hard_reject_reasons.append("negative_hard_block")
     if not any(target in title_lower for target in include_titles):
         hard_reject_reasons.append("title_not_targeted")
 

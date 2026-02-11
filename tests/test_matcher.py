@@ -8,6 +8,7 @@ from job_scout.matcher import match_posting
 from job_scout.models import JobPosting
 from job_scout.normalize import normalize_remote_level
 from job_scout.regions import load_region_data
+from job_scout.targeting import passes_core_gate
 
 
 @pytest.fixture()
@@ -406,3 +407,35 @@ def test_remote_level_onsite():
 
 def test_remote_level_unknown():
     assert normalize_remote_level("") == "unknown"
+
+
+def test_rejects_marketing_brand_titles_with_hard_block(base_config, region_data):
+    posting = _posting(
+        title="Senior Amazon Brand Manager",
+        description_snippet="Remote brand strategy",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "negative_hard_block" in result.reject_reasons
+
+
+def test_non_core_keyword_role_fails_channel_gate(base_config, region_data):
+    posting = _posting(
+        title="Engineering Manager",
+        description_snippet="Platform engineering leadership",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert passes_core_gate(posting) is False

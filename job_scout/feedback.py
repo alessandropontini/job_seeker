@@ -88,7 +88,8 @@ def build_callback_data(
 ) -> str:
     """Build compact callback data for Telegram feedback buttons."""
 
-    payload = f"fb|{run_id}|{short_id}|{action}|{job_hash}"
+    del job_hash
+    payload = f"fb|{run_id}|{action}|{short_id}"
     if len(payload.encode("utf-8")) > 64:
         raise ValueError("callback_data exceeds Telegram limit")
     return payload
@@ -484,12 +485,22 @@ def parse_callback_data(data: str) -> tuple[str, str, str, str] | None:
     if not data.startswith("fb|"):
         return None
     parts = data.split("|")
-    if len(parts) != 5:
-        return None
-    _, run_id, short_id, action, job_hash = parts
-    if not all((run_id, short_id, action, job_hash)):
-        return None
-    return run_id, short_id, action, job_hash
+    if len(parts) == 4:
+        _, run_id, action, short_id = parts
+        if not all((run_id, short_id, action)):
+            return None
+        return run_id, short_id, action, ""
+    if len(parts) == 5:
+        _, run_id, short_id, action, job_hash = parts
+        if not all((run_id, short_id, action, job_hash)):
+            return None
+        return run_id, short_id, action, job_hash
+    if len(parts) == 3:
+        _, run_id, action = parts
+        if not all((run_id, action)):
+            return None
+        return run_id, "legacy", action, ""
+    return None
 
 
 def session_storage_key(run_id: str) -> str:

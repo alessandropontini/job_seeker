@@ -7,6 +7,10 @@ from typing import Iterable, Mapping
 
 from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
+from job_scout.targeting import (
+    CORE_KEYWORDS,
+    has_negative_soft_penalty,
+)
 
 
 def apply_scoring(
@@ -37,61 +41,65 @@ def compute_score(
     if match.decision != "accepted":
         return None, [], []
 
-    scoring_rules = _as_dict(config.get("scoring"))
-    base_score = int(scoring_rules.get("base_score", 100))
-    penalty_weights = _parse_weights(scoring_rules.get("penalty_weights"))
-    bonus_weights = _parse_weights(scoring_rules.get("bonus_weights"))
-
-    applied_penalties = [
-        penalty
-        for penalty in match.penalties
-        if penalty in penalty_weights
-    ]
-
-    applied_bonuses: list[str] = []
-    location_rules = _as_dict(config.get("location_rules"))
-    prefer_full_remote = bool(location_rules.get("prefer_full_remote", False))
-    if (
-        prefer_full_remote
-        and match.remote_level == "full-remote"
-        and "full_remote" in bonus_weights
-    ):
-        applied_bonuses.append("full_remote")
-
-    score = base_score
-    for penalty in applied_penalties:
-        score -= penalty_weights[penalty]
-    for bonus in applied_bonuses:
-        score += bonus_weights[bonus]
-
-    data_governance_boost = _parse_int(
-        scoring_rules.get("data_governance_boost")
-    )
-    data_governance_secondary_boost = _parse_int(
-        scoring_rules.get("data_governance_secondary_boost")
-    )
     search_text = _build_search_text(posting)
-    primary_matches = _find_keywords(
-        search_text, scoring_rules.get("data_governance_keywords", [])
-    )
-    secondary_matches = _find_keywords(
-        search_text,
-        scoring_rules.get("data_governance_secondary_keywords", []),
-    )
-    if primary_matches and data_governance_boost:
-        score += data_governance_boost
+    title_text = posting.title.lower()
+    description_text = posting.description_snippet.lower()
+
+    title_matches = _find_keywords(title_text, CORE_KEYWORDS)
+    description_matches = _find_keywords(description_text, CORE_KEYWORDS)
+
+    score = 0
+    applied_penalties: list[str] = []
+    applied_bonuses: list[str] = []
+
+    if title_matches:
+        score += 60
         applied_bonuses.append(
-            _format_keyword_bonus("data_governance", primary_matches)
+            _format_keyword_bonus("title_keywords", title_matches)
         )
-    if secondary_matches and data_governance_secondary_boost:
-        score += data_governance_secondary_boost
+    if description_matches:
+        score += 30
         applied_bonuses.append(
             _format_keyword_bonus(
-                "data_governance_secondary", secondary_matches
+                "description_keywords", description_matches
             )
         )
 
-    return score, applied_penalties, applied_bonuses
+    if match.remote_level == "full-remote":
+        score += 5
+        applied_bonuses.append("remote_bonus")
+    if not match.missing_salary:
+        score += 5
+        applied_bonuses.append("salary_bonus")
+
+    gcp_matches = _find_keywords(search_text, ["gcp", "google cloud", "bigquery"])
+    governance_matches = _find_keywords(
+        search_text,
+        ["governance", "quality", "metadata", "lineage", "catalog"],
+    )
+    compliance_matches = _find_keywords(
+        search_text,
+        ["compliance", "controls", "policy", "standards"],
+    )
+    if gcp_matches:
+        score += 10
+        applied_bonuses.append(_format_keyword_bonus("gcp_stack", gcp_matches))
+    if governance_matches:
+        score += 15
+        applied_bonuses.append(
+            _format_keyword_bonus("governance_focus", governance_matches)
+        )
+    if compliance_matches:
+        score += 10
+        applied_bonuses.append(
+            _format_keyword_bonus("compliance_focus", compliance_matches)
+        )
+
+    if has_negative_soft_penalty(posting):
+        score -= 50
+        applied_penalties.append("negative_soft_penalty")
+
+    return max(score, 0), applied_penalties, applied_bonuses
 
 
 def _parse_weights(raw: object) -> dict[str, int]:
