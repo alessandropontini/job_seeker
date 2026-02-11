@@ -326,6 +326,7 @@ def main(argv: List[str] | None = None) -> int:
             preference_path=preference_path,
             run_mode=run_mode,
             force_send=force_send,
+            fetched_count=summary.fetched_count,
         )
         feedback_smoke = {"ok": False, "reason": "not_enabled"}
         if args.feedback_smoke_check or run_mode == "manual":
@@ -367,6 +368,12 @@ def main(argv: List[str] | None = None) -> int:
             "normalized_count": summary.normalized_count,
             "candidates_count": summary.candidates_count,
             "matches_count": summary.matches_count,
+            "digest_mode": notification.digest_mode,
+            "anti_zero_triggered": notification.anti_zero_triggered,
+            "threshold_initial": notification.threshold_initial,
+            "threshold_final": notification.threshold_final,
+            "min_results": notification.min_results,
+            "selected_count": notification.selected_count,
             "notified": "yes" if notification.notified else "no",
             "reason": reason,
             "notification_mode": notification.notification_mode,

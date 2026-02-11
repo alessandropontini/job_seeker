@@ -164,3 +164,14 @@
 - Phase 7 CV-driven targeting: enforced core keyword gate for TOP/DATA channels, hard-blocked marketing/brand titles, and added strong quant/trading soft penalties with rebalanced title/description-first scoring.
 - Phase 7 feedback durability: callback schema migrated to `fb|run|vote|short_job_id`, KV feedback keys changed to `feedback:<run_id>:<user_id>:<job_id>`, and `/feedback` now validated to return all per-job events for a run.
 - Added run summary counters (`gate_pass_count`, `hard_block_count`, `soft_penalty_count`) plus tests/docs updates for new targeting and feedback contracts.
+
+### Search Quality — PR #1 (complete)
+**Status:** ✅ Done
+
+**Shipped scope (P1: dynamic thresholding + fallback top-K anti-zero)**
+- Added pure digest selector `select_digest_items(...)` with configurable adaptive thresholding (`high_threshold` → `low_threshold`, fixed `step`).
+- Added anti-zero fallback top-K behavior (`LOW_CONFIDENCE`) to prevent empty digests when `fetched_count > 0`.
+- Added explicit digest mode labelling in Telegram (`TOP`, `ADAPTIVE`, `LOW_CONFIDENCE (anti-zero)`).
+- Extended `out/run_summary.json` diagnostics with digest mode and threshold metadata.
+- Annotated report output with digest mode + final threshold for quick triage.
+- Added pytest coverage for adaptive and low-confidence selection, scheduled `fetched_count==0` invariants, and run summary fields.

@@ -58,6 +58,56 @@ class NotificationResult:
     telegram_thread_id: int | None = None
     telegram_error_code: int | None = None
     telegram_description: str | None = None
+    digest_mode: str = "TOP"
+    anti_zero_triggered: bool = False
+    threshold_initial: int = 70
+    threshold_final: int = 70
+    min_results: int = 5
+    selected_count: int = 0
+
+
+def select_digest_items(
+    scored_jobs: Sequence[ReportRow],
+    fetched_count: int,
+    min_results: int,
+    high_threshold: int,
+    low_threshold: int,
+    step: int,
+) -> tuple[list[ReportRow], str, bool, int]:
+    """Select digest items with adaptive thresholding and anti-zero fallback."""
+
+    if fetched_count <= 0 or not scored_jobs:
+        return [], "TOP", False, high_threshold
+
+    sorted_jobs = sorted(
+        scored_jobs,
+        key=lambda row: (-(row.match.score or 0), row.posting.id),
+    )
+    target_results = max(min_results, 1)
+    floor_threshold = min(high_threshold, low_threshold)
+    step_size = max(step, 1)
+    threshold = high_threshold
+    mode = "TOP"
+
+    selected = [
+        row for row in sorted_jobs if (row.match.score or 0) >= threshold
+    ]
+    while len(selected) < target_results and threshold > floor_threshold:
+        threshold = max(floor_threshold, threshold - step_size)
+        selected = [
+            row
+            for row in sorted_jobs
+            if (row.match.score or 0) >= threshold
+        ]
+        mode = "ADAPTIVE"
+
+    anti_zero_triggered = False
+    if len(selected) < target_results and fetched_count > 0:
+        anti_zero_triggered = True
+        mode = "LOW_CONFIDENCE"
+        selected = sorted_jobs[: min(target_results, len(sorted_jobs))]
+
+    return selected, mode, anti_zero_triggered, threshold
 
 
 def maybe_notify(
@@ -69,6 +119,7 @@ def maybe_notify(
     preference_path: Path | None = None,
     run_mode: str = "scheduled",
     force_send: bool = False,
+    fetched_count: int | None = None,
 ) -> NotificationResult:
     """Send the daily digest notification for the current run."""
 
@@ -139,15 +190,58 @@ def maybe_notify(
             total_in_window = len(fallback_rows)
             digest_scope = "fallback_recent"
 
+    digest_settings = _as_dict(digest_config.get("selection"))
+    min_results = _parse_int(digest_settings.get("min_results", 5), 5)
+    high_threshold = _parse_int(
+        digest_settings.get("high_threshold", 70), 70
+    )
+    low_threshold = _parse_int(
+        digest_settings.get("low_threshold", 40), 40
+    )
+    threshold_step = _parse_int(digest_settings.get("step", 5), 5)
+    effective_fetched_count = fetched_count if fetched_count is not None else len(rows)
+
+    selection_pool = list(daily_rows)
+    if effective_fetched_count > 0 and not selection_pool:
+        selection_pool = [
+            row for row in rows if row.match.score is not None
+        ]
+        if selection_pool and digest_scope != "fallback_recent":
+            digest_scope = "fallback_recent"
+
+    selected_rows, digest_mode, anti_zero_triggered, final_threshold = (
+        select_digest_items(
+            selection_pool,
+            fetched_count=effective_fetched_count,
+            min_results=min_results,
+            high_threshold=high_threshold,
+            low_threshold=low_threshold,
+            step=threshold_step,
+        )
+    )
+    total_in_window = len(selected_rows)
+
     exclude_ids = set()
     if preference_profile:
         personalization = _as_dict(config.get("personalization"))
         if personalization.get("duplicate_action", "skip") == "skip":
             exclude_ids = preference_profile.duplicate_ids
     channel_selection = select_channels(
-        daily_rows,
+        selected_rows,
         config,
         exclude_ids=exclude_ids,
+    )
+    if anti_zero_triggered and not channel_selection.top_matches:
+        channel_selection = channel_selection.__class__(
+            top_matches=list(selected_rows),
+            data_only_best_picks=[],
+            data_only_reasons={},
+        )
+
+    _annotate_report_mode(
+        output_dir=output_dir,
+        digest_mode=digest_mode,
+        threshold_final=final_threshold,
     )
 
     digest = _format_dual_channel_digest(
@@ -156,6 +250,7 @@ def maybe_notify(
         total_in_window=total_in_window,
         window_hours=window_hours,
         digest_scope=digest_scope,
+        digest_mode=digest_mode,
         data_only_reasons=channel_selection.data_only_reasons,
     )
 
@@ -196,6 +291,11 @@ def maybe_notify(
         window_hours=window_hours,
         digest_scope=digest_scope,
         total_in_window=total_in_window,
+        digest_mode=digest_mode,
+        anti_zero_triggered=anti_zero_triggered,
+        threshold_initial=high_threshold,
+        threshold_final=final_threshold,
+        min_results=min_results,
         top_rows=channel_selection.top_matches,
         data_only_rows=channel_selection.data_only_best_picks,
         data_only_reasons=channel_selection.data_only_reasons,
@@ -245,6 +345,11 @@ def maybe_notify(
                 data_only_count=len(
                     channel_selection.data_only_best_picks
                 ),
+                digest_mode=digest_mode,
+                anti_zero_triggered=anti_zero_triggered,
+                threshold_initial=high_threshold,
+                threshold_final=final_threshold,
+                min_results=min_results,
             ),
             live_state=live_state_payload,
         )
@@ -261,6 +366,12 @@ def maybe_notify(
                 "timezone": timezone_name,
                 "reason": skip_reason,
             },
+            digest_mode=digest_mode,
+            anti_zero_triggered=anti_zero_triggered,
+            threshold_initial=high_threshold,
+            threshold_final=final_threshold,
+            min_results=min_results,
+            selected_count=len(notified_rows),
         )
 
     if not telegram_enabled and not dry_run:
@@ -278,6 +389,11 @@ def maybe_notify(
                 data_only_count=len(
                     channel_selection.data_only_best_picks
                 ),
+                digest_mode=digest_mode,
+                anti_zero_triggered=anti_zero_triggered,
+                threshold_initial=high_threshold,
+                threshold_final=final_threshold,
+                min_results=min_results,
             ),
             live_state=live_state_payload,
         )
@@ -290,6 +406,12 @@ def maybe_notify(
             window_start=window_start.isoformat(),
             window_end=now.isoformat(),
             diagnostics={"run_mode": run_mode, "timezone": timezone_name},
+            digest_mode=digest_mode,
+            anti_zero_triggered=anti_zero_triggered,
+            threshold_initial=high_threshold,
+            threshold_final=final_threshold,
+            min_results=min_results,
+            selected_count=len(notified_rows),
         )
 
     if run_mode == "scheduled" and not force_send and total_in_window == 0:
@@ -302,6 +424,11 @@ def maybe_notify(
                 total_in_window=total_in_window,
                 top_count=0,
                 data_only_count=0,
+                digest_mode=digest_mode,
+                anti_zero_triggered=anti_zero_triggered,
+                threshold_initial=high_threshold,
+                threshold_final=final_threshold,
+                min_results=min_results,
             ),
             live_state=live_state_payload,
         )
@@ -320,6 +447,12 @@ def maybe_notify(
             },
             telegram_attempted=False,
             telegram_ok=False,
+            digest_mode=digest_mode,
+            anti_zero_triggered=anti_zero_triggered,
+            threshold_initial=high_threshold,
+            threshold_final=final_threshold,
+            min_results=min_results,
+            selected_count=0,
         )
 
     message_payloads = _build_message_payloads(
@@ -329,6 +462,7 @@ def maybe_notify(
         total_in_window=total_in_window,
         window_hours=window_hours,
         digest_scope=digest_scope,
+        digest_mode=digest_mode,
         run_id=run_id,
         short_ids=short_ids,
         digest_hash=digest_hash,
@@ -452,6 +586,11 @@ def maybe_notify(
                     channel_selection.data_only_best_picks
                 ),
                 notified_count=len(notified_rows),
+                digest_mode=digest_mode,
+                anti_zero_triggered=anti_zero_triggered,
+                threshold_initial=high_threshold,
+                threshold_final=final_threshold,
+                min_results=min_results,
             ),
             live_state=live_state_payload,
         )
@@ -489,6 +628,11 @@ def maybe_notify(
                 data_only_count=len(
                     channel_selection.data_only_best_picks
                 ),
+                digest_mode=digest_mode,
+                anti_zero_triggered=anti_zero_triggered,
+                threshold_initial=high_threshold,
+                threshold_final=final_threshold,
+                min_results=min_results,
             ),
             live_state=live_state_payload,
         )
@@ -497,6 +641,8 @@ def maybe_notify(
         "timezone": timezone_name,
         "total_in_window": total_in_window,
         "digest_scope": digest_scope,
+        "digest_mode": digest_mode,
+        "threshold_final": final_threshold,
     }
     if chat_check_payload is not None:
         diagnostics["chat_check"] = chat_check_payload
@@ -518,6 +664,12 @@ def maybe_notify(
         telegram_thread_id=telegram_thread_id,
         telegram_error_code=telegram_error_code,
         telegram_description=telegram_description,
+        digest_mode=digest_mode,
+        anti_zero_triggered=anti_zero_triggered,
+        threshold_initial=high_threshold,
+        threshold_final=final_threshold,
+        min_results=min_results,
+        selected_count=len(notified_rows) if sent else 0,
     )
 
 
@@ -630,6 +782,7 @@ def _format_dual_channel_digest(
     total_in_window: int,
     window_hours: int,
     digest_scope: str,
+    digest_mode: str,
     data_only_reasons: Mapping[str, list[str]] | None = None,
 ) -> str:
     if total_in_window == 0:
@@ -645,6 +798,10 @@ def _format_dual_channel_digest(
         lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
         lines.append("Published yesterday")
         lines.append(f"Total in window: {total_in_window}")
+    mode_label = digest_mode
+    if digest_mode == "LOW_CONFIDENCE":
+        mode_label = "LOW_CONFIDENCE (anti-zero)"
+    lines.append(f"Mode: {mode_label}")
     if top_rows:
         lines.append("\nTop matches")
         for index, row in enumerate(top_rows, start=1):
@@ -905,6 +1062,11 @@ def _build_digest_payload(
     window_hours: int,
     digest_scope: str,
     total_in_window: int,
+    digest_mode: str,
+    anti_zero_triggered: bool,
+    threshold_initial: int,
+    threshold_final: int,
+    min_results: int,
     top_rows: Sequence[ReportRow],
     data_only_rows: Sequence[ReportRow],
     data_only_reasons: Mapping[str, list[str]] | None = None,
@@ -937,6 +1099,11 @@ def _build_digest_payload(
         "feedback_close_at": feedback_close_at,
         "window_hours": window_hours,
         "scope": digest_scope,
+        "digest_mode": digest_mode,
+        "anti_zero_triggered": anti_zero_triggered,
+        "threshold_initial": threshold_initial,
+        "threshold_final": threshold_final,
+        "min_results": min_results,
         "total_in_window": total_in_window,
         "top_matches_count": len(top_rows),
         "data_only_count": len(data_only_rows),
@@ -952,14 +1119,24 @@ def _build_run_summary(
     total_in_window: int,
     top_count: int,
     data_only_count: int,
+    digest_mode: str,
+    anti_zero_triggered: bool,
+    threshold_initial: int,
+    threshold_final: int,
+    min_results: int,
     notified_count: int = 0,
-) -> dict[str, int]:
+) -> dict[str, int | bool | str]:
     return {
         "total_in_window": total_in_window,
         "top_matches_count": top_count,
         "data_only_count": data_only_count,
         "digest_count": top_count + data_only_count,
         "notified_count": notified_count,
+        "digest_mode": digest_mode,
+        "anti_zero_triggered": anti_zero_triggered,
+        "threshold_initial": threshold_initial,
+        "threshold_final": threshold_final,
+        "min_results": min_results,
     }
 
 def _assign_short_ids(rows: Sequence[ReportRow]) -> dict[str, str]:
@@ -979,6 +1156,7 @@ def _build_message_payloads(
     total_in_window: int,
     window_hours: int,
     digest_scope: str,
+    digest_mode: str,
     run_id: str,
     short_ids: Mapping[str, str],
     digest_hash: str,
@@ -1004,6 +1182,7 @@ def _build_message_payloads(
                     total_in_window=total_in_window,
                     window_hours=window_hours,
                     digest_scope=digest_scope,
+                    digest_mode=digest_mode,
                 )
             }
         )
@@ -1016,6 +1195,7 @@ def _build_message_payloads(
                     total_in_window=total_in_window,
                     window_hours=window_hours,
                     digest_scope=digest_scope,
+                    digest_mode=digest_mode,
                     data_only_reasons=data_only_reasons,
                 )
             }
@@ -1046,16 +1226,25 @@ def _build_message_payloads(
 
 
 def _format_digest_header(
-    *, total_in_window: int, window_hours: int, digest_scope: str
+    *,
+    total_in_window: int,
+    window_hours: int,
+    digest_scope: str,
+    digest_mode: str,
 ) -> str:
+    mode_label = digest_mode
+    if digest_mode == "LOW_CONFIDENCE":
+        mode_label = "LOW_CONFIDENCE (anti-zero)"
     if digest_scope == "fallback_recent":
         return (
             "Job Scout — Daily Digest (fallback)\n"
-            f"Total in digest: {total_in_window}"
+            f"Total in digest: {total_in_window}\n"
+            f"Mode: {mode_label}"
         )
     return (
         f"Job Scout — Daily Digest (last {window_hours}h)\n"
-        f"Total in window: {total_in_window}"
+        f"Total in window: {total_in_window}\n"
+        f"Mode: {mode_label}"
     )
 
 
@@ -1135,6 +1324,24 @@ def _persist_payload(
         ),
         encoding="utf-8",
     )
+
+
+def _annotate_report_mode(
+    *, output_dir: Path, digest_mode: str, threshold_final: int
+) -> None:
+    report_path = output_dir / "report.md"
+    if not report_path.exists():
+        return
+    current = report_path.read_text(encoding="utf-8")
+    mode_label = digest_mode
+    if digest_mode == "LOW_CONFIDENCE":
+        mode_label = "LOW_CONFIDENCE (anti-zero)"
+    annotation = (
+        f"Digest mode: {mode_label} | Threshold final: {threshold_final}\n\n"
+    )
+    if current.startswith(annotation):
+        return
+    report_path.write_text(annotation + current, encoding="utf-8")
 
 
 def _write_telegram_send_response(
