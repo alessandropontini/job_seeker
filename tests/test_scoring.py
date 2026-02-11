@@ -13,22 +13,22 @@ def _posting(**overrides) -> JobPosting:
         id="score-1",
         source="dummy",
         company="Example Co",
-        title="Engineering Manager",
+        title="Data Governance Manager",
         location_text="Rome, Italy",
         location_country="Italy",
         remote_type="full-remote",
         url="https://example.com/job",
         posted_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        salary_text=None,
-        currency=None,
+        salary_text="€80k-€95k",
+        currency="EUR",
         tags=[],
-        description_snippet="Example",
+        description_snippet="Data quality and metadata strategy on GCP BigQuery.",
     )
     data.update(overrides)
     return JobPosting(**data)
 
 
-def test_scoring_applies_penalties_and_bonuses():
+def test_scoring_prioritizes_title_and_description_keywords():
     config = deepcopy(DEFAULT_CONFIG)
     posting = _posting()
     region_data = load_region_data("config/regions.json")
@@ -41,14 +41,16 @@ def test_scoring_applies_penalties_and_bonuses():
     )
     scored = apply_scoring(posting, match, config)
 
-    assert scored.score == 95
-    assert scored.score_penalties == ["missing_salary"]
-    assert scored.score_bonuses == ["full_remote"]
+    assert scored.score and scored.score >= 100
+    assert any(bonus.startswith("title_keywords:") for bonus in scored.score_bonuses)
+    assert any(
+        bonus.startswith("description_keywords:") for bonus in scored.score_bonuses
+    )
 
 
 def test_scoring_skips_rejected_postings():
     config = deepcopy(DEFAULT_CONFIG)
-    posting = _posting(title="Senior Engineer")
+    posting = _posting(title="Senior Engineer", description_snippet="backend")
     region_data = load_region_data("config/regions.json")
     _, match = match_posting(
         posting,
@@ -64,14 +66,11 @@ def test_scoring_skips_rejected_postings():
     assert scored.score_bonuses == []
 
 
-def test_scoring_applies_data_governance_boost():
+def test_quantitative_title_gets_soft_penalty_and_is_not_top_score():
     config = deepcopy(DEFAULT_CONFIG)
-    config["scoring"]["data_governance_boost"] = 25
     posting = _posting(
-        title="Data Governance Manager",
-        description_snippet="Own Collibra policies and metadata stewardship.",
-        salary_text="€90k-€110k",
-        currency="EUR",
+        title="Quantitative Research Team Lead",
+        description_snippet="Lead quantitative research for trading portfolios.",
     )
     region_data = load_region_data("config/regions.json")
     _, match = match_posting(
@@ -83,8 +82,6 @@ def test_scoring_applies_data_governance_boost():
     )
     scored = apply_scoring(posting, match, config)
 
-    assert scored.score == 130
-    assert any(
-        bonus.startswith("data_governance:")
-        for bonus in scored.score_bonuses
-    )
+    assert "negative_soft_penalty" in scored.score_penalties
+    assert scored.score is not None
+    assert scored.score < 70

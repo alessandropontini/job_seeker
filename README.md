@@ -71,13 +71,10 @@ Key sections:
 - `personalization.enabled`: toggle preference learning (default: `false`).
 - `personalization.profile_path`: preference profile location (default: `out/preferences.json`).
 - `personalization.*_step`: per-feedback weight deltas for tokens, tags, remote level, seniority.
-- `scoring.base_score`: starting score for accepted postings.
-- `scoring.penalty_weights`: per-penalty score deductions (e.g., `prefer_full_remote`).
-- `scoring.bonus_weights`: per-bonus score additions (e.g., `full_remote`).
-- `scoring.data_governance_boost`: bonus score for data governance keyword matches.
-- `scoring.data_governance_keywords`: primary keyword list for data governance boosts.
-- `scoring.data_governance_secondary_boost`: smaller bonus for secondary keywords.
-- `scoring.data_governance_secondary_keywords`: secondary keyword list (cloud platform signals).
+- `scoring.title_keywords_weight`: title keyword weight (default 60).
+- `scoring.description_keywords_weight`: description keyword weight (default 30).
+- `scoring.remote_bonus`: full-remote bonus (default 5).
+- `scoring.salary_bonus`: salary-known bonus (default 5).
 - `notifications.telegram.enabled`: Telegram is always-on in production (defaults to true).
 - `notifications.telegram.top_n`: fallback max items per digest.
 - `notifications.telegram.min_score`: minimum score required to notify.
@@ -425,7 +422,7 @@ Security note: the workflow reads `TELEGRAM_BOT_TOKEN` from GitHub Secrets and n
 **Manual feedback verification**
 1. Run the dummy E2E pipeline (see above) to send a Telegram digest with inline feedback buttons.
 2. Tap 👍/👎/⭐/🧻 and confirm the spinner disappears immediately with a “Feedback salvato” toast.
-3. In Cloudflare KV, verify a key like `feedback:<run_id>:<short_id>:<user_id>` was created/updated.
+3. In Cloudflare KV, verify keys like `feedback:<run_id>:<user_id>:<short_id>` are created per click (multiple jobs in same run must produce multiple keys).
 
 **Worker logs (Observability)**
 1. Open **Workers & Pages → job-scout-telegram-feedback → Observability → Events/Logs**.
@@ -588,7 +585,7 @@ Scheduled runs continue to evaluate **yesterday in Europe/Rome** and preserve de
 - **08:00 didn’t trigger**: schedule uses dual UTC cron (06:00/07:00) plus a Rome time gate (`hour==08`) to handle CET/CEST.
 - **0 offers / no message**: inspect `out/run_summary.json` (`reason`, counts, window, timezone, source).
 - **Feedback button issues**:
-  - Verify `out/telegram_payload.json` exists and callback payloads follow `fb|run_id|short_id|action|job_hash`.
+  - Verify `out/telegram_payload.json` exists and callback payloads follow `fb|run_id|vote|short_job_id` (<=64 bytes). Legacy payloads are still parsed for backward compatibility.
   - Callback data is validated at build time to remain `<=64` bytes.
   - Verify worker registration diagnostics in `out/feedback_registration_result.log` (`/window/open`) and fetch status in `run_summary.json` (`fetch_feedback`).
 
@@ -609,3 +606,19 @@ Troubleshooting rapido quando “non vedo messaggi”:
 2. Controlla `telegram_attempted/telegram_ok`.
 3. Se `telegram_ok=false`, leggi `telegram_error_code` + `telegram_description` e `telegram_send_response.json`.
 4. Se chat forum (`is_forum=true`) e manca thread, vedrai `warning_missing_thread_id` in `run_summary` (manual).
+
+
+## CV-driven matching gates
+- TOP_MATCHES and DATA_ONLY_BEST_PICKS now require a core data-governance keyword gate (`data governance`, `data quality`, `metadata`, `data platform`, `gcp`, `bigquery`, etc.).
+- Hard-blocked titles (`brand manager`, `marketing`, `growth`, `sales`, `seo`, `paid media`) are rejected with `negative_hard_block`.
+- Quant/trading-like titles (`quantitative`, `trading`, `hedge fund`, `portfolio`) receive `negative_soft_penalty` and are strongly de-ranked.
+- Channel thresholds are now strict by default: TOP_MATCHES `score >= 70`, DATA_ONLY_BEST_PICKS `score >= 40`.
+
+### Feedback callback schema
+- Primary schema: `fb|<run_id>|<vote>|<short_job_id>` (kept under 64 bytes).
+- Backward compatible parsing supports old 5-part callbacks and legacy 3-part callbacks; legacy callbacks can be stored with a less granular key and may not guarantee multi-click uniqueness.
+- `fetch_feedback(run_id)` returns all click events collected under `feedback:<run_id>:*`.
+
+### Troubleshooting (multi-click feedback)
+- If you click feedback on 2 different jobs in the same digest, `/feedback` for that `run_id` must return 2 events.
+- If only 1 event appears, inspect callback payload format and KV keys to ensure `job_short_id` is present in the callback.

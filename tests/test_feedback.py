@@ -193,6 +193,11 @@ def test_callback_roundtrip_uses_worker_session_key_contract():
     payload = build_callback_data(run_id, short_id, action, job_hash)
     parsed = parse_callback_data(payload)
 
-    assert parsed == (run_id, short_id, action, job_hash)
+    assert parsed == (run_id, short_id, action, "")
     assert session_storage_key(parsed[0]) == f"session:{run_id}"
 
+
+
+def test_parse_callback_data_legacy_contract_supported():
+    parsed = parse_callback_data("fb|run123|L")
+    assert parsed == ("run123", "legacy", "L", "")

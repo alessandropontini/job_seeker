@@ -606,7 +606,7 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
       telegram_update_type: telegramUpdateType,
     };
   }
-  const { runId, jobShortId, action, jobHash } = parsed;
+  const { runId, jobShortId, action, jobHash, legacy } = parsed;
   const sessionKey = `session:${runId}`;
   logInfo("kv_read", { ...baseLog, kv_key: sessionKey });
   const windowRaw = await env.JOB_SCOUT_KV.get(sessionKey, "json");
@@ -669,7 +669,7 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   }
   const jobs = Array.isArray(windowRaw.jobs) ? windowRaw.jobs : [];
   const jobEntry = jobs.find((job) => job?.short_id === jobShortId);
-  if (!jobEntry || jobEntry?.job_hash !== jobHash) {
+  if (!jobEntry || (jobHash && jobEntry?.job_hash !== jobHash)) {
     scheduleAnswer(env, ctx, callback.id, "Job non riconosciuto");
     logWarn("telegram_webhook_rejected", {
       ...baseLog,
@@ -688,7 +688,9 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   }
   const userId = callback.from?.id ?? "unknown";
   const messageId = callback.message?.message_id ?? null;
-  const key = `feedback:${runId}:${jobShortId}:${userId}`;
+  const key = legacy
+    ? `feedback:${runId}:${userId}`
+    : `feedback:${runId}:${userId}:${jobShortId}`;
   const value = buildFeedbackValue({
     runId,
     action,
@@ -991,17 +993,28 @@ export function parseCallbackData(data) {
     return null;
   }
   const parts = data.split("|");
-  if (parts.length !== 5) {
-    return null;
+  if (parts.length === 4) {
+    const [_, runId, action, jobShortId] = parts;
+    if (!runId || !jobShortId || !action || !isValidAction(action)) {
+      return null;
+    }
+    return { runId, jobShortId, action, jobHash: "", legacy: false };
   }
-  const [_, runId, jobShortId, action, jobHash] = parts;
-  if (!runId || !jobShortId || !action || !jobHash) {
-    return null;
+  if (parts.length === 5) {
+    const [_, runId, jobShortId, action, jobHash] = parts;
+    if (!runId || !jobShortId || !action || !jobHash || !isValidAction(action)) {
+      return null;
+    }
+    return { runId, jobShortId, action, jobHash, legacy: false };
   }
-  if (!isValidAction(action)) {
-    return null;
+  if (parts.length === 3) {
+    const [_, runId, action] = parts;
+    if (!runId || !action || !isValidAction(action)) {
+      return null;
+    }
+    return { runId, jobShortId: "legacy", action, jobHash: "", legacy: true };
   }
-  return { runId, jobShortId, action, jobHash };
+  return null;
 }
 
 export function hasAlreadySentForDate(lastSentDate, targetDateRome) {
@@ -1179,7 +1192,8 @@ function jsonResponse(payload, status = 200) {
 }
 
 function buildCallbackData(runId, jobShortId, action, jobHash) {
-  const payload = `fb|${runId}|${jobShortId}|${action}|${jobHash}`;
+  void jobHash;
+  const payload = `fb|${runId}|${action}|${jobShortId}`;
   if (new TextEncoder().encode(payload).length > 64) {
     throw new Error("callback_data exceeds Telegram limit");
   }

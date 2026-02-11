@@ -17,6 +17,7 @@ from job_scout.preferences import PreferenceProfile, apply_preferences
 from job_scout.regions import load_region_data
 from job_scout.sources import AVAILABLE_SOURCES
 from job_scout.scoring import apply_scoring
+from job_scout.targeting import passes_core_gate
 from job_scout.writers import ReportRow, SourceStatus, write_reports
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,9 @@ class PipelineSummary:
     candidates_count: int
     matches_count: int
     source_counts: dict[str, int]
+    gate_pass_count: int = 0
+    hard_block_count: int = 0
+    soft_penalty_count: int = 0
 
 
 def _resolve_sources(selected: Iterable[str] | None) -> list[str]:
@@ -175,11 +179,21 @@ def run_pipeline(
         source_statuses=source_statuses,
     )
     logger.info("Wrote reports to %s", output_dir)
+    gate_pass_count = sum(1 for row in all_rows if passes_core_gate(row.posting))
+    hard_block_count = sum(
+        1 for row in all_rows if "negative_hard_block" in row.match.reject_reasons
+    )
+    soft_penalty_count = sum(
+        1 for row in all_rows if "negative_soft_penalty" in row.match.score_penalties
+    )
     summary = PipelineSummary(
         fetched_count=fetched_total,
         normalized_count=normalized_total,
         candidates_count=len(matches) + len(missing_salary_allowed),
         matches_count=len(matches),
         source_counts=source_counts,
+        gate_pass_count=gate_pass_count,
+        hard_block_count=hard_block_count,
+        soft_penalty_count=soft_penalty_count,
     )
     return all_rows, summary
