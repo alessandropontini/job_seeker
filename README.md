@@ -259,12 +259,13 @@ help you pinpoint the issue:
 
 
 ## Digest anti-zero behavior (P1)
-- The Telegram digest now guarantees non-empty output whenever `fetched_count > 0`.
+- The Telegram digest now guarantees non-empty output in `run_mode=manual` with `force_send=true` whenever `fetched_count > 0` and at least one candidate survives hard filters.
+- Candidate pool is built **after hard filters only** (for example: excluded country, invalid hard blocks). Soft gates like `title_not_targeted` do not zero the pool in P1.
 - Selection starts in **TOP** mode at `high_threshold` and keeps only jobs above that score.
 - If fewer than `min_results` jobs are available, thresholding automatically relaxes in `step` increments down to `low_threshold` (**ADAPTIVE** mode).
 - If results are still below `min_results`, the system sends the best available jobs by score (**LOW_CONFIDENCE (anti-zero)** mode).
 - The selected mode is shown in Telegram headers/messages (`Mode: TOP`, `Mode: ADAPTIVE`, `Mode: LOW_CONFIDENCE (anti-zero)`).
-- Runtime diagnostics are persisted in `out/run_summary.json` via `digest_mode`, `anti_zero_triggered`, `threshold_initial`, `threshold_final`, `min_results`, and `selected_count`.
+- Runtime diagnostics are persisted in `out/run_summary.json` via `digest_mode`, `anti_zero_triggered`, `threshold_initial`, `threshold_final`, `min_results`, `selected_count`, and `reason_when_zero` (`no_candidates_after_hard_filters` or `fetched_count_zero`).
 
 ## Outputs
 The pipeline writes reports to `out/`:

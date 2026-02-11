@@ -38,6 +38,8 @@ from job_scout.writers import ReportRow
 
 logger = logging.getLogger(__name__)
 
+_CANDIDATE_SOFT_REJECT_REASONS = {"title_not_targeted"}
+
 
 @dataclass(frozen=True)
 class NotificationResult:
@@ -64,23 +66,26 @@ class NotificationResult:
     threshold_final: int = 70
     min_results: int = 5
     selected_count: int = 0
+    reason_when_zero: str | None = None
 
 
 def select_digest_items(
-    scored_jobs: Sequence[ReportRow],
+    candidates_scored: Sequence[ReportRow],
     fetched_count: int,
     min_results: int,
     high_threshold: int,
     low_threshold: int,
     step: int,
-) -> tuple[list[ReportRow], str, bool, int]:
+    force_send: bool,
+    run_mode: str,
+) -> tuple[list[ReportRow], str, bool, int, int]:
     """Select digest items with adaptive thresholding and anti-zero fallback."""
 
-    if fetched_count <= 0 or not scored_jobs:
-        return [], "TOP", False, high_threshold
+    if fetched_count <= 0 or not candidates_scored:
+        return [], "TOP", False, high_threshold, 0
 
     sorted_jobs = sorted(
-        scored_jobs,
+        candidates_scored,
         key=lambda row: (-(row.match.score or 0), row.posting.id),
     )
     target_results = max(min_results, 1)
@@ -107,7 +112,18 @@ def select_digest_items(
         mode = "LOW_CONFIDENCE"
         selected = sorted_jobs[: min(target_results, len(sorted_jobs))]
 
-    return selected, mode, anti_zero_triggered, threshold
+    if (
+        fetched_count > 0
+        and run_mode == "manual"
+        and force_send
+        and not selected
+        and sorted_jobs
+    ):
+        anti_zero_triggered = True
+        mode = "LOW_CONFIDENCE"
+        selected = sorted_jobs[:1]
+
+    return selected, mode, anti_zero_triggered, threshold, len(selected)
 
 
 def maybe_notify(
@@ -201,15 +217,28 @@ def maybe_notify(
     threshold_step = _parse_int(digest_settings.get("step", 5), 5)
     effective_fetched_count = fetched_count if fetched_count is not None else len(rows)
 
-    selection_pool = list(daily_rows)
+    hard_filtered_candidates = [
+        row
+        for row in rows
+        if _is_candidate_after_hard_filters(row)
+    ]
+    selection_pool = [
+        row for row in daily_rows if _is_candidate_after_hard_filters(row)
+    ]
     if effective_fetched_count > 0 and not selection_pool:
         selection_pool = [
-            row for row in rows if row.match.score is not None
+            row for row in hard_filtered_candidates if row.match.score is not None
         ]
         if selection_pool and digest_scope != "fallback_recent":
             digest_scope = "fallback_recent"
 
-    selected_rows, digest_mode, anti_zero_triggered, final_threshold = (
+    (
+        selected_rows,
+        digest_mode,
+        anti_zero_triggered,
+        final_threshold,
+        selected_count,
+    ) = (
         select_digest_items(
             selection_pool,
             fetched_count=effective_fetched_count,
@@ -217,9 +246,18 @@ def maybe_notify(
             high_threshold=high_threshold,
             low_threshold=low_threshold,
             step=threshold_step,
+            force_send=force_send,
+            run_mode=run_mode,
         )
     )
     total_in_window = len(selected_rows)
+
+    reason_when_zero = None
+    if selected_count == 0:
+        if effective_fetched_count <= 0:
+            reason_when_zero = "fetched_count_zero"
+        elif not hard_filtered_candidates:
+            reason_when_zero = "no_candidates_after_hard_filters"
 
     exclude_ids = set()
     if preference_profile:
@@ -350,6 +388,7 @@ def maybe_notify(
                 threshold_initial=high_threshold,
                 threshold_final=final_threshold,
                 min_results=min_results,
+                reason_when_zero=reason_when_zero,
             ),
             live_state=live_state_payload,
         )
@@ -371,7 +410,8 @@ def maybe_notify(
             threshold_initial=high_threshold,
             threshold_final=final_threshold,
             min_results=min_results,
-            selected_count=len(notified_rows),
+            selected_count=selected_count,
+            reason_when_zero=reason_when_zero,
         )
 
     if not telegram_enabled and not dry_run:
@@ -394,6 +434,7 @@ def maybe_notify(
                 threshold_initial=high_threshold,
                 threshold_final=final_threshold,
                 min_results=min_results,
+                reason_when_zero=reason_when_zero,
             ),
             live_state=live_state_payload,
         )
@@ -411,7 +452,8 @@ def maybe_notify(
             threshold_initial=high_threshold,
             threshold_final=final_threshold,
             min_results=min_results,
-            selected_count=len(notified_rows),
+            selected_count=selected_count,
+            reason_when_zero=reason_when_zero,
         )
 
     if run_mode == "scheduled" and not force_send and total_in_window == 0:
@@ -429,6 +471,7 @@ def maybe_notify(
                 threshold_initial=high_threshold,
                 threshold_final=final_threshold,
                 min_results=min_results,
+                reason_when_zero=reason_when_zero,
             ),
             live_state=live_state_payload,
         )
@@ -452,7 +495,8 @@ def maybe_notify(
             threshold_initial=high_threshold,
             threshold_final=final_threshold,
             min_results=min_results,
-            selected_count=0,
+            selected_count=selected_count,
+            reason_when_zero=reason_when_zero,
         )
 
     message_payloads = _build_message_payloads(
@@ -470,6 +514,7 @@ def maybe_notify(
         send_per_job=send_per_job,
         run_mode=run_mode,
         force_send=force_send,
+        reason_when_zero=reason_when_zero,
     )
     _persist_payload(
         output_dir=output_dir,
@@ -591,6 +636,7 @@ def maybe_notify(
                 threshold_initial=high_threshold,
                 threshold_final=final_threshold,
                 min_results=min_results,
+                reason_when_zero=reason_when_zero,
             ),
             live_state=live_state_payload,
         )
@@ -633,6 +679,7 @@ def maybe_notify(
                 threshold_initial=high_threshold,
                 threshold_final=final_threshold,
                 min_results=min_results,
+                reason_when_zero=reason_when_zero,
             ),
             live_state=live_state_payload,
         )
@@ -669,7 +716,8 @@ def maybe_notify(
         threshold_initial=high_threshold,
         threshold_final=final_threshold,
         min_results=min_results,
-        selected_count=len(notified_rows) if sent else 0,
+        selected_count=selected_count,
+        reason_when_zero=reason_when_zero,
     )
 
 
@@ -1124,9 +1172,10 @@ def _build_run_summary(
     threshold_initial: int,
     threshold_final: int,
     min_results: int,
+    reason_when_zero: str | None = None,
     notified_count: int = 0,
 ) -> dict[str, int | bool | str]:
-    return {
+    summary: dict[str, int | bool | str] = {
         "total_in_window": total_in_window,
         "top_matches_count": top_count,
         "data_only_count": data_only_count,
@@ -1138,6 +1187,17 @@ def _build_run_summary(
         "threshold_final": threshold_final,
         "min_results": min_results,
     }
+    if reason_when_zero:
+        summary["reason_when_zero"] = reason_when_zero
+    return summary
+
+
+def _is_candidate_after_hard_filters(row: ReportRow) -> bool:
+    """Return True when a row survives hard filters for digest candidate pool."""
+
+    reasons = set(row.match.reject_reasons or [])
+    reasons.difference_update(_CANDIDATE_SOFT_REJECT_REASONS)
+    return not reasons
 
 def _assign_short_ids(rows: Sequence[ReportRow]) -> dict[str, str]:
     used: set[str] = set()
@@ -1164,11 +1224,15 @@ def _build_message_payloads(
     send_per_job: bool,
     run_mode: str,
     force_send: bool,
+    reason_when_zero: str | None = None,
 ) -> list[dict[str, object]]:
     if total_in_window == 0:
+        headline = "No matches today."
+        if reason_when_zero == "no_candidates_after_hard_filters":
+            headline = "No candidates after hard filters."
         return [{
             "text": (
-                "No matches today.\n"
+                f"{headline}\n"
                 f"run_mode={run_mode} force_send={str(force_send).lower()}\n"
                 f"total_in_window={total_in_window} top_matches=0 data_only=0\n"
                 "Diagnostics: check out/run_summary.json artifact."

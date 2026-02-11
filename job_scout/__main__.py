@@ -396,6 +396,9 @@ def main(argv: List[str] | None = None) -> int:
             },
             "feedback_smoke_check": feedback_smoke,
         }
+        if notification.selected_count == 0 and notification.reason_when_zero:
+            run_summary["reason_when_zero"] = notification.reason_when_zero
+
         chat_check = (notification.diagnostics or {}).get("chat_check")
         if isinstance(chat_check, dict):
             run_summary["telegram_chat_check"] = chat_check

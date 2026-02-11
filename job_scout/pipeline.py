@@ -22,6 +22,8 @@ from job_scout.writers import ReportRow, SourceStatus, write_reports
 
 logger = logging.getLogger(__name__)
 
+_CANDIDATE_SOFT_REJECT_REASONS = {"title_not_targeted"}
+
 
 @dataclass(frozen=True)
 class PipelineSummary:
@@ -186,10 +188,15 @@ def run_pipeline(
     soft_penalty_count = sum(
         1 for row in all_rows if "negative_soft_penalty" in row.match.score_penalties
     )
+    candidates_count = sum(
+        1
+        for row in all_rows
+        if not _is_hard_blocked_candidate(row)
+    )
     summary = PipelineSummary(
         fetched_count=fetched_total,
         normalized_count=normalized_total,
-        candidates_count=len(matches) + len(missing_salary_allowed),
+        candidates_count=candidates_count,
         matches_count=len(matches),
         source_counts=source_counts,
         gate_pass_count=gate_pass_count,
@@ -197,3 +204,11 @@ def run_pipeline(
         soft_penalty_count=soft_penalty_count,
     )
     return all_rows, summary
+
+
+def _is_hard_blocked_candidate(row: ReportRow) -> bool:
+    """Return True when a row is rejected by hard blockers only."""
+
+    reasons = set(row.match.reject_reasons or [])
+    reasons.difference_update(_CANDIDATE_SOFT_REJECT_REASONS)
+    return bool(reasons)
