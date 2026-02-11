@@ -175,3 +175,20 @@
 - Extended `out/run_summary.json` diagnostics with digest mode and threshold metadata.
 - Annotated report output with digest mode + final threshold for quick triage.
 - Added pytest coverage for adaptive and low-confidence selection, scheduled `fetched_count==0` invariants, and run summary fields.
+
+### Search Quality — PR #1 FIX (anti-zero candidate-pool bug)
+**Status:** ✅ Done
+
+**Shipped scope (PR1-FIX)**
+- Fixed the PR1 architectural bug where `candidates_count=0` prevented anti-zero from triggering even with `fetched_count>0`.
+- Split flow explicitly into: hard filtering → candidate pool → selection (`TOP`/`ADAPTIVE`/`LOW_CONFIDENCE`).
+- Candidate pool now reflects rows that survive hard filters (soft gate `title_not_targeted` no longer empties candidates in this phase).
+- Dynamic thresholding now runs on candidate pool and can relax down to `low_threshold` before top-K fallback.
+- Added explicit zero-result reasons in summary: `no_candidates_after_hard_filters`, `fetched_count_zero`.
+
+### Next: P4 Multi-source to increase volume
+- RemoteOK (API)
+- WeWorkRemotely (RSS)
+- Arbeitnow (API)
+
+Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).

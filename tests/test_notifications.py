@@ -43,6 +43,40 @@ def _make_row(job_id: str, score: int, penalties: list[str]) -> ReportRow:
     return ReportRow(posting=posting, match=match)
 
 
+
+
+def _make_rejected_row(job_id: str, reason: str) -> ReportRow:
+    posting = JobPosting(
+        id=job_id,
+        source="dummy",
+        company="Nimbus",
+        title=f"Role {job_id}",
+        location_text="London, UK",
+        location_country="United Kingdom",
+        remote_type="hybrid",
+        url=f"https://example.com/{job_id}",
+        posted_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        salary_text="€45,000 - €50,000",
+        currency="EUR",
+        tags=[],
+    )
+    match = MatchResult(
+        matches_all=False,
+        decision="rejected",
+        hard_reject_reasons=[reason],
+        penalties=[],
+        missing_fields=[],
+        reject_reasons=[reason],
+        missing_salary=False,
+        salary_min_eur=45000,
+        salary_max_eur=50000,
+        remote_level="hybrid",
+        score=None,
+        score_penalties=[],
+        score_bonuses=[],
+    )
+    return ReportRow(posting=posting, match=match)
+
 def test_dual_channel_digest_includes_sections():
     top_row = _make_row("alpha", 110, [])
     data_row = _make_row("beta", 90, ["prefer_full_remote"])
@@ -76,7 +110,7 @@ def test_select_digest_items_adaptive_or_low_confidence():
         _make_row("zeta", 52, []),
     ]
 
-    selected, mode, anti_zero_triggered, final_threshold = (
+    selected, mode, anti_zero_triggered, final_threshold, selected_count = (
         notifications.select_digest_items(
             scored_jobs,
             fetched_count=8,
@@ -84,6 +118,8 @@ def test_select_digest_items_adaptive_or_low_confidence():
             high_threshold=70,
             low_threshold=40,
             step=5,
+            force_send=True,
+            run_mode="manual",
         )
     )
 
@@ -91,6 +127,7 @@ def test_select_digest_items_adaptive_or_low_confidence():
     assert mode in {"ADAPTIVE", "LOW_CONFIDENCE"}
     assert final_threshold <= 70
     assert anti_zero_triggered is (mode == "LOW_CONFIDENCE")
+    assert selected_count == len(selected)
 
 
 def test_select_digest_items_low_confidence_with_few_rows():
@@ -99,7 +136,7 @@ def test_select_digest_items_low_confidence_with_few_rows():
         _make_row("beta", 32, []),
     ]
 
-    selected, mode, anti_zero_triggered, _final_threshold = (
+    selected, mode, anti_zero_triggered, _final_threshold, _selected_count = (
         notifications.select_digest_items(
             scored_jobs,
             fetched_count=2,
@@ -107,6 +144,8 @@ def test_select_digest_items_low_confidence_with_few_rows():
             high_threshold=70,
             low_threshold=40,
             step=5,
+            force_send=True,
+            run_mode="manual",
         )
     )
 
@@ -114,6 +153,34 @@ def test_select_digest_items_low_confidence_with_few_rows():
     assert mode == "LOW_CONFIDENCE"
     assert anti_zero_triggered is True
 
+
+
+
+def test_select_digest_items_top_mode_when_threshold_met():
+    scored_jobs = [
+        _make_row("alpha", 95, []),
+        _make_row("beta", 88, []),
+        _make_row("gamma", 72, []),
+    ]
+
+    selected, mode, anti_zero_triggered, final_threshold, selected_count = (
+        notifications.select_digest_items(
+            scored_jobs,
+            fetched_count=3,
+            min_results=2,
+            high_threshold=70,
+            low_threshold=40,
+            step=5,
+            force_send=True,
+            run_mode="manual",
+        )
+    )
+
+    assert len(selected) == 3
+    assert selected_count == 3
+    assert mode == "TOP"
+    assert anti_zero_triggered is False
+    assert final_threshold == 70
 
 def test_dedupe_skips_duplicate_digest(tmp_path, monkeypatch):
     fixed_now = datetime(2024, 2, 5, 8, 0, tzinfo=timezone.utc)
@@ -331,6 +398,30 @@ def test_manual_mode_forces_no_match_diagnostic_payload(tmp_path):
     assert result.notified is True
     assert "No matches today" in payload["messages"][0]["text"]
 
+
+
+
+def test_manual_mode_reports_no_candidates_after_hard_filters(tmp_path):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+
+    rejected_row = _make_rejected_row("hard-blocked", "excluded_country")
+    result = notifications.maybe_notify(
+        [rejected_row],
+        output_dir,
+        config,
+        run_mode="manual",
+        force_send=True,
+        fetched_count=1,
+    )
+
+    payload = json.loads((output_dir / "telegram_payload.json").read_text(encoding="utf-8"))
+    assert result.selected_count == 0
+    assert result.reason_when_zero == "no_candidates_after_hard_filters"
+    assert "No candidates after hard filters" in payload["messages"][0]["text"]
 
 def test_telegram_response_metadata_propagated(tmp_path, monkeypatch):
     fixed_now = datetime(2024, 2, 9, 8, 0, tzinfo=timezone.utc)
