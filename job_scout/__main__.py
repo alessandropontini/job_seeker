@@ -74,7 +74,11 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--source",
         action="append",
-        help="Source name(s), repeatable or comma-separated.",
+        help="Source name(s), repeatable or comma-separated (legacy-compatible).",
+    )
+    run_parser.add_argument(
+        "--sources",
+        help="Multi-source selector (comma-separated or 'all').",
     )
     run_parser.add_argument(
         "--fixture-file",
@@ -121,6 +125,26 @@ def _build_parser() -> argparse.ArgumentParser:
     sources_parser.add_argument("--since-days", type=int, default=1)
 
     return parser
+
+
+def _resolve_cli_sources(args: argparse.Namespace) -> list[str] | None:
+    selected: list[str] = []
+    if args.source:
+        selected.extend(args.source)
+    if args.sources:
+        selected.append(args.sources)
+
+    resolved: list[str] = []
+    for entry in selected:
+        for name in entry.split(","):
+            cleaned = name.strip().lower()
+            if not cleaned:
+                continue
+            if cleaned == "all":
+                return ["all"]
+            if cleaned not in resolved:
+                resolved.append(cleaned)
+    return resolved or None
 
 
 def _resolve_run_mode(args: argparse.Namespace, config: dict[str, object]) -> str:
@@ -282,13 +306,14 @@ def main(argv: List[str] | None = None) -> int:
             allow_missing_salary = salary_rules.get("flag_missing_salary", True)
         if args.allow_missing_salary is not None:
             allow_missing_salary = True
+        selected_sources = _resolve_cli_sources(args)
         rows, summary = run_pipeline(
             since_days=args.since_days,
             output_dir=args.output_dir,
             config=config,
             strict=args.strict,
             allow_missing_salary=bool(allow_missing_salary),
-            sources=args.source,
+            sources=selected_sources,
             preference_profile=preference_profile,
         )
         notification = maybe_notify(
@@ -330,7 +355,7 @@ def main(argv: List[str] | None = None) -> int:
         run_summary = {
             "run_mode": run_mode,
             "force_send": force_send,
-            "source": args.source or config.get("sources", {}).get("enabled", []),
+            "source": selected_sources or config.get("sources", {}).get("enabled", []),
             "since_days": args.since_days,
             "window_start": notification.window_start,
             "window_end": notification.window_end,

@@ -1,0 +1,19 @@
+<rss version="2.0">
+  <channel>
+    <title>We Work Remotely</title>
+    <item>
+      <title>Data Governance Specialist (Europe)</title>
+      <link>https://weworkremotely.com/remote-jobs/example-data-governance-specialist</link>
+      <guid>example-data-governance-specialist</guid>
+      <pubDate>Mon, 05 Feb 2024 12:00:00 GMT</pubDate>
+      <description>DataCo - Build data quality controls. Salary: €75k-€90k</description>
+    </item>
+    <item>
+      <title>Engineering Manager (Worldwide)</title>
+      <link>https://weworkremotely.com/remote-jobs/example-engineering-manager</link>
+      <guid>example-engineering-manager</guid>
+      <pubDate>Tue, 06 Feb 2024 09:30:00 GMT</pubDate>
+      <description>Remote Labs - Platform leadership role. Salary: $130k-$150k</description>
+    </item>
+  </channel>
+</rss>

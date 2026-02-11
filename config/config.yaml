@@ -28,6 +28,26 @@ role_targeting:
     - manager
     - lead
     - head
+    - data governance
+    - data quality
+    - metadata
+    - data management
+    - data steward
+    - data owner
+    - data catalog
+    - master data
+    - mdm
+    - bcbs 239
+    - compliance
+    - gdpr
+    - privacy
+    - risk data
+    - data policy
+    - data controls
+    - lineage
+    - governance dati
+    - qualità dati
+    - catalogo dati
 
 salary_rules:
   minimum_eur: 52000
