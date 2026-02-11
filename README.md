@@ -540,3 +540,64 @@ The dummy E2E workflow is manual-only:
 - `e2e_fake`: full fake-data integration with fake Telegram send and webhook callback replay.
 - `e2e-telegram-real`: fake job fixtures + real Telegram send + callback validation (manual click by default, optional automatic replay mode).
 - Operational details, artifacts, and troubleshooting are documented in `docs/e2e_fake.md` and `docs/e2e_telegram_real.md`.
+
+## Live daily Telegram workflow (`live-daily-telegram`)
+
+A dedicated workflow now supports both scheduled and manual live runs: `.github/workflows/live-daily-telegram.yml`.
+
+### Run mode
+- `run_mode=scheduled`
+  - Uses Europe/Rome daily digest date = **yesterday**.
+  - Uses `since-days=1` in scheduled workflow path.
+  - Skips Telegram send when there are no matches (`reason=no_matches`) and writes diagnostics to `out/run_summary.json`.
+- `run_mode=manual`
+  - Always sends a Telegram diagnostic message, even with `0` matches.
+  - Useful for visibility/debugging and callback button validation.
+
+`run_mode` precedence is: CLI `--run-mode` > env `JOB_SCOUT_RUN_MODE` > config `runtime.run_mode`.
+
+### Force send
+Use `--force-send` (or workflow input `force_send=true`) to force a Telegram message even when no matches are available.
+
+### Manual debug with wider window (since_days=30)
+From GitHub Actions:
+1. Open **live-daily-telegram**.
+2. Run with:
+   - `run_mode=manual`
+   - `since_days=30`
+   - `force_send=true`
+3. Check artifacts (`out/`) for `run_summary.json`, `last_run.json`, `telegram_payload.json`, `feedback_registration_result.log`.
+
+### Day-after expectation
+Manual runs now persist live state (`live_state`) in `last_run*.json` including:
+- `last_successful_run_at`
+- `last_digest_date_local`
+- `last_seen_job_ids`
+
+Scheduled runs continue to evaluate **yesterday in Europe/Rome** and preserve dedupe behavior without blocking the next day after a manual debug run.
+
+### Troubleshooting
+- **08:00 didn’t trigger**: schedule uses dual UTC cron (06:00/07:00) plus a Rome time gate (`hour==08`) to handle CET/CEST.
+- **0 offers / no message**: inspect `out/run_summary.json` (`reason`, counts, window, timezone, source).
+- **Feedback button issues**:
+  - Verify `out/telegram_payload.json` exists and callback payloads follow `fb|run_id|short_id|action|job_hash`.
+  - Callback data is validated at build time to remain `<=64` bytes.
+  - Verify worker registration diagnostics in `out/feedback_registration_result.log` (`/window/open`) and fetch status in `run_summary.json` (`fetch_feedback`).
+
+### Telegram forensic diagnostics (live/manual)
+Per ogni run, usa questi artifact per capire **se Telegram ha accettato** il messaggio e dove è stato consegnato:
+- `out/telegram_send_response.json`: risposte raw JSON di `getMe`/`sendMessage`.
+- `out/telegram_chat_check.json` (manual): esito `getChat` (`type`, `title`, `is_forum`, `id_fingerprint` oppure `error_code`/`description`).
+- `out/run_summary.json`: campi sintetici `telegram_attempted`, `telegram_ok`, `telegram_message_id`, `telegram_chat_id_fingerprint`, `telegram_thread_id`, `telegram_error_code`, `telegram_description`.
+
+> Privacy/sicurezza: niente token e niente `chat_id` completo nei log/artifact; viene salvata solo una fingerprint.
+
+### Topic/forum groups (`message_thread_id`)
+Se il bot deve scrivere in un topic Telegram (forum group), imposta `TELEGRAM_MESSAGE_THREAD_ID`.
+Nel workflow `live-daily-telegram` è disponibile l'input `telegram_message_thread_id` (manual dispatch).
+
+Troubleshooting rapido quando “non vedo messaggi”:
+1. Controlla `run_summary.reason` (`no_matches`, `deduped`, `time_gate_skip`, `error_*`).
+2. Controlla `telegram_attempted/telegram_ok`.
+3. Se `telegram_ok=false`, leggi `telegram_error_code` + `telegram_description` e `telegram_send_response.json`.
+4. Se chat forum (`is_forum=true`) e manca thread, vedrai `warning_missing_thread_id` in `run_summary` (manual).

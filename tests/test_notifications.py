@@ -73,7 +73,7 @@ def test_dedupe_skips_duplicate_digest(tmp_path, monkeypatch):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
 
-    digest_date = fixed_now.date().isoformat()
+    digest_date = (fixed_now.astimezone(notifications.ZoneInfo("Europe/Rome")).date() - timedelta(days=1)).isoformat()
     digest_hash = notifications.compute_digest_hash(digest_date, [row], [])
     state_path = output_dir / "last_notified.json"
     state_path.write_text(
@@ -242,3 +242,71 @@ def test_env_real_mode_enabled_with_e2e_gate(monkeypatch):
     mode = notifications._resolve_telegram_send_mode({"send_mode": "fake"})
 
     assert mode == "real"
+
+def test_scheduled_mode_skips_when_no_matches(tmp_path):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+
+    result = notifications.maybe_notify(
+        [], output_dir, config, run_mode="scheduled", force_send=False
+    )
+
+    assert result.notified is False
+    assert result.skipped_reason == "no_matches"
+    assert result.telegram_attempted is False
+
+
+def test_manual_mode_forces_no_match_diagnostic_payload(tmp_path):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+
+    result = notifications.maybe_notify(
+        [], output_dir, config, run_mode="manual", force_send=True
+    )
+
+    payload = json.loads((output_dir / "telegram_payload.json").read_text(encoding="utf-8"))
+    assert result.notified is True
+    assert "No matches today" in payload["messages"][0]["text"]
+
+
+def test_telegram_response_metadata_propagated(tmp_path, monkeypatch):
+    fixed_now = datetime(2024, 2, 9, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    row = _make_row("delta", 111, [])
+    row.posting.posted_at = fixed_now - timedelta(hours=1)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "real"
+    monkeypatch.setenv("JOB_SCOUT_E2E_REAL_TELEGRAM", "1")
+
+    def _fake_send_detailed(_messages, run_chat_check=False):
+        return notifications.telegram_notifier.TelegramSendResult(
+            sent=True,
+            reason=None,
+            attempted=True,
+            responses=[
+                {"method": "sendMessage", "status": 200, "response": {"ok": True, "result": {"message_id": 777}}}
+            ],
+            chat_fingerprint="abc12345",
+            thread_id=42,
+            chat_check={"ok": True, "is_forum": True},
+        )
+
+    monkeypatch.setattr(notifications.telegram_notifier, "send_messages_detailed", _fake_send_detailed)
+
+    result = notifications.maybe_notify([row], output_dir, config, run_mode="manual", force_send=True)
+
+    assert result.telegram_ok is True
+    assert result.telegram_message_id == 777
+    assert result.telegram_chat_id_fingerprint == "abc12345"
+    assert result.telegram_thread_id == 42
+    assert result.telegram_attempted is True

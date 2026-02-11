@@ -88,3 +88,23 @@ def test_send_messages_sends_multiple(monkeypatch):
     assert sent is True
     assert reason is None
     assert called["count"] == 3
+
+
+def test_send_messages_passes_thread_id(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+    monkeypatch.setenv("TELEGRAM_MESSAGE_THREAD_ID", "99")
+    payloads = []
+
+    def _fake_urlopen(request, timeout=0):
+        if request.data:
+            payloads.append(json.loads(request.data.decode("utf-8")))
+        return _FakeResponse(status=200)
+
+    monkeypatch.setattr(telegram.urllib.request, "urlopen", _fake_urlopen)
+
+    result = telegram.send_messages_detailed([{"text": "thread"}])
+
+    assert result.sent is True
+    send_payload = payloads[-1]
+    assert send_payload["message_thread_id"] == 99
