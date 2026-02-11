@@ -80,6 +80,7 @@ def save_run_state(
     snapshot: Snapshot,
     digest: Mapping[str, object],
     summary: Mapping[str, object] | None = None,
+    live_state: Mapping[str, object] | None = None,
 ) -> None:
     """Persist snapshot data alongside the latest digest payload."""
 
@@ -93,6 +94,8 @@ def save_run_state(
         summary_payload = dict(summary)
         payload["summary"] = summary_payload
         payload["counts"] = summary_payload
+    if live_state:
+        payload["live_state"] = dict(live_state)
     digest_hash = digest_payload.get("digest_hash")
     if digest_hash:
         payload["digest_hash"] = digest_hash

@@ -138,6 +138,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "window_minutes": 60,
         "use_telegram_updates": False,
     },
+    "runtime": {
+        "run_mode": "scheduled",
+        "digest_timezone": "Europe/Rome",
+    },
     "digest": {
         "mode": "daily_window",
         "window_hours": 24,

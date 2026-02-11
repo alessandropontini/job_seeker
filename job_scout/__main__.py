@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from pathlib import Path
@@ -91,6 +92,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "Requires JOB_SCOUT_E2E_REAL_TELEGRAM=1."
         ),
     )
+    run_parser.add_argument(
+        "--run-mode",
+        choices=("manual", "scheduled"),
+        help="Execution mode controlling notification semantics.",
+    )
+    run_parser.add_argument(
+        "--force-send",
+        action="store_true",
+        help="Send Telegram diagnostics even when there are zero matches.",
+    )
+    run_parser.add_argument(
+        "--feedback-smoke-check",
+        action="store_true",
+        help="Validate feedback button callback_data payloads in telegram_payload.json.",
+    )
 
     sources_parser = subparsers.add_parser(
         "sources", help="Inspect available sources"
@@ -105,6 +121,54 @@ def _build_parser() -> argparse.ArgumentParser:
     sources_parser.add_argument("--since-days", type=int, default=1)
 
     return parser
+
+
+def _resolve_run_mode(args: argparse.Namespace, config: dict[str, object]) -> str:
+    runtime = config.get("runtime")
+    config_mode = None
+    if isinstance(runtime, dict):
+        raw_mode = runtime.get("run_mode")
+        if isinstance(raw_mode, str):
+            config_mode = raw_mode.strip().lower()
+    env_mode = os.getenv("JOB_SCOUT_RUN_MODE", "").strip().lower()
+    arg_mode = (args.run_mode or "").strip().lower()
+    for candidate in (arg_mode, env_mode, config_mode):
+        if candidate in {"manual", "scheduled"}:
+            return candidate
+    return "scheduled"
+
+
+def _write_run_summary(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True, indent=2), encoding="utf-8")
+
+
+def _run_feedback_smoke_check(output_dir: Path) -> dict[str, object]:
+    payload_path = output_dir / "telegram_payload.json"
+    if not payload_path.exists():
+        return {"ok": False, "reason": "missing_telegram_payload"}
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    callbacks: list[str] = []
+    for message in payload.get("messages", []):
+        reply_markup = message.get("reply_markup") or {}
+        keyboard = reply_markup.get("inline_keyboard") or []
+        for row in keyboard:
+            for button in row:
+                callback_data = button.get("callback_data")
+                if isinstance(callback_data, str):
+                    callbacks.append(callback_data)
+    if not callbacks:
+        return {"ok": False, "reason": "no_callback_data"}
+    too_long = [item for item in callbacks if len(item.encode("utf-8")) > 64]
+    if too_long:
+        return {
+            "ok": False,
+            "reason": "callback_data_too_long",
+            "count": len(too_long),
+        }
+    return {"ok": True, "reason": "ok", "count": len(callbacks)}
+
+
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -143,6 +207,11 @@ def main(argv: List[str] | None = None) -> int:
             state_config["dir"] = str(args.state_dir)
         if state_config:
             config["state"] = state_config
+        run_mode = _resolve_run_mode(args, config)
+        force_send = bool(args.force_send or run_mode == "manual")
+        feedback_fetch_reason = "not_requested"
+        feedback_items_count = 0
+        feedback_endpoint = "/feedback"
         preference_profile = None
         preference_path = None
         personalization = config.get("personalization", {})
@@ -179,6 +248,8 @@ def main(argv: List[str] | None = None) -> int:
                 feedback_items, reason = fetch_feedback(
                     run_id=previous_run_id, config=config
                 )
+                feedback_items_count = len(feedback_items)
+                feedback_fetch_reason = reason or "ok"
                 if reason:
                     logging.getLogger(__name__).info(
                         "Feedback fetch skipped: %s.", reason
@@ -226,20 +297,74 @@ def main(argv: List[str] | None = None) -> int:
             config,
             preference_profile=preference_profile,
             preference_path=preference_path,
+            run_mode=run_mode,
+            force_send=force_send,
         )
+        feedback_smoke = {"ok": False, "reason": "not_enabled"}
+        if args.feedback_smoke_check or run_mode == "manual":
+            feedback_smoke = _run_feedback_smoke_check(args.output_dir)
+
         logger = logging.getLogger(__name__)
         logger.info(
-            "Run summary: fetched_count=%s normalized_count=%s "
-            "candidates_count=%s matches_count=%s notified_count=%s "
-            "notification_mode=%s source_counts=%s",
+            "Run diagnostics: run_mode=%s force_send=%s window_start=%s window_end=%s timezone=%s",
+            run_mode,
+            force_send,
+            notification.window_start,
+            notification.window_end,
+            (notification.diagnostics or {}).get("timezone", "Europe/Rome"),
+        )
+        logger.info(
+            "Run summary: fetched_count=%s normalized_count=%s candidates_count=%s matches_count=%s notified_count=%s notification_mode=%s reason=%s source_counts=%s",
             summary.fetched_count,
             summary.normalized_count,
             summary.candidates_count,
             summary.matches_count,
             notification.notified_count,
             notification.notification_mode,
+            notification.skipped_reason or "sent",
             summary.source_counts,
         )
+        reason = notification.skipped_reason or "sent"
+        if reason in {"duplicate_digest", "already_notified_today"}:
+            reason = "deduped"
+        run_summary = {
+            "run_mode": run_mode,
+            "force_send": force_send,
+            "source": args.source or config.get("sources", {}).get("enabled", []),
+            "since_days": args.since_days,
+            "window_start": notification.window_start,
+            "window_end": notification.window_end,
+            "timezone": (notification.diagnostics or {}).get("timezone", "Europe/Rome"),
+            "local_date": notification.digest_date_local,
+            "fetched_count": summary.fetched_count,
+            "normalized_count": summary.normalized_count,
+            "candidates_count": summary.candidates_count,
+            "matches_count": summary.matches_count,
+            "notified": "yes" if notification.notified else "no",
+            "reason": reason,
+            "notification_mode": notification.notification_mode,
+            "source_counts": summary.source_counts,
+            "telegram_attempted": notification.telegram_attempted,
+            "telegram_ok": notification.telegram_ok,
+            "telegram_message_id": notification.telegram_message_id,
+            "telegram_chat_id_fingerprint": notification.telegram_chat_id_fingerprint,
+            "telegram_thread_id": notification.telegram_thread_id,
+            "telegram_error_code": notification.telegram_error_code,
+            "telegram_description": notification.telegram_description,
+            "feedback_enabled": bool(config.get("feedback", {}).get("enabled", False)) if isinstance(config.get("feedback"), dict) else False,
+            "feedback_endpoint": "/window/open, /feedback",
+            "fetch_feedback": {
+                "items_count": feedback_items_count,
+                "reason": feedback_fetch_reason,
+            },
+            "feedback_smoke_check": feedback_smoke,
+        }
+        chat_check = (notification.diagnostics or {}).get("chat_check")
+        if isinstance(chat_check, dict):
+            run_summary["telegram_chat_check"] = chat_check
+            if run_mode == "manual" and chat_check.get("is_forum") and notification.telegram_thread_id is None:
+                run_summary["warning_missing_thread_id"] = True
+        _write_run_summary(args.output_dir / "run_summary.json", run_summary)
         return 0
 
     return 1

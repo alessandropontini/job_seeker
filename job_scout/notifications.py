@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from job_scout.channels import select_channels
 from job_scout.feedback import (
@@ -45,6 +46,18 @@ class NotificationResult:
     notified_count: int
     notification_mode: str
     skipped_reason: str | None = None
+    notified: bool = False
+    digest_date_local: str | None = None
+    window_start: str | None = None
+    window_end: str | None = None
+    diagnostics: dict[str, object] | None = None
+    telegram_attempted: bool = False
+    telegram_ok: bool = False
+    telegram_message_id: int | None = None
+    telegram_chat_id_fingerprint: str | None = None
+    telegram_thread_id: int | None = None
+    telegram_error_code: int | None = None
+    telegram_description: str | None = None
 
 
 def maybe_notify(
@@ -54,9 +67,12 @@ def maybe_notify(
     *,
     preference_profile: PreferenceProfile | None = None,
     preference_path: Path | None = None,
+    run_mode: str = "scheduled",
+    force_send: bool = False,
 ) -> NotificationResult:
     """Send the daily digest notification for the current run."""
 
+    rows = list(rows)
     notifications = _as_dict(config.get("notifications"))
     telegram_config = _as_dict(notifications.get("telegram"))
     dedupe_config = _as_dict(notifications.get("dedupe"))
@@ -67,7 +83,6 @@ def maybe_notify(
     min_score = _parse_int(telegram_config.get("min_score", 0), 0)
     send_per_job = bool(telegram_config.get("send_per_job", True))
     send_header = bool(telegram_config.get("send_header", True))
-    persist_payload = bool(telegram_config.get("persist_payload", False))
     digest_config = _as_dict(config.get("digest"))
     digest_mode = str(digest_config.get("mode", "daily_window"))
     if digest_mode != "daily_window":
@@ -88,14 +103,29 @@ def maybe_notify(
     )
     previous = load_snapshot(snapshot_path)
     now = _now()
+    runtime_config = _as_dict(config.get("runtime"))
+    timezone_name = str(runtime_config.get("digest_timezone", "Europe/Rome"))
+    digest_tz = ZoneInfo(timezone_name)
+    now_local = now.astimezone(digest_tz)
+    target_date_local = (now_local - timedelta(days=1)).date()
+    if run_mode == "manual":
+        target_date_local = now_local.date()
     window_start = now - timedelta(hours=window_hours)
 
-    daily_rows = _select_daily_window_rows(
-        rows,
-        window_start,
-        now,
-        minimum_score=min_score,
-    )
+    if run_mode == "scheduled":
+        daily_rows = _select_digest_date_rows(
+            rows,
+            target_date_local=target_date_local,
+            timezone_name=timezone_name,
+            minimum_score=min_score,
+        )
+    else:
+        daily_rows = _select_daily_window_rows(
+            rows,
+            window_start,
+            now,
+            minimum_score=min_score,
+        )
     total_in_window = len(daily_rows)
     digest_scope = "daily_window"
     if not daily_rows:
@@ -137,7 +167,7 @@ def maybe_notify(
         state_dir=state_dir,
         state_suffix=state_suffix,
     )
-    digest_date = now.date().isoformat()
+    digest_date = target_date_local.isoformat()
     digest_hash = compute_digest_hash(
         digest_date,
         channel_selection.top_matches,
@@ -171,6 +201,10 @@ def maybe_notify(
         data_only_reasons=channel_selection.data_only_reasons,
         short_ids=short_ids,
     )
+    digest_payload["run_mode"] = run_mode
+    digest_payload["force_send"] = bool(force_send)
+    digest_payload["timezone"] = timezone_name
+    digest_payload["target_date_local"] = digest_date
     base_snapshot = Snapshot(
         generated_at=now.isoformat(),
         jobs=dict(previous.jobs),
@@ -179,8 +213,20 @@ def maybe_notify(
         channel_selection.top_matches
         + channel_selection.data_only_best_picks
     )
+    last_seen_job_ids = [
+        _snapshot_key(row)
+        for row in _unique_rows(
+            list(channel_selection.top_matches)
+            + list(channel_selection.data_only_best_picks)
+        )
+    ]
+    live_state_payload = {
+        "last_successful_run_at": now.isoformat(),
+        "last_digest_date_local": digest_date,
+        "last_seen_job_ids": last_seen_job_ids,
+    }
     skip_reason = None
-    if dedupe_enabled:
+    if dedupe_enabled and run_mode == "scheduled" and not force_send:
         skip_reason = _should_skip_digest(
             digest_state_path, digest_date, digest_hash
         )
@@ -200,11 +246,21 @@ def maybe_notify(
                     channel_selection.data_only_best_picks
                 ),
             ),
+            live_state=live_state_payload,
         )
         return NotificationResult(
             notified_count=0,
             notification_mode="daily_window",
             skipped_reason=skip_reason,
+            notified=False,
+            digest_date_local=digest_date,
+            window_start=window_start.isoformat(),
+            window_end=now.isoformat(),
+            diagnostics={
+                "run_mode": run_mode,
+                "timezone": timezone_name,
+                "reason": skip_reason,
+            },
         )
 
     if not telegram_enabled and not dry_run:
@@ -223,11 +279,47 @@ def maybe_notify(
                     channel_selection.data_only_best_picks
                 ),
             ),
+            live_state=live_state_payload,
         )
         return NotificationResult(
             notified_count=0,
             notification_mode="disabled",
             skipped_reason="disabled",
+            notified=False,
+            digest_date_local=digest_date,
+            window_start=window_start.isoformat(),
+            window_end=now.isoformat(),
+            diagnostics={"run_mode": run_mode, "timezone": timezone_name},
+        )
+
+    if run_mode == "scheduled" and not force_send and total_in_window == 0:
+        logger.info("Telegram send attempted: no; reason=no_matches.")
+        save_run_state(
+            snapshot_path,
+            base_snapshot,
+            digest_payload,
+            summary=_build_run_summary(
+                total_in_window=total_in_window,
+                top_count=0,
+                data_only_count=0,
+            ),
+            live_state=live_state_payload,
+        )
+        return NotificationResult(
+            notified_count=0,
+            notification_mode="daily_window",
+            skipped_reason="no_matches",
+            notified=False,
+            digest_date_local=digest_date,
+            window_start=window_start.isoformat(),
+            window_end=now.isoformat(),
+            diagnostics={
+                "run_mode": run_mode,
+                "timezone": timezone_name,
+                "reason": "no_matches",
+            },
+            telegram_attempted=False,
+            telegram_ok=False,
         )
 
     message_payloads = _build_message_payloads(
@@ -242,13 +334,14 @@ def maybe_notify(
         digest_hash=digest_hash,
         send_header=send_header,
         send_per_job=send_per_job,
+        run_mode=run_mode,
+        force_send=force_send,
     )
-    if persist_payload:
-        _persist_payload(
-            output_dir=output_dir,
-            message_payloads=message_payloads,
-            digest_payload=digest_payload,
-        )
+    _persist_payload(
+        output_dir=output_dir,
+        message_payloads=message_payloads,
+        digest_payload=digest_payload,
+    )
     feedback_jobs = _build_feedback_job_map(
         channel_selection.top_matches,
         channel_selection.data_only_best_picks,
@@ -277,12 +370,22 @@ def maybe_notify(
             registration_result.body_excerpt,
         )
         if send_mode == "fake" and not registration_result.ok:
-            raise RuntimeError(
-                "Feedback window registration failed in fake mode: "
-                f"status={registration_result.status}; "
-                f"reason={registration_result.reason}; "
-                f"body={registration_result.body_excerpt}"
+            logger.warning(
+                "Feedback window registration failed in fake mode: status=%s reason=%s body=%s",
+                registration_result.status,
+                registration_result.reason,
+                registration_result.body_excerpt,
             )
+
+    telegram_attempted = False
+    telegram_ok = False
+    telegram_message_id = None
+    telegram_chat_fingerprint = None
+    telegram_thread_id = None
+    telegram_error_code = None
+    telegram_description = None
+    chat_check_payload = None
+    send_responses: list[dict[str, object]] = []
 
     if dry_run:
         sent, reason = _save_dry_run_payload(
@@ -299,11 +402,42 @@ def maybe_notify(
         )
         logger.info("Telegram send attempted: no; reason=fake_run.")
     else:
-        sent, reason = telegram_notifier.send_messages(message_payloads)
+        telegram_result = telegram_notifier.send_messages_detailed(
+            message_payloads,
+            run_chat_check=(run_mode == "manual"),
+        )
+        sent = telegram_result.sent
+        reason = telegram_result.reason
+        telegram_attempted = telegram_result.attempted
+        telegram_ok = telegram_result.sent
+        telegram_chat_fingerprint = telegram_result.chat_fingerprint
+        telegram_thread_id = telegram_result.thread_id
+        chat_check_payload = telegram_result.chat_check
+        send_responses = telegram_result.responses
         logger.info(
             "Telegram send attempted: yes; reason=%s.",
             reason or "sent",
         )
+        _write_telegram_send_response(output_dir=output_dir, responses=send_responses)
+        if chat_check_payload is not None:
+            _write_telegram_chat_check(
+                output_dir=output_dir,
+                chat_check=chat_check_payload,
+            )
+        last_send = _last_send_message_response(send_responses)
+        if isinstance(last_send, Mapping):
+            telegram_ok = bool(last_send.get("ok", False))
+            result_payload = last_send.get("result")
+            if isinstance(result_payload, Mapping):
+                message_id = result_payload.get("message_id")
+                if isinstance(message_id, int):
+                    telegram_message_id = message_id
+            error_code = last_send.get("error_code")
+            if isinstance(error_code, int):
+                telegram_error_code = error_code
+            description = last_send.get("description")
+            if isinstance(description, str):
+                telegram_description = description
     if sent:
         logger.info("Notification sent via Telegram.")
         updated_snapshot = mark_notified(base_snapshot, notified_rows)
@@ -319,8 +453,9 @@ def maybe_notify(
                 ),
                 notified_count=len(notified_rows),
             ),
+            live_state=live_state_payload,
         )
-        if dedupe_enabled:
+        if dedupe_enabled and run_mode == "scheduled":
             _save_digest_state(
                 digest_state_path,
                 digest_date,
@@ -355,10 +490,34 @@ def maybe_notify(
                     channel_selection.data_only_best_picks
                 ),
             ),
+            live_state=live_state_payload,
         )
+    diagnostics = {
+        "run_mode": run_mode,
+        "timezone": timezone_name,
+        "total_in_window": total_in_window,
+        "digest_scope": digest_scope,
+    }
+    if chat_check_payload is not None:
+        diagnostics["chat_check"] = chat_check_payload
+    if send_responses:
+        diagnostics["send_response_count"] = len(send_responses)
     return NotificationResult(
-        notified_count=len(notified_rows),
+        notified_count=len(notified_rows) if sent else 0,
         notification_mode="daily_window",
+        skipped_reason=None if sent else reason,
+        notified=bool(sent),
+        digest_date_local=digest_date,
+        window_start=window_start.isoformat(),
+        window_end=now.isoformat(),
+        diagnostics=diagnostics,
+        telegram_attempted=telegram_attempted,
+        telegram_ok=telegram_ok,
+        telegram_message_id=telegram_message_id,
+        telegram_chat_id_fingerprint=telegram_chat_fingerprint,
+        telegram_thread_id=telegram_thread_id,
+        telegram_error_code=telegram_error_code,
+        telegram_description=telegram_description,
     )
 
 
@@ -376,6 +535,29 @@ def compute_digest_hash(
         )
     payload = "|".join([digest_date, *sorted(items)])
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _select_digest_date_rows(
+    rows: Iterable[ReportRow],
+    *,
+    target_date_local: object,
+    timezone_name: str,
+    minimum_score: int,
+) -> list[ReportRow]:
+    candidates: list[ReportRow] = []
+    digest_tz = ZoneInfo(timezone_name)
+    for row in rows:
+        if not row.match.matches_all:
+            continue
+        if (row.match.score or 0) < minimum_score:
+            continue
+        posted_at = getattr(row.posting, "posted_at", None)
+        if not isinstance(posted_at, datetime) or posted_at.tzinfo is None:
+            continue
+        if posted_at.astimezone(digest_tz).date() != target_date_local:
+            continue
+        candidates.append(row)
+    return candidates
 
 
 def _select_daily_window_rows(
@@ -802,9 +984,18 @@ def _build_message_payloads(
     digest_hash: str,
     send_header: bool,
     send_per_job: bool,
+    run_mode: str,
+    force_send: bool,
 ) -> list[dict[str, object]]:
     if total_in_window == 0:
-        return [{"text": "No new job postings published in the last 24 hours."}]
+        return [{
+            "text": (
+                "No matches today.\n"
+                f"run_mode={run_mode} force_send={str(force_send).lower()}\n"
+                f"total_in_window={total_in_window} top_matches=0 data_only=0\n"
+                "Diagnostics: check out/run_summary.json artifact."
+            )
+        }]
     payloads: list[dict[str, object]] = []
     if send_header:
         payloads.append(
@@ -944,6 +1135,40 @@ def _persist_payload(
         ),
         encoding="utf-8",
     )
+
+
+def _write_telegram_send_response(
+    *, output_dir: Path, responses: Sequence[Mapping[str, object]]
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "telegram_send_response.json"
+    path.write_text(
+        json.dumps({"responses": list(responses)}, sort_keys=True, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _write_telegram_chat_check(
+    *, output_dir: Path, chat_check: Mapping[str, object]
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "telegram_chat_check.json"
+    path.write_text(
+        json.dumps(dict(chat_check), sort_keys=True, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _last_send_message_response(
+    responses: Sequence[Mapping[str, object]],
+) -> Mapping[str, object] | None:
+    for entry in reversed(list(responses)):
+        if entry.get("method") != "sendMessage":
+            continue
+        response = entry.get("response")
+        if isinstance(response, Mapping):
+            return response
+    return None
 
 
 def _write_feedback_registration_result(

@@ -142,3 +142,19 @@
 - Phase 7 contract hardening: feedback KV payload now persists `run_id` to improve correlation with `fetch_feedback(run_id)` diagnostics.
 - Phase 7 CI cleanup: removed redundant workflows (`dummy-e2e`, `scheduled-remotive`, `telegram_webhook_set/get`) and added manual-only `offline_qa` + `wheelhouse` workflows.
 - Phase 7 docs: added `docs/runbook_live.md`, refreshed E2E real runbook, and updated README/CI workflow inventory for Cloudflare-based live scheduling.
+
+### Phase 7 live reliability hotfix (current)
+**Status:** ✅ Done
+
+**Shipped scope**
+- Added explicit `run_mode` (`manual`/`scheduled`) and `force_send` controls to CLI runtime behavior.
+- Introduced deterministic scheduled digest targeting **yesterday** in `Europe/Rome`.
+- Implemented manual-mode observability: Telegram diagnostic send even with zero matches.
+- Added persistent `out/run_summary.json` with notification reason codes, counters, window, timezone, and feedback diagnostics.
+- Persisted live state metadata in `last_run*.json` (`last_successful_run_at`, `last_digest_date_local`, `last_seen_job_ids`) for stable next-day scheduled continuity.
+- Added new workflow `.github/workflows/live-daily-telegram.yml` with:
+  - dual UTC cron + Rome 08:00 gate,
+  - manual dispatch inputs (`source`, `since_days`, `force_send`, `run_mode`),
+  - always-on artifact upload for `out/`.
+- Preserved feedback contracts: callback payload format/size checks and payload persistence (`out/telegram_payload.json`) for live diagnostics.
+- Phase 7 live diagnostics hardening: persisted Telegram API forensic artifacts (`telegram_send_response.json`, `telegram_chat_check.json`), added thread/topic support via `TELEGRAM_MESSAGE_THREAD_ID`, and expanded `run_summary.json` with explicit send acceptance/error fields for production triage.
