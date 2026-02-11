@@ -158,3 +158,5 @@
   - always-on artifact upload for `out/`.
 - Preserved feedback contracts: callback payload format/size checks and payload persistence (`out/telegram_payload.json`) for live diagnostics.
 - Phase 7 live diagnostics hardening: persisted Telegram API forensic artifacts (`telegram_send_response.json`, `telegram_chat_check.json`), added thread/topic support via `TELEGRAM_MESSAGE_THREAD_ID`, and expanded `run_summary.json` with explicit send acceptance/error fields for production triage.
+- Matcher tuning update: full-remote `Worldwide`/`Europe` locations are now accepted while UK and USA-only postings remain excluded, and role targeting now covers data governance/data quality/metadata/data management keywords to reduce false negatives from Remotive live runs.
+- Sources expansion update: added public RSS/API multi-source support (`--sources` + `all`) while keeping `--source` compatibility, introduced We Work Remotely RSS connector with normalized fields, and added tests for WWR parsing plus `run_summary.source_counts` coverage.

@@ -58,11 +58,11 @@ bash tools/install_dev_deps.sh
 Edit `config/config.yaml` to adjust defaults. Missing fields fall back to defaults in `job_scout/config.py`.
 
 Key sections:
-- `sources.enabled`: list of source names to run (`dummy`, `remotive`).
+- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`).
 - `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
 - `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
-- `role_targeting.include_titles`: manager/lead/head keywords to match.
+- `role_targeting.include_titles`: manager/lead/head plus data governance and data management keyword families (including Italian variants) used for title targeting.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
 - `salary_rules.currency_rates`: approximate rates used for conversion (EUR=1.0, USD=0.92, GBP=1.17).
@@ -125,6 +125,12 @@ Run specific sources (repeatable or comma-separated):
 python -m job_scout run --source dummy
 python -m job_scout run --source remotive --source dummy
 python -m job_scout run --source remotive,dummy
+```
+
+Run in multi-source mode with the new selector (`--source` remains supported):
+```bash
+python -m job_scout run --sources remotive,wwr
+python -m job_scout run --sources all
 ```
 
 Run with a deterministic dummy fixture file (useful for CI/E2E):
@@ -225,8 +231,8 @@ help you pinpoint the issue:
   invalid token) vs. transport problems (empty response + curl stderr).
 
 ## Matching rules overview
-- **Location:** allow EU countries, Italy, or city match (default: New York). Explicitly reject UK.
-- **Role:** only manager/lead/head titles are accepted.
+- **Location:** allow EU countries, Italy, New York city matches, and full-remote jobs marked as `Worldwide` or `Europe`. Explicitly reject UK and other non-target geographies.
+- **Role:** manager/lead/head titles plus data governance/data quality/metadata/data management variants are accepted.
 - **Salary:** minimum 52,000 EUR; missing salary is flagged and kept in results.
 - **Remote:** remote level is normalized and reported; non-remote roles are not rejected by default.
   `prefer_full_remote` is treated as a soft preference and records a penalty when not met.
@@ -293,8 +299,10 @@ plus `telegram_payload.json`/`digest.md` when dry-run mode is enabled.
 
 ## Source connectors
 - `dummy`: offline test data.
-- `remotive`: public Remotive API (no authentication). This connector **does not** scrape
-  behind logins or paywalls.
+- `remotive`: public Remotive API (no authentication). Attribution: Remotive public API.
+- `wwr`: public We Work Remotely RSS feed (no authentication). Attribution: We Work Remotely RSS.
+
+All connectors are API/RSS based and **do not** scrape behind logins or paywalls.
 
 ## Notes
 - Prefer full-remote roles when available, but do not exclude non-remote roles by default.

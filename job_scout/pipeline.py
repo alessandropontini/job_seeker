@@ -39,9 +39,13 @@ def _resolve_sources(selected: Iterable[str] | None) -> list[str]:
     resolved: list[str] = []
     for entry in selected:
         for name in entry.split(","):
-            name = name.strip()
-            if name and name not in resolved:
-                resolved.append(name)
+            cleaned = name.strip().lower()
+            if not cleaned:
+                continue
+            if cleaned == "all":
+                return sorted(AVAILABLE_SOURCES)
+            if cleaned not in resolved:
+                resolved.append(cleaned)
     return resolved
 
 

@@ -123,6 +123,8 @@ def evaluate_hard_constraints(
         location_rules.get("allow_unknown_location", True)
     )
 
+    remote_level = normalize_remote_level(posting.remote_type)
+
     location_country = normalize_country(
         posting.location_country, region_data
     )
@@ -141,6 +143,20 @@ def evaluate_hard_constraints(
         hard_reject_reasons.append("excluded_country_text")
 
     location_allowed = False
+    worldwide_full_remote = (
+        remote_level == "full-remote"
+        and _location_matches_token(
+            location_country_lower, location_text_lower, "worldwide"
+        )
+    )
+    europe_full_remote = (
+        remote_level == "full-remote"
+        and _location_matches_token(
+            location_country_lower, location_text_lower, "europe"
+        )
+    )
+    if worldwide_full_remote or europe_full_remote:
+        location_allowed = True
     if location_country_lower in include_countries:
         location_allowed = True
     if any(city in location_text_lower for city in include_cities):
@@ -185,8 +201,6 @@ def evaluate_hard_constraints(
     if missing_salary:
         missing_fields.append("salary")
 
-    remote_level = normalize_remote_level(posting.remote_type)
-
     return (
         hard_reject_reasons,
         missing_fields,
@@ -226,3 +240,14 @@ def _normalize_country_list(
             normalize_country(country, region_data).lower()
         )
     return normalized
+
+
+def _location_matches_token(
+    country: str,
+    location_text: str,
+    token: str,
+) -> bool:
+    """Return true when a location token appears as country or text fragment."""
+
+    normalized_token = token.lower()
+    return country == normalized_token or normalized_token in location_text

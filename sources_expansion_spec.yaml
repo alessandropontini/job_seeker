@@ -1,0 +1,44 @@
+version: 1
+scope: sources-expansion
+constraints:
+  transport:
+    - api
+    - rss
+  forbidden:
+    - playwright
+    - browser-automation
+    - login-required-scraping
+
+implemented:
+  cli:
+    legacy_source_flag: "--source"
+    multi_source_flag: "--sources"
+    all_keyword: "all"
+    compatibility: "--source remains supported; --sources can be combined"
+
+  sources:
+    - name: remotive
+      type: api
+      endpoint: "https://remotive.com/api/remote-jobs"
+      attribution: "Remotive public API"
+    - name: wwr
+      type: rss
+      endpoint: "https://weworkremotely.com/remote-jobs.rss"
+      attribution: "We Work Remotely public RSS"
+
+  normalized_schema:
+    - id
+    - source
+    - title
+    - company
+    - url
+    - posted_at
+    - location_text
+    - location_country
+    - remote_type
+    - salary_text
+    - currency
+
+tests:
+  - parse_wwr_rss_fixture
+  - run_summary_source_counts

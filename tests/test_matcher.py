@@ -65,6 +65,57 @@ def test_excludes_uk_by_text(base_config, region_data):
     assert "excluded_country_text" in result.hard_reject_reasons
 
 
+
+
+def test_accepts_worldwide_when_full_remote(base_config, region_data):
+    posting = _posting(location_text="Worldwide", location_country="Worldwide")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert "location_not_allowed" not in result.hard_reject_reasons
+
+
+def test_accepts_europe_when_full_remote(base_config, region_data):
+    posting = _posting(location_text="Europe", location_country="")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert "location_not_allowed" not in result.hard_reject_reasons
+
+
+def test_rejects_uk_when_full_remote(base_config, region_data):
+    posting = _posting(
+        location_text="Remote - United Kingdom", location_country="United Kingdom"
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert "location_not_allowed" in result.hard_reject_reasons
+
+
+def test_rejects_usa_only_when_full_remote(base_config, region_data):
+    posting = _posting(location_text="Remote - USA only", location_country="USA")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert "location_not_allowed" in result.hard_reject_reasons
+
 def test_accepts_eu_country(base_config, region_data):
     posting = _posting(location_text="Berlin, Germany", location_country="Germany")
     _, result = match_posting(
@@ -199,6 +250,18 @@ def test_rejects_non_target_title(base_config, region_data):
     )
     assert result.decision == "rejected"
     assert "title_not_targeted" in result.hard_reject_reasons
+
+
+def test_accepts_data_governance_specialist_title(base_config, region_data):
+    posting = _posting(title="Data Governance Specialist")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert "title_not_targeted" not in result.hard_reject_reasons
 
 
 def test_parses_eur_salary_range(base_config, region_data):
