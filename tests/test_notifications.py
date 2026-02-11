@@ -52,6 +52,7 @@ def test_dual_channel_digest_includes_sections():
         total_in_window=2,
         window_hours=24,
         digest_scope="daily_window",
+        digest_mode="TOP",
         data_only_reasons={
             notifications._snapshot_key(data_row): ["data keyword: data"]
         },
@@ -62,6 +63,56 @@ def test_dual_channel_digest_includes_sections():
     assert "[TOP]" in digest
     assert "[DATA]" in digest
     assert "channel: data keyword: data" in digest
+    assert "Mode: TOP" in digest
+
+
+def test_select_digest_items_adaptive_or_low_confidence():
+    scored_jobs = [
+        _make_row("alpha", 66, []),
+        _make_row("beta", 63, []),
+        _make_row("gamma", 61, []),
+        _make_row("delta", 58, []),
+        _make_row("epsilon", 55, []),
+        _make_row("zeta", 52, []),
+    ]
+
+    selected, mode, anti_zero_triggered, final_threshold = (
+        notifications.select_digest_items(
+            scored_jobs,
+            fetched_count=8,
+            min_results=5,
+            high_threshold=70,
+            low_threshold=40,
+            step=5,
+        )
+    )
+
+    assert len(selected) == 5
+    assert mode in {"ADAPTIVE", "LOW_CONFIDENCE"}
+    assert final_threshold <= 70
+    assert anti_zero_triggered is (mode == "LOW_CONFIDENCE")
+
+
+def test_select_digest_items_low_confidence_with_few_rows():
+    scored_jobs = [
+        _make_row("alpha", 35, []),
+        _make_row("beta", 32, []),
+    ]
+
+    selected, mode, anti_zero_triggered, _final_threshold = (
+        notifications.select_digest_items(
+            scored_jobs,
+            fetched_count=2,
+            min_results=5,
+            high_threshold=70,
+            low_threshold=40,
+            step=5,
+        )
+    )
+
+    assert len(selected) == 2
+    assert mode == "LOW_CONFIDENCE"
+    assert anti_zero_triggered is True
 
 
 def test_dedupe_skips_duplicate_digest(tmp_path, monkeypatch):
@@ -251,12 +302,18 @@ def test_scheduled_mode_skips_when_no_matches(tmp_path):
     config["notifications"]["telegram"]["send_mode"] = "fake"
 
     result = notifications.maybe_notify(
-        [], output_dir, config, run_mode="scheduled", force_send=False
+        [],
+        output_dir,
+        config,
+        run_mode="scheduled",
+        force_send=False,
+        fetched_count=0,
     )
 
     assert result.notified is False
     assert result.skipped_reason == "no_matches"
     assert result.telegram_attempted is False
+    assert result.digest_mode == "TOP"
 
 
 def test_manual_mode_forces_no_match_diagnostic_payload(tmp_path):

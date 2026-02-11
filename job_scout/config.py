@@ -141,6 +141,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "mode": "daily_window",
         "window_hours": 24,
         "top_n": 10,
+        "selection": {
+            "min_results": 5,
+            "high_threshold": 70,
+            "low_threshold": 40,
+            "step": 5,
+        },
     },
 }
 

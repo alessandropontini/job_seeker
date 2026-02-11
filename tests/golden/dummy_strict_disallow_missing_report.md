@@ -1,3 +1,5 @@
+Digest mode: LOW_CONFIDENCE (anti-zero) | Threshold final: 40
+
 # Job Scout Report
 
 ## Source Status

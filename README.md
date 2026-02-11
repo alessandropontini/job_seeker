@@ -19,6 +19,7 @@ Project docs:
 - [RUNBOOK_QA.md](RUNBOOK_QA.md)
 - [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md)
 - [docs/SECRETS.md](docs/SECRETS.md)
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
 > CI note: cron-based notification workflows are disabled; operations run manual-only via `workflow_dispatch`. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
 
@@ -94,6 +95,10 @@ Key sections:
 - `digest.mode`: `daily_window` for the scheduled digest behavior.
 - `digest.window_hours`: size of the daily window (24 hours).
 - `digest.top_n`: number of items in the daily digest.
+- `digest.selection.min_results`: target minimo di elementi digest prima di fermare l'adattamento soglia (default: 5).
+- `digest.selection.high_threshold`: soglia iniziale per modalità TOP (default: 70).
+- `digest.selection.low_threshold`: soglia minima per modalità ADAPTIVE (default: 40).
+- `digest.selection.step`: decremento soglia ad ogni iterazione (default: 5).
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
@@ -251,6 +256,15 @@ help you pinpoint the issue:
 - Telegram feedback buttons update a local profile file with token/tag/remote/seniority weights.
 - Preference scores **only** adjust ranking; hard rejects remain enforced.
 - The profile is stored at `out/preferences.json` by default and is safe to delete/reset.
+
+
+## Digest anti-zero behavior (P1)
+- The Telegram digest now guarantees non-empty output whenever `fetched_count > 0`.
+- Selection starts in **TOP** mode at `high_threshold` and keeps only jobs above that score.
+- If fewer than `min_results` jobs are available, thresholding automatically relaxes in `step` increments down to `low_threshold` (**ADAPTIVE** mode).
+- If results are still below `min_results`, the system sends the best available jobs by score (**LOW_CONFIDENCE (anti-zero)** mode).
+- The selected mode is shown in Telegram headers/messages (`Mode: TOP`, `Mode: ADAPTIVE`, `Mode: LOW_CONFIDENCE (anti-zero)`).
+- Runtime diagnostics are persisted in `out/run_summary.json` via `digest_mode`, `anti_zero_triggered`, `threshold_initial`, `threshold_final`, `min_results`, and `selected_count`.
 
 ## Outputs
 The pipeline writes reports to `out/`:
