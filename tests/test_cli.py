@@ -100,6 +100,9 @@ def test_cli_run_summary_contains_telegram_fields(tmp_path, monkeypatch):
     summary = json.loads((output_dir / "run_summary.json").read_text(encoding="utf-8"))
     assert summary["telegram_ok"] is True
     assert summary["telegram_message_id"] == 123
+    assert summary["trigger_type"]
+    assert summary["now_utc"]
+    assert summary["now_local"]
     assert summary["digest_mode"] == "TOP"
     assert "threshold_initial" in summary
     assert "threshold_final" in summary

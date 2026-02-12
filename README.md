@@ -21,27 +21,23 @@ Project docs:
 - [docs/SECRETS.md](docs/SECRETS.md)
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
-> CI note: cron-based notification workflows are disabled; operations run manual-only via `workflow_dispatch`. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
+> CI note: `live-daily-telegram` runs both on cron and manual dispatch, with artifact-first diagnostics in every run. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
 
 ## Live mode (08:00 Europe/Rome)
 
-Production daily scheduling is executed on **Cloudflare Worker Cron Triggers**, not on GitHub Actions.
+Production daily scheduling is executed on **GitHub Actions** (`live-daily-telegram`) with UTC cron plus Rome time gate.
 
-- Worker cron: UTC schedules (`0 6 * * *` + `0 7 * * *`) with runtime Rome-hour guard (`08:00 Europe/Rome`).
+- GitHub Actions cron: UTC schedules (`55 6 * * *` + `5 7 * * *`) with runtime gate (`08:00-08:10 Europe/Rome`) to cover CET/CEST safely.
 - Live send gate: `JOB_SCOUT_ENV=live` required, otherwise the Worker refuses sending.
 - Dedup: KV key `live:last_sent_date` prevents duplicate daily digest sends.
 - Daily window: digest is built from **yesterday** (`Europe/Rome`) postings; fallback is explicitly flagged if empty.
 - Feedback compatibility preserved with existing contracts: `/window/open`, `/telegram/feedback`, and `/feedback` (`fetch_feedback`).
 
-### Why GitHub Actions remain manual-only
+### Why dual cron + time gate
 
-GitHub Actions are retained for operator-driven QA/deploy workflows only (`workflow_dispatch`).
-There is no `on.schedule` in repository workflows by design. Daily automation runs in Cloudflare,
-which is the runtime that already handles webhook feedback persistence and Telegram callback security.
-
-See:
-- [docs/runbook_live.md](docs/runbook_live.md)
-- [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md)
+Europe/Rome switches between CET/CEST. We keep two nearby UTC cron entries and enforce the exact local window in runtime:
+- one run lands in `08:00-08:10 Europe/Rome` and executes the digest path;
+- the other run exits with `reason=time_gate_skip`, sends a diagnostic Telegram ping (`Scheduled run skipped (time gate)`), and publishes `out/run_summary.json` for observability.
 
 ## Requirements
 - Python 3.11
@@ -569,7 +565,8 @@ A dedicated workflow now supports both scheduled and manual live runs: `.github/
 - `run_mode=scheduled`
   - Uses Europe/Rome daily digest date = **yesterday**.
   - Uses `since-days=1` in scheduled workflow path.
-  - Skips Telegram send when there are no matches (`reason=no_matches`) and writes diagnostics to `out/run_summary.json`.
+  - Always produces visible outcome at 08:00 Rome: sends digest (`reason=sent`) or sends diagnostic `No matches today` (`reason=no_matches`).
+  - If cron fires outside the local gate window, it sends `Scheduled run skipped (time gate)` and stores `reason=time_gate_skip`.
 - `run_mode=manual`
   - Always sends a Telegram diagnostic message, even with `0` matches.
   - Useful for visibility/debugging and callback button validation.
@@ -597,8 +594,9 @@ Manual runs now persist live state (`live_state`) in `last_run*.json` including:
 Scheduled runs continue to evaluate **yesterday in Europe/Rome** and preserve dedupe behavior without blocking the next day after a manual debug run.
 
 ### Troubleshooting
-- **08:00 didn’t trigger**: schedule uses dual UTC cron (06:00/07:00) plus a Rome time gate (`hour==08`) to handle CET/CEST.
-- **0 offers / no message**: inspect `out/run_summary.json` (`reason`, counts, window, timezone, source).
+- **08:00 didn’t trigger**: verify Actions are enabled, workflow is on default branch, and cron is active (`55 6 * * *` + `5 7 * * *`).
+- **08:00 run skipped intentionally**: check `out/run_summary.json` with `reason=time_gate_skip`, `now_utc`, `now_local`, `timezone=Europe/Rome`; a Telegram ping `Scheduled run skipped (time gate)` is expected by default.
+- **0 offers / no message**: inspect `out/run_summary.json` (`reason=no_matches`, counts, window, timezone, source) and `out/telegram_payload.json`.
 - **Feedback button issues**:
   - Verify `out/telegram_payload.json` exists and callback payloads follow `fb|run_id|vote|short_job_id` (<=64 bytes). Legacy payloads are still parsed for backward compatibility.
   - Callback data is validated at build time to remain `<=64` bytes.

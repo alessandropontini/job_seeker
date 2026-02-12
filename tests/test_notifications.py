@@ -361,7 +361,7 @@ def test_env_real_mode_enabled_with_e2e_gate(monkeypatch):
 
     assert mode == "real"
 
-def test_scheduled_mode_skips_when_no_matches(tmp_path):
+def test_scheduled_mode_sends_no_match_diagnostic(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
 
@@ -377,12 +377,53 @@ def test_scheduled_mode_skips_when_no_matches(tmp_path):
         fetched_count=0,
     )
 
-    assert result.notified is False
+    payload = json.loads((output_dir / "telegram_payload.json").read_text(encoding="utf-8"))
+    assert result.notified is True
     assert result.skipped_reason == "no_matches"
     assert result.telegram_attempted is False
     assert result.digest_mode == "TOP"
+    assert "No matches today" in payload["messages"][0]["text"]
 
 
+
+
+def test_scheduled_no_matches_attempts_telegram_in_real_mode(tmp_path, monkeypatch):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "real"
+    monkeypatch.setenv("JOB_SCOUT_E2E_REAL_TELEGRAM", "1")
+
+    def _fake_send_detailed(_messages, run_chat_check=False):
+        return notifications.telegram_notifier.TelegramSendResult(
+            sent=True,
+            reason=None,
+            attempted=True,
+            responses=[],
+            chat_fingerprint="abc12345",
+            thread_id=None,
+            chat_check=None,
+        )
+
+    monkeypatch.setattr(
+        notifications.telegram_notifier,
+        "send_messages_detailed",
+        _fake_send_detailed,
+    )
+
+    result = notifications.maybe_notify(
+        [],
+        output_dir,
+        config,
+        run_mode="scheduled",
+        force_send=False,
+        fetched_count=0,
+    )
+
+    assert result.skipped_reason == "no_matches"
+    assert result.telegram_attempted is True
+    assert result.telegram_ok is True
 def test_manual_mode_forces_no_match_diagnostic_payload(tmp_path):
     output_dir = tmp_path / "out"
     output_dir.mkdir()
