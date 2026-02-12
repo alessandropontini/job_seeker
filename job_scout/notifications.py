@@ -456,48 +456,8 @@ def maybe_notify(
             reason_when_zero=reason_when_zero,
         )
 
-    if run_mode == "scheduled" and not force_send and total_in_window == 0:
-        logger.info("Telegram send attempted: no; reason=no_matches.")
-        save_run_state(
-            snapshot_path,
-            base_snapshot,
-            digest_payload,
-            summary=_build_run_summary(
-                total_in_window=total_in_window,
-                top_count=0,
-                data_only_count=0,
-                digest_mode=digest_mode,
-                anti_zero_triggered=anti_zero_triggered,
-                threshold_initial=high_threshold,
-                threshold_final=final_threshold,
-                min_results=min_results,
-                reason_when_zero=reason_when_zero,
-            ),
-            live_state=live_state_payload,
-        )
-        return NotificationResult(
-            notified_count=0,
-            notification_mode="daily_window",
-            skipped_reason="no_matches",
-            notified=False,
-            digest_date_local=digest_date,
-            window_start=window_start.isoformat(),
-            window_end=now.isoformat(),
-            diagnostics={
-                "run_mode": run_mode,
-                "timezone": timezone_name,
-                "reason": "no_matches",
-            },
-            telegram_attempted=False,
-            telegram_ok=False,
-            digest_mode=digest_mode,
-            anti_zero_triggered=anti_zero_triggered,
-            threshold_initial=high_threshold,
-            threshold_final=final_threshold,
-            min_results=min_results,
-            selected_count=selected_count,
-            reason_when_zero=reason_when_zero,
-        )
+    if run_mode == "scheduled" and total_in_window == 0:
+        logger.info("Scheduled run has no matches; sending diagnostic Telegram message.")
 
     message_payloads = _build_message_payloads(
         channel_selection.top_matches,
@@ -683,6 +643,12 @@ def maybe_notify(
             ),
             live_state=live_state_payload,
         )
+    outcome_reason = None
+    if total_in_window == 0:
+        outcome_reason = "no_matches"
+    elif not sent:
+        outcome_reason = reason
+
     diagnostics = {
         "run_mode": run_mode,
         "timezone": timezone_name,
@@ -698,7 +664,7 @@ def maybe_notify(
     return NotificationResult(
         notified_count=len(notified_rows) if sent else 0,
         notification_mode="daily_window",
-        skipped_reason=None if sent else reason,
+        skipped_reason=outcome_reason,
         notified=bool(sent),
         digest_date_local=digest_date,
         window_start=window_start.isoformat(),

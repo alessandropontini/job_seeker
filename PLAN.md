@@ -192,3 +192,25 @@
 - Arbeitnow (API)
 
 Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
+
+### PR2 — Schedule + 08:00 observability (complete)
+**Status:** ✅ Done
+
+- Enabled live GitHub Actions schedule on `.github/workflows/live-daily-telegram.yml` (`on.schedule`) with dual UTC cron (`55 6 * * *` + `5 7 * * *`) plus runtime time-gate on `Europe/Rome`.
+- Added deterministic time-gate diagnostics: scheduled skip writes `out/run_summary.json` with `reason=time_gate_skip`, `now_utc`, `now_local`, timezone, and selected counters.
+- Guaranteed artifact observability on every run (`out/run_summary.json` always present and uploaded).
+- Updated scheduled behavior to avoid silent zero-result runs: scheduled no-match now sends diagnostic Telegram message and records `reason=no_matches`.
+- Extended `run_summary` schema with `trigger_type`, `now_utc`, `now_local` for easier ops triage.
+- Added unit tests for Rome 08:00 gate logic (CET/CEST) and scheduled no-match notification behavior.
+- Updated README and troubleshooting docs with “08:00 no message” checks, DST rationale, and reason-code interpretation.
+
+### PR2 FIX — schedule observability + run_mode isolation (complete)
+**Status:** ✅ Done
+
+- Removed global `JOB_SCOUT_RUN_MODE=scheduled` from workflow job-level environment to avoid contaminating manual dispatch behavior.
+- Set `JOB_SCOUT_RUN_MODE=scheduled` only in the `Run scheduled mode` step; manual step now relies exclusively on workflow input `run_mode`.
+- Added default-on Telegram ping for time-gate skips (`Scheduled run skipped (time gate)`) and persisted outcome in `out/run_summary.json`.
+- Added scheduled post-run fallback ping for `reason=no_matches` when `telegram_attempted=false` to guarantee visible schedule observability.
+- Kept artifact guarantees (`out/run_summary.json` and `out/` upload on `always()`) without introducing new secrets or secret logging.
+- Added/kept test coverage for Rome 08:00 time gate and scheduled no-matches Telegram attempt semantics.
+- Next step (P4): increase source volume to reduce `no_matches` days while preserving strict location/role/salary filters.

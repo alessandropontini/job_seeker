@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import List
 
 from job_scout.config import load_config
@@ -25,6 +26,7 @@ from job_scout.preferences import (
     resolve_profile_path,
     save_profile,
 )
+from zoneinfo import ZoneInfo
 from job_scout.sources import AVAILABLE_SOURCES
 
 
@@ -165,6 +167,12 @@ def _resolve_run_mode(args: argparse.Namespace, config: dict[str, object]) -> st
 def _write_run_summary(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True, indent=2), encoding="utf-8")
+
+
+def _runtime_clock_snapshot(timezone_name: str) -> tuple[str, str]:
+    now_utc = datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(ZoneInfo(timezone_name))
+    return now_utc.isoformat(), now_local.isoformat()
 
 
 def _run_feedback_smoke_check(output_dir: Path) -> dict[str, object]:
@@ -355,14 +363,19 @@ def main(argv: List[str] | None = None) -> int:
         reason = notification.skipped_reason or "sent"
         if reason in {"duplicate_digest", "already_notified_today"}:
             reason = "deduped"
+        summary_timezone = (notification.diagnostics or {}).get("timezone", "Europe/Rome")
+        now_utc_iso, now_local_iso = _runtime_clock_snapshot(summary_timezone)
         run_summary = {
             "run_mode": run_mode,
+            "trigger_type": os.getenv("JOB_SCOUT_TRIGGER_TYPE", run_mode),
             "force_send": force_send,
             "source": selected_sources or config.get("sources", {}).get("enabled", []),
             "since_days": args.since_days,
             "window_start": notification.window_start,
             "window_end": notification.window_end,
-            "timezone": (notification.diagnostics or {}).get("timezone", "Europe/Rome"),
+            "timezone": summary_timezone,
+            "now_utc": now_utc_iso,
+            "now_local": now_local_iso,
             "local_date": notification.digest_date_local,
             "fetched_count": summary.fetched_count,
             "normalized_count": summary.normalized_count,

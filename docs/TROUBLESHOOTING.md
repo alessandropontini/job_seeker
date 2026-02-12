@@ -33,3 +33,16 @@ Per evitare digest vuoti quando `fetched_count > 0`, il sistema ha inviato i mig
 1. Verifica che il giorno in questione abbia abbastanza job in target (EU/Italy/New York, no UK).
 2. Controlla se i punteggi sono sistematicamente bassi (molti sotto `high_threshold`).
 3. Se necessario, regola `digest.selection` in config (`min_results`, `high_threshold`, `low_threshold`, `step`) mantenendo invariati scoring e fonti.
+
+## Se non ricevi nulla alle 08:00 Europe/Rome
+
+Controlli rapidi (ordine consigliato):
+1. GitHub Actions deve essere abilitato nel repository.
+2. Il workflow `live-daily-telegram` deve essere presente nel branch `main` (default branch).
+3. Il workflow deve avere trigger `on.schedule` attivo con doppio cron UTC (`55 6 * * *` + `5 7 * * *`).
+4. Apri l'ultimo artifact `out/run_summary.json` e verifica `reason`:
+   - `sent`: digest inviato.
+   - `no_matches`: nessun job selezionato, ma è stato inviato un messaggio diagnostico.
+   - `time_gate_skip`: run fuori finestra locale (`08:00-08:10 Europe/Rome`), skip atteso (con ping Telegram `Scheduled run skipped (time gate)`).
+
+Perché doppio cron + gate: il passaggio CET/CEST sposta l'equivalenza UTC delle 08:00 locali. Due run ravvicinati garantiscono che almeno uno cada nella finestra locale corretta, mentre l'altro produce comunque diagnostica osservabile (`time_gate_skip`).

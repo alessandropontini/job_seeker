@@ -2,8 +2,8 @@ name: live-daily-telegram
 
 on:
   schedule:
-    - cron: "0 6 * * *"
-    - cron: "0 7 * * *"
+    - cron: "55 6 * * *"
+    - cron: "5 7 * * *"
   workflow_dispatch:
     inputs:
       source:
@@ -42,7 +42,6 @@ jobs:
       JOB_SCOUT_WEBHOOK_SECRET: ${{ secrets.JOB_SCOUT_WEBHOOK_SECRET }}
       JOB_SCOUT_TELEGRAM_MODE: real
       JOB_SCOUT_E2E_REAL_TELEGRAM: "1"
-      JOB_SCOUT_RUN_MODE: scheduled
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,29 +51,69 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Time gate (Europe/Rome 08:00) for schedule
+      - name: Time gate (Europe/Rome 08:00 ±10m) for schedule
         id: time_gate
         if: ${{ github.event_name == 'schedule' }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
-          hour_local="$(TZ=Europe/Rome date +%H)"
-          if [[ "${hour_local}" != "08" ]]; then
-            cat > out/run_summary.json <<JSON
-          {
-            "run_mode": "scheduled",
-            "reason": "time_gate_skip",
-            "timezone": "Europe/Rome",
-            "local_hour": "${hour_local}",
-            "telegram_attempted": false,
-            "telegram_ok": false
-          }
-          JSON
-            echo "run_allowed=0" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "run_allowed=1" >> "$GITHUB_OUTPUT"
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from job_scout.scheduling import check_rome_8am_window
+
+          result = check_rome_8am_window(datetime.now(timezone.utc), minute_window=10)
+          Path("out/time_gate_output.txt").write_text(
+              "1" if result.allowed else "0", encoding="utf-8"
+          )
+          if not result.allowed:
+              payload = {
+                  "run_mode": "scheduled",
+                  "trigger_type": "scheduled",
+                  "reason": "time_gate_skip",
+                  "timezone": result.timezone,
+                  "now_utc": result.now_utc,
+                  "now_local": result.now_local,
+                  "local_hour": result.local_hour,
+                  "local_minute": result.local_minute,
+                  "telegram_attempted": False,
+                  "telegram_ok": False,
+                  "selected_count": 0,
+              }
+              Path("out/run_summary.json").write_text(
+                  json.dumps(payload, indent=2, sort_keys=True),
+                  encoding="utf-8",
+              )
+          PY
+          run_allowed="$(cat out/time_gate_output.txt)"
+          echo "run_allowed=${run_allowed}" >> "$GITHUB_OUTPUT"
+
+      - name: Time gate skip Telegram ping
+        if: ${{ github.event_name == 'schedule' && steps.time_gate.outputs.run_allowed == '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from job_scout.notifier import telegram as telegram_notifier
+
+          result = telegram_notifier.send_messages_detailed([
+              {"text": "Scheduled run skipped (time gate). See artifact out/run_summary.json"}
+          ])
+          summary_path = Path("out/run_summary.json")
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          summary["telegram_attempted"] = bool(result.attempted)
+          summary["telegram_ok"] = bool(result.sent)
+          if result.reason:
+              summary["telegram_ping_reason"] = result.reason
+          summary_path.write_text(
+              json.dumps(summary, indent=2, sort_keys=True),
+              encoding="utf-8",
+          )
+          PY
 
       - name: Install dependencies
         if: ${{ github.event_name != 'schedule' || steps.time_gate.outputs.run_allowed == '1' }}
@@ -89,6 +128,9 @@ jobs:
       - name: Run scheduled mode
         if: ${{ github.event_name == 'schedule' && steps.time_gate.outputs.run_allowed == '1' }}
         shell: bash
+        env:
+          JOB_SCOUT_TRIGGER_TYPE: scheduled
+          JOB_SCOUT_RUN_MODE: scheduled
         run: |
           set -euo pipefail
           python -m job_scout run \
@@ -99,11 +141,42 @@ jobs:
             --output-dir out \
             --run-mode scheduled
 
+      - name: Scheduled no-matches fallback ping
+        if: ${{ github.event_name == 'schedule' && steps.time_gate.outputs.run_allowed == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from job_scout.notifier import telegram as telegram_notifier
+
+          summary_path = Path("out/run_summary.json")
+          if not summary_path.exists():
+              raise SystemExit(0)
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          if summary.get("reason") != "no_matches" or summary.get("telegram_attempted", False):
+              raise SystemExit(0)
+
+          result = telegram_notifier.send_messages_detailed([
+              {"text": "No matches today. See artifact out/run_summary.json"}
+          ])
+          summary["telegram_attempted"] = bool(result.attempted)
+          summary["telegram_ok"] = bool(result.sent)
+          if result.reason:
+              summary["telegram_ping_reason"] = result.reason
+          summary_path.write_text(
+              json.dumps(summary, indent=2, sort_keys=True),
+              encoding="utf-8",
+          )
+          PY
+
       - name: Run manual mode
         if: ${{ github.event_name == 'workflow_dispatch' }}
         shell: bash
         env:
           TELEGRAM_MESSAGE_THREAD_ID: ${{ inputs.telegram_message_thread_id }}
+          JOB_SCOUT_TRIGGER_TYPE: manual
         run: |
           set -euo pipefail
           source_name="${{ inputs.source || 'remotive' }}"
@@ -134,10 +207,13 @@ jobs:
           if [[ ! -f out/run_summary.json ]]; then
             cat > out/run_summary.json <<'JSON'
           {
-            "notified": "no",
+            "run_mode": "unknown",
+            "trigger_type": "unknown",
             "reason": "workflow_failed_before_summary",
+            "timezone": "Europe/Rome",
             "telegram_attempted": false,
-            "telegram_ok": false
+            "telegram_ok": false,
+            "selected_count": 0
           }
           JSON
           fi
