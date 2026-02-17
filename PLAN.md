@@ -186,6 +186,13 @@
 - Dynamic thresholding now runs on candidate pool and can relax down to `low_threshold` before top-K fallback.
 - Added explicit zero-result reasons in summary: `no_candidates_after_hard_filters`, `fetched_count_zero`.
 
+### PR2 TEMP — pause `live-daily-telegram` cron (complete)
+**Status:** ✅ Done
+
+- Temporarily disabled automatic `on.schedule` triggers (`55 6 * * *`, `5 7 * * *`) in `.github/workflows/live-daily-telegram.yml`.
+- Kept `workflow_dispatch` active so live checks can still run manually with existing inputs and artifacts.
+- Updated README operational notes to document the temporary pause and rationale (avoid unattended sends until reactivation decision).
+
 ### Next: P4 Multi-source to increase volume
 - RemoteOK (API)
 - WeWorkRemotely (RSS)
