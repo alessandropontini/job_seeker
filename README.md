@@ -21,23 +21,21 @@ Project docs:
 - [docs/SECRETS.md](docs/SECRETS.md)
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
-> CI note: `live-daily-telegram` runs both on cron and manual dispatch, with artifact-first diagnostics in every run. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
+> CI note: `live-daily-telegram` is temporarily manual-only (`workflow_dispatch`) while automatic cron runs are paused; artifact-first diagnostics are still available in every run. See [docs/CI_RUNBOOK.md](docs/CI_RUNBOOK.md).
 
 ## Live mode (08:00 Europe/Rome)
 
-Production daily scheduling is executed on **GitHub Actions** (`live-daily-telegram`) with UTC cron plus Rome time gate.
+Automatic scheduling for **GitHub Actions** (`live-daily-telegram`) is temporarily paused. The workflow remains available via manual dispatch (`workflow_dispatch`) for controlled live runs and diagnostics.
 
-- GitHub Actions cron: UTC schedules (`55 6 * * *` + `5 7 * * *`) with runtime gate (`08:00-08:10 Europe/Rome`) to cover CET/CEST safely.
+- Cron status: **temporarily disabled** (previous UTC entries were `55 6 * * *` and `5 7 * * *`).
 - Live send gate: `JOB_SCOUT_ENV=live` required, otherwise the Worker refuses sending.
 - Dedup: KV key `live:last_sent_date` prevents duplicate daily digest sends.
 - Daily window: digest is built from **yesterday** (`Europe/Rome`) postings; fallback is explicitly flagged if empty.
 - Feedback compatibility preserved with existing contracts: `/window/open`, `/telegram/feedback`, and `/feedback` (`fetch_feedback`).
 
-### Why dual cron + time gate
+### Why cron is paused
 
-Europe/Rome switches between CET/CEST. We keep two nearby UTC cron entries and enforce the exact local window in runtime:
-- one run lands in `08:00-08:10 Europe/Rome` and executes the digest path;
-- the other run exits with `reason=time_gate_skip`, sends a diagnostic Telegram ping (`Scheduled run skipped (time gate)`), and publishes `out/run_summary.json` for observability.
+The automated 06:55/07:05 UTC schedule is intentionally paused to avoid unattended sends while live-operation behavior is being reviewed. Manual dispatch remains enabled so operators can still run end-to-end checks and collect `out/` artifacts safely on demand.
 
 ## Requirements
 - Python 3.11
@@ -559,7 +557,9 @@ The dummy E2E workflow is manual-only:
 
 ## Live daily Telegram workflow (`live-daily-telegram`)
 
-A dedicated workflow now supports both scheduled and manual live runs: `.github/workflows/live-daily-telegram.yml`.
+A dedicated workflow supports live runs via manual dispatch: `.github/workflows/live-daily-telegram.yml`.
+
+> Temporary operational state: cron triggers are disabled; only `workflow_dispatch` is active.
 
 ### Run mode
 - `run_mode=scheduled`
@@ -594,7 +594,7 @@ Manual runs now persist live state (`live_state`) in `last_run*.json` including:
 Scheduled runs continue to evaluate **yesterday in Europe/Rome** and preserve dedupe behavior without blocking the next day after a manual debug run.
 
 ### Troubleshooting
-- **08:00 didn’t trigger**: verify Actions are enabled, workflow is on default branch, and cron is active (`55 6 * * *` + `5 7 * * *`).
+- **08:00 didn’t trigger**: expected while cron is paused; trigger the workflow manually from Actions when needed.
 - **08:00 run skipped intentionally**: check `out/run_summary.json` with `reason=time_gate_skip`, `now_utc`, `now_local`, `timezone=Europe/Rome`; a Telegram ping `Scheduled run skipped (time gate)` is expected by default.
 - **0 offers / no message**: inspect `out/run_summary.json` (`reason=no_matches`, counts, window, timezone, source) and `out/telegram_payload.json`.
 - **Feedback button issues**:

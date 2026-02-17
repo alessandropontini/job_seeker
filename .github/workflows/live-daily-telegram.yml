@@ -1,9 +1,6 @@
 name: live-daily-telegram
 
 on:
-  schedule:
-    - cron: "55 6 * * *"
-    - cron: "5 7 * * *"
   workflow_dispatch:
     inputs:
       source:
