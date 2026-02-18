@@ -201,6 +201,25 @@ def test_rejects_location_not_allowed_when_not_strict(
     assert "location_not_allowed" in result.hard_reject_reasons
 
 
+def test_manual_soft_penalty_for_location_and_title(base_config, region_data):
+    base_config["runtime"]["run_mode"] = "manual"
+    posting = _posting(
+        title="Senior Engineer",
+        location_text="Toronto, Canada",
+        location_country="Canada",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "location_not_allowed" in result.penalties
+    assert "title_not_targeted" in result.penalties
+
+
 def test_accepts_manager_title(base_config, region_data):
     posting = _posting(title="Product Manager")
     _, result = match_posting(
@@ -421,8 +440,46 @@ def test_rejects_marketing_brand_titles_with_hard_block(base_config, region_data
         strict=False,
         allow_missing_salary=True,
     )
-    assert result.decision == "rejected"
-    assert "negative_hard_block" in result.reject_reasons
+    assert result.decision == "accepted"
+    assert "negative_domain" in result.penalties
+
+
+def test_missing_salary_does_not_reject(base_config, region_data):
+    base_config["runtime"]["run_mode"] = "manual"
+    posting = _posting(salary_text=None, currency=None)
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert result.missing_salary is True
+
+
+def test_salary_below_minimum_manual_penalty_scheduled_reject(base_config, region_data):
+    posting = _posting(salary_text="€40k-€45k", currency=None)
+    _, scheduled = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert scheduled.decision == "rejected"
+    assert "salary_below_minimum" in scheduled.hard_reject_reasons
+
+    base_config["runtime"]["run_mode"] = "manual"
+    _, manual = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert manual.decision == "accepted"
+    assert "salary_below_minimum" in manual.penalties
 
 
 def test_non_core_keyword_role_fails_channel_gate(base_config, region_data):

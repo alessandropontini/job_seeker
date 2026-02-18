@@ -862,6 +862,7 @@ def _format_row_block(
         line,
         details,
         _format_rationale(row, extra_reasons=extra_reasons),
+        _format_why(row),
         posting.url,
     ]
 
@@ -885,6 +886,12 @@ def _format_rationale(
 
 def _snapshot_key(row: ReportRow) -> str:
     return f"{row.posting.source}:{row.posting.id}"
+
+
+def _format_why(row: ReportRow) -> str:
+    if not row.match.why:
+        return "   Why: broad recall fallback"
+    return "   Why: " + "; ".join(row.match.why[:3])
 
 
 def _build_feedback_keyboard_for_job(

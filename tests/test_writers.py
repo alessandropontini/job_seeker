@@ -38,6 +38,7 @@ def test_write_reports_creates_files(tmp_path):
             score=95,
             score_penalties=["missing_salary"],
             score_bonuses=["full_remote"],
+            why=["match core_title: data governance", "penalty missing_salary"],
         ),
     )
 
@@ -61,10 +62,13 @@ def test_write_reports_creates_files(tmp_path):
     md_content = md_path.read_text(encoding="utf-8")
 
     assert "unit-2" in csv_content
+    assert "penalties_applied" in csv_content.splitlines()[0]
+    assert "why" in csv_content.splitlines()[0]
     assert "Product Lead" in md_content
     assert "Salary: Missing" in md_content
     assert "Penalties: missing_salary" in md_content
     assert "Score: 95" in md_content
+    assert "Why:" in md_content
     assert "## TOP_MATCHES" in md_content
     assert "## DATA_ONLY_BEST_PICKS" in md_content
     assert "## Matches" in md_content
@@ -119,6 +123,7 @@ def test_write_reports_orders_by_score(tmp_path):
             score=110,
             score_penalties=[],
             score_bonuses=["full_remote"],
+            why=["match core_title"],
         ),
     )
     low_row = ReportRow(
@@ -137,6 +142,7 @@ def test_write_reports_orders_by_score(tmp_path):
             score=85,
             score_penalties=["prefer_full_remote"],
             score_bonuses=[],
+            why=["penalty prefer_full_remote"],
         ),
     )
 

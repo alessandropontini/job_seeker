@@ -7,12 +7,12 @@ Quando `fetched_count > 0` ma `candidates_count=0`, significa che **tutti** i jo
 In questo caso il digest può restare vuoto solo con `reason_when_zero="no_candidates_after_hard_filters"`.
 
 Controlli consigliati:
-- `hard_block_count`: se alto, verifica filtri location/salary hard.
+- `hard_rejected_count`: se alto, verifica reject hard reali (`excluded_country*`, `missing_url`).
 - `exclude_countries` e match su `excluded_country` / `excluded_country_text` (UK escluso esplicitamente).
-- Regole salary (`minimum_eur`) e reject `salary_below_minimum`.
-- Hard negative blocks (`negative_hard_block`).
+- Regole salary (`minimum_eur`): in scheduled `salary_below_minimum` è hard reject, in manual è soft penalty.
+- `top_penalties` e `top_hard_rejects` in `out/run_summary.json` per capire cosa sta abbassando la qualità.
 
-Nota: in PR1 `title_not_targeted` è trattato come soft gate per il candidate pool, quindi non deve da solo azzerare `candidates_count`.
+Nota PR3: in manual `title_not_targeted` e `location_not_allowed` sono penalità soft; usa `report.csv` colonne `hard_reject_reasons`, `penalties_applied`, `score`, `why` per leggere il motivo reale del ranking.
 
 ## Ho ricevuto `Mode: LOW_CONFIDENCE (anti-zero)` su Telegram
 

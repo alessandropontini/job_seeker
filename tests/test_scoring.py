@@ -41,11 +41,12 @@ def test_scoring_prioritizes_title_and_description_keywords():
     )
     scored = apply_scoring(posting, match, config)
 
-    assert scored.score and scored.score >= 100
-    assert any(bonus.startswith("title_keywords:") for bonus in scored.score_bonuses)
+    assert scored.score and 0 <= scored.score <= 100
+    assert any(bonus.startswith("core_title:") for bonus in scored.score_bonuses)
     assert any(
-        bonus.startswith("description_keywords:") for bonus in scored.score_bonuses
+        bonus.startswith("core_description:") for bonus in scored.score_bonuses
     )
+    assert scored.why
 
 
 def test_scoring_skips_rejected_postings():

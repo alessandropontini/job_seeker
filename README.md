@@ -226,10 +226,10 @@ help you pinpoint the issue:
 - `http_code` and `raw_response` together indicate Telegram-side errors (e.g., 401/403
   invalid token) vs. transport problems (empty response + curl stderr).
 
-## Matching rules overview
-- **Location:** allow EU countries, Italy, New York city matches, and full-remote jobs marked as `Worldwide` or `Europe`. Explicitly reject UK and other non-target geographies.
+## Matching rules overview (PR3 wide recall)
+- **Location:** allow EU countries, Italy, New York city matches, and full-remote jobs marked as `Worldwide` or `Europe`. Explicitly reject UK. In `run_mode=manual`, non-target locations become soft penalties (`location_not_allowed`) instead of hard rejects.
 - **Role:** manager/lead/head titles plus data governance/data quality/metadata/data management variants are accepted.
-- **Salary:** minimum 52,000 EUR; missing salary is flagged and kept in results.
+- **Salary:** minimum 52,000 EUR; missing salary is flagged and kept in results. Salary below minimum is a soft penalty in manual runs and a hard reject in scheduled runs.
 - **Remote:** remote level is normalized and reported; non-remote roles are not rejected by default.
   `prefer_full_remote` is treated as a soft preference and records a penalty when not met.
 - **Unknown location:** accepted in non-strict runs with an `unknown_location` penalty.
@@ -241,8 +241,11 @@ help you pinpoint the issue:
 
 ## Scoring & ranking
 - Scores apply only to **accepted** postings.
-- Score = `scoring.base_score` + bonuses − penalties (all weights configured in `scoring`).
-- Data governance keyword matches add a configurable boost, recorded in score bonuses.
+- Score = weighted CV keyword recall (`title` weight > `description`) + role/platform bonuses − soft penalties.
+- Core CV terms (data governance/quality/management/metadata/lineage/compliance/risk data) are weighted highest.
+- Cloud/data-platform terms (`GCP`, `BigQuery`, `Kafka`, `ETL/ELT`, `Airflow`, `dbt`, `SQL`) add medium-high signal.
+- Negative domains (`brand/growth marketing`, `SEO`, `paid ads`, `sales`, `affiliate`) and quant-trading titles receive strong penalties.
+- Scores are clamped to 0-100 and each selected job includes explainability `why[]` (2-3 reasons).
 - Reports order accepted postings by score (desc), then by newest `posted_at`.
 
 ## Personalization (optional)
@@ -264,10 +267,10 @@ help you pinpoint the issue:
 ## Outputs
 The pipeline writes reports to `out/`:
 - `out/report.csv` includes matcher fields:
-  - `matches_all`, `decision`, `hard_reject_reasons`, `penalties`,
+  - `matches_all`, `decision`, `hard_reject_reasons`, `penalties_applied`, `penalties`,
     `missing_fields`, `reject_reasons`, `missing_salary`, `remote_level`,
     `salary_min_eur`, `salary_max_eur`, `score`, `score_penalties`,
-    `score_bonuses`.
+    `score_bonuses`, `why`.
 - `out/report.md` has sections:
   - `## TOP_MATCHES (strict)`
   - `## DATA_ONLY_BEST_PICKS (wide)`
@@ -623,7 +626,7 @@ Troubleshooting rapido quando “non vedo messaggi”:
 
 ## CV-driven matching gates
 - TOP_MATCHES and DATA_ONLY_BEST_PICKS now require a core data-governance keyword gate (`data governance`, `data quality`, `metadata`, `data platform`, `gcp`, `bigquery`, etc.).
-- Hard-blocked titles (`brand manager`, `marketing`, `growth`, `sales`, `seo`, `paid media`) are rejected with `negative_hard_block`.
+- Marketing/brand/sales titles are no longer hard-rejected in manual runs; they are strongly penalized (`negative_domain`) for wide-recall behavior.
 - Quant/trading-like titles (`quantitative`, `trading`, `hedge fund`, `portfolio`) receive `negative_soft_penalty` and are strongly de-ranked.
 - Channel thresholds are now strict by default: TOP_MATCHES `score >= 70`, DATA_ONLY_BEST_PICKS `score >= 40`.
 

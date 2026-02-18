@@ -27,6 +27,7 @@ CSV_FIELDS = [
     "matches_all",
     "decision",
     "hard_reject_reasons",
+    "penalties_applied",
     "penalties",
     "missing_fields",
     "reject_reasons",
@@ -37,6 +38,7 @@ CSV_FIELDS = [
     "score",
     "score_penalties",
     "score_bonuses",
+    "why",
 ]
 
 
@@ -64,6 +66,7 @@ def _serialize_for_csv(row: ReportRow) -> dict:
     data["matches_all"] = row.match.matches_all
     data["decision"] = row.match.decision
     data["hard_reject_reasons"] = ";".join(row.match.hard_reject_reasons)
+    data["penalties_applied"] = ";".join(row.match.penalties)
     data["penalties"] = ";".join(row.match.penalties)
     data["missing_fields"] = ";".join(row.match.missing_fields)
     data["reject_reasons"] = ";".join(row.match.reject_reasons)
@@ -74,6 +77,7 @@ def _serialize_for_csv(row: ReportRow) -> dict:
     data["score"] = row.match.score
     data["score_penalties"] = ";".join(row.match.score_penalties)
     data["score_bonuses"] = ";".join(row.match.score_bonuses)
+    data["why"] = " | ".join(row.match.why)
     return data
 
 
@@ -167,6 +171,8 @@ def _write_section(
             )
         if row.match.score is not None and row.match.decision == "accepted":
             handle.write(f"  - Score: {row.match.score}\n")
+            if row.match.why:
+                handle.write(f"  - Why: {'; '.join(row.match.why)}\n")
             adjustments = []
             if row.match.score_bonuses:
                 adjustments.append(

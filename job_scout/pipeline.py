@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
+from collections import Counter
 
 from job_scout.channels import select_channels
 from job_scout.matcher import match_posting
@@ -37,6 +38,14 @@ class PipelineSummary:
     gate_pass_count: int = 0
     hard_block_count: int = 0
     soft_penalty_count: int = 0
+    hard_rejected_count: int = 0
+    soft_penalized_count: int = 0
+    top_penalties: dict[str, int] | None = None
+    top_hard_rejects: dict[str, int] | None = None
+    avg_score: float = 0.0
+    max_score: int = 0
+    selected_min_score: int = 0
+    selected_max_score: int = 0
 
 
 def _resolve_sources(selected: Iterable[str] | None) -> list[str]:
@@ -182,9 +191,7 @@ def run_pipeline(
     )
     logger.info("Wrote reports to %s", output_dir)
     gate_pass_count = sum(1 for row in all_rows if passes_core_gate(row.posting))
-    hard_block_count = sum(
-        1 for row in all_rows if "negative_hard_block" in row.match.reject_reasons
-    )
+    hard_block_count = sum(1 for row in all_rows if row.match.hard_reject_reasons)
     soft_penalty_count = sum(
         1 for row in all_rows if "negative_soft_penalty" in row.match.score_penalties
     )
@@ -193,6 +200,18 @@ def run_pipeline(
         for row in all_rows
         if not _is_hard_blocked_candidate(row)
     )
+    penalty_counts = Counter(
+        penalty
+        for row in all_rows
+        for penalty in row.match.penalties
+    )
+    hard_reject_counts = Counter(
+        reason
+        for row in all_rows
+        for reason in row.match.hard_reject_reasons
+    )
+    scored_rows = [row for row in all_rows if row.match.score is not None]
+    selected_scores = [row.match.score or 0 for row in matches if row.match.score is not None]
     summary = PipelineSummary(
         fetched_count=fetched_total,
         normalized_count=normalized_total,
@@ -202,6 +221,14 @@ def run_pipeline(
         gate_pass_count=gate_pass_count,
         hard_block_count=hard_block_count,
         soft_penalty_count=soft_penalty_count,
+        hard_rejected_count=len(rejected),
+        soft_penalized_count=sum(1 for row in all_rows if row.match.penalties),
+        top_penalties=dict(penalty_counts.most_common(5)),
+        top_hard_rejects=dict(hard_reject_counts.most_common(5)),
+        avg_score=(sum((row.match.score or 0) for row in scored_rows) / len(scored_rows)) if scored_rows else 0.0,
+        max_score=max((row.match.score or 0) for row in scored_rows) if scored_rows else 0,
+        selected_min_score=min(selected_scores) if selected_scores else 0,
+        selected_max_score=max(selected_scores) if selected_scores else 0,
     )
     return all_rows, summary
 

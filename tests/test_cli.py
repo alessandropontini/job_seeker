@@ -108,6 +108,13 @@ def test_cli_run_summary_contains_telegram_fields(tmp_path, monkeypatch):
     assert "threshold_final" in summary
     assert "min_results" in summary
     assert "selected_count" in summary
+    assert "hard_rejected_count" in summary
+    assert "soft_penalized_count" in summary
+    assert "top_penalties" in summary
+    assert "top_hard_rejects" in summary
+    assert "avg_score" in summary
+    assert "selected_min_score" in summary
+    assert "selected_max_score" in summary
 
     assert summary["source_counts"] == {"remotive": 2, "wwr": 1}
 
