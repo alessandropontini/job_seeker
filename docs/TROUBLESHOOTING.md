@@ -46,3 +46,19 @@ Controlli rapidi (ordine consigliato):
    - `time_gate_skip`: run fuori finestra locale (`08:00-08:10 Europe/Rome`), skip atteso (con ping Telegram `Scheduled run skipped (time gate)`).
 
 Perché doppio cron + gate: il passaggio CET/CEST sposta l'equivalenza UTC delle 08:00 locali. Due run ravvicinati garantiscono che almeno uno cada nella finestra locale corretta, mentre l'altro produce comunque diagnostica osservabile (`time_gate_skip`).
+
+## Se vedi `feedback non valido` su Telegram
+
+Controlli rapidi per distinguere i casi più comuni:
+- Verifica `close_at` della sessione nel KV e assicurati che la finestra sia 24h (`FEEDBACK_WINDOW_MINUTES=1440`).
+- Se la sessione non esiste più per quel `run_id`, il Worker risponde con `Session missing (expired). request_id=<id>`.
+- Se `callback_data` è malformato, il Worker risponde con `Invalid callback data. request_id=<id>`.
+- Filtra i Workers Logs per `request_id` (header `X-Request-Id`) e cerca `event=feedback_callback`.
+
+Esempi diagnostici (`event=feedback_callback`):
+- `outcome=ok, reason=feedback_recorded`
+- `outcome=session_missing, reason=session_expired`
+- `outcome=session_missing, reason=no_session_for_run_id`
+- `outcome=invalid_callback, reason=bad_format`
+- `outcome=invalid_callback, reason=bad_action`
+- `outcome=invalid_callback, reason=missing_fields`

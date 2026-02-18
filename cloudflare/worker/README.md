@@ -48,7 +48,7 @@ This avoids GitHub scheduled workflows and keeps scheduling in Cloudflare.
 
 - KV binding: `JOB_SCOUT_KV`
 - Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_SECRET`, `ALLOWED_TELEGRAM_USER_ID`, `JOB_SCOUT_SMOKE_TOKEN`
-- Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES`
+- Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES` (`1440` recommended in production, i.e. 24h)
 
 See `docs/runbook_live.md` for operational checklist and troubleshooting.
 

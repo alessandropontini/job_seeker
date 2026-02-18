@@ -72,7 +72,7 @@ function buildEnv({
   return {
     JOB_SCOUT_WEBHOOK_SECRET: secret,
     TELEGRAM_BOT_TOKEN: telegramToken,
-    FEEDBACK_WINDOW_MINUTES: 60,
+    FEEDBACK_WINDOW_MINUTES: 1440,
     JOB_SCOUT_KV: kv,
     ALLOWED_TELEGRAM_USER_ID: allowedUserId,
     JOB_SCOUT_SMOKE_TOKEN: smokeToken,
@@ -181,7 +181,7 @@ maybeTest("telegram webhook returns invalid callback data on malformed data", as
   );
   assert.equal(response.status, 200);
   const body = await response.text();
-  assert.match(body, /^Invalid callback data \(request_id=/);
+  assert.match(body, /^Invalid callback data\. request_id=/);
   assert.equal(kv.putCalls.length, 0);
   assert.ok(findLogEvent(logs, "feedback_callback"));
 });
@@ -316,7 +316,7 @@ maybeTest("telegram webhook returns session missing when short_id is absent", as
   assert.equal(response.status, 200);
   assert.ok(response.headers.get("X-Request-Id"));
   const body = await response.text();
-  assert.match(body, /^Session missing \(request_id=/);
+  assert.match(body, /^Session missing \(expired\)\. request_id=/);
 });
 
 maybeTest("telegram webhook resolves job by hash fallback in v2 callback", async () => {
@@ -338,6 +338,57 @@ maybeTest("telegram webhook resolves job by hash fallback in v2 callback", async
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /^OK \(request_id=/);
+});
+
+maybeTest("telegram webhook distinguishes invalid callback from missing session and keeps request_id", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const env = buildEnv({ secret: "topsecret", kv: new MockKV() });
+
+  const invalidResponse = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret", data: "fb|run123|BAD|job1" }),
+    env
+  );
+  assert.equal(invalidResponse.status, 200);
+  assert.ok(invalidResponse.headers.get("X-Request-Id"));
+  const invalidBody = await invalidResponse.text();
+  assert.match(invalidBody, /^Invalid callback data\. request_id=/);
+
+  const missingResponse = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret", data: "fb|run404|L|job1" }),
+    env
+  );
+  assert.equal(missingResponse.status, 200);
+  assert.ok(missingResponse.headers.get("X-Request-Id"));
+  const missingBody = await missingResponse.text();
+  assert.match(missingBody, /^Session missing \(expired\)\. request_id=/);
+});
+
+maybeTest("feedback callback logging emits structured payload and uses error log for non-ok", async () => {
+  const { consoleMock, logs, errorLogs } = createConsoleMock();
+  const module = await loadWorkerModule({ consoleOverride: consoleMock });
+  const worker = module.default;
+  const env = buildEnv({ secret: "topsecret", kv: new MockKV() });
+
+  await worker.fetch(
+    buildRequest({ secretHeader: "topsecret", data: "fb|run123|BAD|job1" }),
+    env
+  );
+
+  const callbackLog = logs
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .find((entry) => entry?.event === "feedback_callback");
+  assert.ok(callbackLog);
+  assert.equal(callbackLog.outcome, "invalid_callback");
+  assert.equal(callbackLog.reason, "bad_action");
+  assert.equal(callbackLog.request_id?.length > 0, true);
+  assert.equal(errorLogs.some((line) => line.includes('"event":"feedback_callback"')), true);
 });
 
 maybeTest("logs route_not_found for unknown paths", async () => {
@@ -404,12 +455,22 @@ function createFetchMock() {
 
 function createConsoleMock() {
   const logs = [];
+  const errorLogs = [];
+  const warnLogs = [];
   return {
     logs,
+    errorLogs,
+    warnLogs,
     consoleMock: {
       log: (line) => logs.push(line),
-      error: (line) => logs.push(line),
-      warn: (line) => logs.push(line),
+      error: (line) => {
+        logs.push(line);
+        errorLogs.push(line);
+      },
+      warn: (line) => {
+        logs.push(line);
+        warnLogs.push(line);
+      },
     },
   };
 }

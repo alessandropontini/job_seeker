@@ -1,5 +1,6 @@
 const REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs";
 const LIVE_RUN_TTL_SECONDS = 60 * 60 * 24 * 14;
+const MIN_SESSION_TTL_SECONDS = 60 * 60 * 24;
 
 export default {
   async fetch(request, env, ctx) {
@@ -213,7 +214,7 @@ async function runDailyLiveDigest(env, ctx, baseLog) {
     })),
   };
   await env.JOB_SCOUT_KV.put(`session:${runId}`, JSON.stringify(sessionPayload), {
-    expirationTtl: 60 * 60 * 2,
+    expirationTtl: sessionTtlSeconds(env),
   });
 
   await persistLiveRun(env, {
@@ -544,12 +545,20 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
 
   const callback = payload?.callback_query;
   if (!callback) {
-    return {
-      response: textResponse("No callback", 200, baseLog.request_id),
+    return feedbackExit({
+      baseLog,
+      startedAt,
       outcome: "ok",
       reason: "no_callback",
-      telegram_update_type: telegramUpdateType,
-    };
+      runId: null,
+      jobShortId: null,
+      action: null,
+      responseMessage: "No callback",
+      env,
+      ctx,
+      responseStatus: 200,
+      telegramUpdateType,
+    });
   }
 
   const allowedUserId = env.ALLOWED_TELEGRAM_USER_ID;
@@ -598,18 +607,17 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
     });
   }
 
-  const parsed = parseCallbackData(data);
-  if (!parsed) {
+  const parsed = parseCallbackDataWithReason(data);
+  if (!parsed.ok) {
     return feedbackExit({
       baseLog,
       startedAt,
       outcome: "invalid_callback",
-      errorCode: "invalid_callback_data",
-      reason: "Callback payload format invalid",
+      reason: parsed.reason,
       runId: null,
       jobShortId: null,
       action: null,
-      responseMessage: "Invalid callback data",
+      responseMessage: "Invalid callback data. request_id=<id>",
       callbackId: callback.id,
       callbackText: "Feedback non valido",
       env,
@@ -619,7 +627,7 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
     });
   }
 
-  const { runId, jobShortId, action, jobHash, legacy } = parsed;
+  const { runId, jobShortId, action, jobHash, legacy } = parsed.value;
   const sessionKey = `session:${runId}`;
   const windowRaw = await env.JOB_SCOUT_KV.get(sessionKey, "json");
   if (!windowRaw) {
@@ -627,12 +635,11 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
       baseLog,
       startedAt,
       outcome: "session_missing",
-      errorCode: "session_missing",
-      reason: "session key not found",
+      reason: "no_session_for_run_id",
       runId,
       jobShortId,
       action,
-      responseMessage: "Session missing",
+      responseMessage: "Session missing (expired). request_id=<id>",
       callbackId: callback.id,
       callbackText: "⏱ Session scaduta",
       env,
@@ -674,12 +681,11 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
       baseLog,
       startedAt,
       outcome: "session_missing",
-      errorCode: "window_closed",
-      reason: "feedback window closed",
+      reason: "session_expired",
       runId,
       jobShortId,
       action,
-      responseMessage: "Session missing",
+      responseMessage: "Session missing (expired). request_id=<id>",
       callbackId: callback.id,
       callbackText: "⏱ Session scaduta",
       env,
@@ -702,7 +708,7 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
       runId,
       jobShortId,
       action,
-      responseMessage: "Session missing",
+      responseMessage: "Session missing (expired). request_id=<id>",
       callbackId: callback.id,
       callbackText: "Job non riconosciuto",
       env,
@@ -1008,7 +1014,7 @@ async function handleWindowOpen(request, env, baseLog) {
     jobs: Array.isArray(payload.body.jobs) ? payload.body.jobs : [],
   };
   await env.JOB_SCOUT_KV.put(`session:${runId}`, JSON.stringify(windowPayload), {
-    expirationTtl: 60 * 60 * 2,
+    expirationTtl: sessionTtlSeconds(env),
   });
   logInfo("window_open_recorded", {
     ...baseLog,
@@ -1023,32 +1029,52 @@ async function handleWindowOpen(request, env, baseLog) {
 }
 
 export function parseCallbackData(data) {
+  const parsed = parseCallbackDataWithReason(data);
+  return parsed.ok ? parsed.value : null;
+}
+
+function parseCallbackDataWithReason(data) {
+  if (typeof data !== "string") {
+    return { ok: false, reason: "bad_format" };
+  }
   if (!data.startsWith("fb|")) {
-    return null;
+    return { ok: false, reason: "bad_format" };
   }
   const parts = data.split("|");
   if (parts.length === 4) {
     const [_, runId, action, jobShortId] = parts;
-    if (!runId || !jobShortId || !action || !isValidAction(action)) {
-      return null;
+    if (!runId || !jobShortId || !action) {
+      return { ok: false, reason: "missing_fields" };
     }
-    return { runId, jobShortId, action, jobHash: "", legacy: false };
+    if (!isValidAction(action)) {
+      return { ok: false, reason: "bad_action" };
+    }
+    return { ok: true, value: { runId, jobShortId, action, jobHash: "", legacy: false } };
   }
   if (parts.length === 5) {
     const [_, runId, action, jobShortId, jobHash] = parts;
-    if (!runId || !jobShortId || !action || !jobHash || !isValidAction(action)) {
-      return null;
+    if (!runId || !jobShortId || !action || !jobHash) {
+      return { ok: false, reason: "missing_fields" };
     }
-    return { runId, jobShortId, action, jobHash, legacy: false };
+    if (!isValidAction(action)) {
+      return { ok: false, reason: "bad_action" };
+    }
+    return { ok: true, value: { runId, jobShortId, action, jobHash, legacy: false } };
   }
   if (parts.length === 3) {
     const [_, runId, action] = parts;
-    if (!runId || !action || !isValidAction(action)) {
-      return null;
+    if (!runId || !action) {
+      return { ok: false, reason: "missing_fields" };
     }
-    return { runId, jobShortId: "legacy", action, jobHash: "", legacy: true };
+    if (!isValidAction(action)) {
+      return { ok: false, reason: "bad_action" };
+    }
+    return {
+      ok: true,
+      value: { runId, jobShortId: "legacy", action, jobHash: "", legacy: true },
+    };
   }
-  return null;
+  return { ok: false, reason: "bad_format" };
 }
 
 export function hasAlreadySentForDate(lastSentDate, targetDateRome) {
@@ -1155,6 +1181,11 @@ function feedbackWindowMs(env) {
   return minutes * 60 * 1000;
 }
 
+function sessionTtlSeconds(env) {
+  const windowSeconds = Math.ceil(feedbackWindowMs(env) / 1000);
+  return Math.max(MIN_SESSION_TTL_SECONDS, windowSeconds);
+}
+
 function isValidAction(action) {
   return ["L", "M", "D", "S", "X", "like", "maybe", "dislike", "love", "duplicate"].includes(action);
 }
@@ -1227,7 +1258,6 @@ function feedbackExit({
     job_short_id: jobShortId,
     action,
     outcome,
-    error_code: errorCode,
     reason,
     duration_ms: Date.now() - startedAt,
     telegram_update_type: telegramUpdateType,
@@ -1237,7 +1267,7 @@ function feedbackExit({
   return {
     response: textResponse(responseMessage, responseStatus, baseLog.request_id),
     outcome,
-    reason: errorCode,
+    reason,
     telegram_update_type: telegramUpdateType,
     kv_key: kvKey,
   };
@@ -1262,14 +1292,13 @@ function logFeedbackEvent(fields) {
     job_short_id: fields.job_short_id,
     action: fields.action,
     outcome: fields.outcome,
-    error_code: fields.error_code,
     reason: fields.reason,
     duration_ms: fields.duration_ms,
     telegram_update_type: fields.telegram_update_type,
     kv_key: fields.kv_key,
     telegram_user_id: fields.telegram_user_id,
   };
-  const level = fields.outcome === "ok" ? "info" : fields.outcome === "error" ? "error" : "warn";
+  const level = fields.outcome === "ok" ? "info" : "error";
   logEvent(level, payload);
 }
 
@@ -1309,7 +1338,11 @@ function jsonResponse(payload, status = 200) {
 }
 
 function textResponse(message, status, requestId) {
-  return new Response(`${message} (request_id=${requestId})`, {
+  const suffix = `request_id=${requestId}`;
+  const responseMessage = message.includes("request_id=")
+    ? message.replace("<id>", requestId)
+    : `${message} (${suffix})`;
+  return new Response(responseMessage, {
     status,
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
