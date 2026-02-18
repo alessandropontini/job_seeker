@@ -253,3 +253,22 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Updated `cloudflare/worker/wrangler.toml` observability blocks to match current Cloudflare dashboard schema.
 - Added explicit `head_sampling_rate` and `persist` fields for logs, plus explicit traces settings.
 - Kept observability enabled for logs and configured traces block explicitly for future rollout control.
+
+### PR3.2 — Feedback callback diagnostics hardening (complete)
+**Status:** ✅ Done
+
+- Extended feedback window default for Worker vars to 24h (`FEEDBACK_WINDOW_MINUTES=1440`).
+- Aligned session KV TTL with feedback window using a minimum 24h TTL for `session:<run_id>` records.
+- Added structured `feedback_callback` logs for all `/telegram/feedback` exits, including non-callback updates.
+- Normalized callback parse failure reasons (`bad_format`, `bad_action`, `missing_fields`) and session-missing reasons (`session_expired`, `no_session_for_run_id`).
+- Kept request correlation deterministic with `X-Request-Id` and request-id text in error bodies.
+- Added/updated tests for reason distinction, request-id presence, and structured callback diagnostics logs.
+
+### Ops — Reliable Cloudflare Worker deploy workflow (complete)
+**Status:** ✅ Done
+
+- Reworked `.github/workflows/deploy_worker.yml` for reliable manual deploy (`workflow_dispatch`) with optional auto-trigger on `push` to `main` when Worker paths change.
+- Pinned Wrangler to `4.41.0` and added hard validation that `wrangler --version` matches `4.41.x`.
+- Added deterministic Worker directory discovery by locating `wrangler.toml` and validating `name = "job-scout-telegram-feedback"` before deploy.
+- Added pre-deploy JS syntax check (`node --check worker.js`) and post-deploy diagnostics (`wrangler whoami`, deployments list, UTC timestamp, commit SHA).
+- Standardized required secrets to `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and documented setup + verification steps.

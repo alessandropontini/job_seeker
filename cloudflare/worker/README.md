@@ -48,7 +48,7 @@ This avoids GitHub scheduled workflows and keeps scheduling in Cloudflare.
 
 - KV binding: `JOB_SCOUT_KV`
 - Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_SECRET`, `ALLOWED_TELEGRAM_USER_ID`, `JOB_SCOUT_SMOKE_TOKEN`
-- Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES`
+- Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES` (`1440` recommended in production, i.e. 24h)
 
 See `docs/runbook_live.md` for operational checklist and troubleshooting.
 
@@ -62,3 +62,30 @@ See `docs/runbook_live.md` for operational checklist and troubleshooting.
 
 After deploy, open **Cloudflare Dashboard → Workers & Pages → job-scout-telegram-feedback → Logs**.
 Filter by `request_id` (header `X-Request-Id`) or `run_id` to trace callback outcomes (`ok`, `invalid_callback`, `session_missing`, `forbidden`, `error`).
+
+## Deploy Worker (GitHub Actions)
+
+Use workflow `.github/workflows/deploy_worker.yml` to deploy `job-scout-telegram-feedback` reliably.
+
+### Required GitHub Secrets
+Create these repository secrets before running deploy:
+- `CLOUDFLARE_API_TOKEN` (token with Workers deploy permissions)
+- `CLOUDFLARE_ACCOUNT_ID` (Cloudflare account id)
+
+### How to run deploy
+1. Open **GitHub → Actions → deploy-feedback-worker**.
+2. Click **Run workflow**.
+3. Choose `environment`:
+   - `staging` (default)
+   - `prod`
+4. Start the workflow.
+
+The workflow pins Wrangler to `4.41.0`, verifies `wrangler --version` is `4.41.x`, validates worker name in `wrangler.toml`, runs `node --check worker.js`, and executes:
+- `wrangler deploy --config wrangler.toml` (staging)
+- `wrangler deploy --config wrangler.toml --env <environment>` (non-staging)
+
+### How to verify Active Deployment in Cloudflare
+1. Open **Cloudflare Dashboard → Workers & Pages → job-scout-telegram-feedback**.
+2. Confirm **Active Deployment** timestamp is recent.
+3. Compare script/version metadata with the commit SHA printed in workflow logs.
+4. Optionally verify from workflow logs using `wrangler deployments list` output.
