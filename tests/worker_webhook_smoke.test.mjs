@@ -118,6 +118,7 @@ maybeTest("telegram webhook rejects missing secret header", async () => {
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: null }), env);
   assert.equal(response.status, 401);
+  assert.ok(response.headers.get("X-Request-Id"));
   assert.equal(kv.putCalls.length, 0);
   assert.ok(findLogEvent(logs, "auth_fail"));
 });
@@ -130,6 +131,7 @@ maybeTest("telegram webhook rejects wrong secret header", async () => {
   const env = buildEnv({ secret: "topsecret", kv });
   const response = await worker.fetch(buildRequest({ secretHeader: "wrong" }), env);
   assert.equal(response.status, 401);
+  assert.ok(response.headers.get("X-Request-Id"));
   assert.equal(kv.putCalls.length, 0);
   assert.ok(findLogEvent(logs, "auth_fail"));
 });
@@ -153,8 +155,9 @@ maybeTest("telegram webhook accepts correct secret header and writes KV", async 
     env
   );
   assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.deepEqual(body, { ok: true });
+  assert.ok(response.headers.get("X-Request-Id"));
+  const body = await response.text();
+  assert.match(body, /^OK \(request_id=/);
   assert.equal(kv.putCalls.length, 1);
   assert.ok(kv.store.has("feedback:run123:42:job1"));
   assert.ok(findLogEvent(logs, "request_received"));
@@ -178,9 +181,9 @@ maybeTest("telegram webhook returns invalid callback data on malformed data", as
   );
   assert.equal(response.status, 200);
   const body = await response.text();
-  assert.equal(body, "Invalid callback data");
+  assert.match(body, /^Invalid callback data \(request_id=/);
   assert.equal(kv.putCalls.length, 0);
-  assert.ok(findLogEvent(logs, "telegram_webhook_rejected"));
+  assert.ok(findLogEvent(logs, "feedback_callback"));
 });
 
 maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
@@ -197,9 +200,10 @@ maybeTest("telegram webhook blocks non-allowed user feedback", async () => {
     buildRequest({ secretHeader: "topsecret" }),
     env
   );
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 403);
+  assert.ok(response.headers.get("X-Request-Id"));
   assert.equal(kv.putCalls.length, 0);
-  assert.ok(findLogEvent(logs, "unauthorized_user"));
+  assert.ok(findLogEvent(logs, "feedback_callback"));
 });
 
 maybeTest("telegram webhook GET probe returns ok", async () => {
@@ -216,15 +220,24 @@ maybeTest("telegram webhook GET probe returns ok", async () => {
   assert.ok(findLogEvent(logs, "telegram_webhook_probe"));
 });
 
-maybeTest("parseCallbackData accepts the expected feedback payload format", async () => {
+maybeTest("parseCallbackData accepts v1 and v2 callback payload formats", async () => {
   const module = await loadWorkerModule();
   const { parseCallbackData } = module;
-  const parsed = parseCallbackData("fb|run123|L|job1");
-  assert.deepEqual(parsed, {
+  const parsedV1 = parseCallbackData("fb|run123|L|job1");
+  assert.deepEqual(parsedV1, {
     runId: "run123",
     jobShortId: "job1",
     action: "L",
     jobHash: "",
+    legacy: false,
+  });
+  const parsedV2 = parseCallbackData("fb|run123|L|job1|hash1aaa");
+  assert.deepEqual(parsedV2, {
+    runId: "run123",
+    jobShortId: "job1",
+    action: "L",
+    jobHash: "hash1aaa",
+    legacy: false,
   });
   assert.equal(parseCallbackData("fb|run123|job1|bad|hash1"), null);
 });
@@ -248,6 +261,7 @@ maybeTest("internal smoke session returns callback data for valid token", async 
   assert.ok(parsed);
   assert.equal(parsed.runId, body.session_id);
   assert.equal(parsed.jobShortId, body.job_id);
+  assert.ok(parsed.jobHash);
   const session = await kv.get(`session:${body.session_id}`, "json");
   assert.ok(session);
   assert.equal(session.jobs[0].job_hash, parsed.jobHash);
@@ -282,6 +296,50 @@ maybeTest("internal smoke session hides when token is invalid", async () => {
   assert.equal(response.status, 404);
 });
 
+
+maybeTest("telegram webhook returns session missing when short_id is absent", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV({
+    "session:run123": JSON.stringify({
+      run_id: "run123",
+      open_at: new Date(Date.now() - 1000).toISOString(),
+      close_at: new Date(Date.now() + 1000).toISOString(),
+      jobs: [{ short_id: "jobX", job_hash: "hashX", source: "dummy" }],
+    }),
+  });
+  const env = buildEnv({ secret: "topsecret", kv });
+  const response = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret", data: "fb|run123|L|job1" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  assert.ok(response.headers.get("X-Request-Id"));
+  const body = await response.text();
+  assert.match(body, /^Session missing \(request_id=/);
+});
+
+maybeTest("telegram webhook resolves job by hash fallback in v2 callback", async () => {
+  const module = await loadWorkerModule();
+  const worker = module.default;
+  const kv = new MockKV({
+    "session:run123": JSON.stringify({
+      run_id: "run123",
+      open_at: new Date(Date.now() - 1000).toISOString(),
+      close_at: new Date(Date.now() + 1000).toISOString(),
+      jobs: [{ short_id: "job1", job_hash: "hash8888", source: "dummy" }],
+    }),
+  });
+  const env = buildEnv({ secret: "topsecret", kv, telegramToken: "token" });
+  const response = await worker.fetch(
+    buildRequest({ secretHeader: "topsecret", data: "fb|run123|L|missing|hash8888" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /^OK \(request_id=/);
+});
+
 maybeTest("logs route_not_found for unknown paths", async () => {
   const { consoleMock, logs } = createConsoleMock();
   const module = await loadWorkerModule({ consoleOverride: consoleMock });
@@ -293,6 +351,7 @@ maybeTest("logs route_not_found for unknown paths", async () => {
     env
   );
   assert.equal(response.status, 404);
+  assert.ok(response.headers.get("X-Request-Id"));
   assert.ok(findLogEvent(logs, "route_not_found"));
 });
 
