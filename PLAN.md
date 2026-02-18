@@ -246,3 +246,10 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Increase daily candidate volume with additional public sources while preserving no-login/no-paywall policy.
 - Keep PR3 wide-recall scoring pipeline unchanged; plug new sources into the same normalization/matching/ranking contracts.
 - Goal: reduce low-volume days from Remotive-only fetches without sacrificing relevance.
+
+### PR3.2 — Cloudflare observability schema alignment (complete)
+**Status:** ✅ Done
+
+- Updated `cloudflare/worker/wrangler.toml` observability blocks to match current Cloudflare dashboard schema.
+- Added explicit `head_sampling_rate` and `persist` fields for logs, plus explicit traces settings.
+- Kept observability enabled for logs and configured traces block explicitly for future rollout control.
