@@ -25,11 +25,13 @@ def test_pipeline_groups_and_reports(tmp_path):
     assert "matches_all" in csv_header
     assert "decision" in csv_header
     assert "hard_reject_reasons" in csv_header
+    assert "penalties_applied" in csv_header
     assert "penalties" in csv_header
     assert "missing_fields" in csv_header
     assert "reject_reasons" in csv_header
     assert "missing_salary" in csv_header
     assert "score" in csv_header
+    assert "why" in csv_header
 
     md_content = md_path.read_text(encoding="utf-8")
     assert "## Source Status" in md_content

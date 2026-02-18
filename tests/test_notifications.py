@@ -39,6 +39,7 @@ def _make_row(job_id: str, score: int, penalties: list[str]) -> ReportRow:
         score=score,
         score_penalties=penalties,
         score_bonuses=["full_remote"],
+        why=["match core_title", "match platform", "penalty prefer_full_remote"],
     )
     return ReportRow(posting=posting, match=match)
 
@@ -98,6 +99,7 @@ def test_dual_channel_digest_includes_sections():
     assert "[DATA]" in digest
     assert "channel: data keyword: data" in digest
     assert "Mode: TOP" in digest
+    assert "Why:" in digest
 
 
 def test_select_digest_items_adaptive_or_low_confidence():

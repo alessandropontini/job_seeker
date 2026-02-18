@@ -27,7 +27,32 @@ CORE_KEYWORDS = [
     "google cloud",
 ]
 
-NEGATIVE_HARD_BLOCK_TITLES = [
+PLATFORM_KEYWORDS = [
+    "gcp",
+    "bigquery",
+    "google cloud",
+    "kafka",
+    "etl",
+    "elt",
+    "data pipeline",
+    "data lake",
+    "data warehouse",
+    "airflow",
+    "dbt",
+    "sql",
+]
+
+ROLE_BONUS_KEYWORDS = [
+    "data governance manager",
+    "data governance specialist",
+    "data manager",
+    "data platform",
+    "data product",
+    "data owner",
+    "data lead",
+]
+
+NEGATIVE_DOMAIN_KEYWORDS = [
     "brand manager",
     "marketing",
     "growth",
@@ -76,14 +101,13 @@ def find_core_keyword_matches(posting: JobPosting) -> list[str]:
     return find_matches(text, CORE_KEYWORDS)
 
 
-def has_negative_hard_block(posting: JobPosting) -> bool:
-    """Return True when title matches hard-blocked role families."""
+def has_negative_domain_penalty(posting: JobPosting) -> bool:
+    """Return True when title matches marketing/sales role families."""
 
-    return has_any(posting.title.lower(), NEGATIVE_HARD_BLOCK_TITLES)
+    return has_any(posting.title.lower(), NEGATIVE_DOMAIN_KEYWORDS)
 
 
 def has_negative_soft_penalty(posting: JobPosting) -> bool:
     """Return True when title matches quant/trading role families."""
 
     return has_any(posting.title.lower(), NEGATIVE_SOFT_PENALTY_TITLES)
-

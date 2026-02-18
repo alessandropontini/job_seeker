@@ -13,7 +13,7 @@ from job_scout.normalize import (
     parse_salary_range,
 )
 from job_scout.regions import RegionData, normalize_country
-from job_scout.targeting import has_negative_hard_block
+from job_scout.targeting import has_negative_domain_penalty
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ class MatchResult:
     score: int | None = None
     score_penalties: list[str] = field(default_factory=list)
     score_bonuses: list[str] = field(default_factory=list)
+    why: list[str] = field(default_factory=list)
 
 
 def match_posting(
@@ -44,18 +45,29 @@ def match_posting(
 ) -> tuple[JobPosting, MatchResult]:
     """Return a posting copy with match metadata based on configured rules."""
 
+    run_mode = _resolve_run_mode(config)
     (
         hard_reject_reasons,
+        soft_penalties,
         missing_fields,
         salary_min_eur,
         salary_max_eur,
         missing_salary,
         remote_level,
-    ) = evaluate_hard_constraints(posting, config, region_data, strict)
+    ) = evaluate_hard_constraints(
+        posting,
+        config,
+        region_data,
+        strict,
+        run_mode=run_mode,
+    )
     decision = "rejected" if hard_reject_reasons else "accepted"
     missing_salary_allowed = missing_salary and allow_missing_salary
-    penalties = evaluate_soft_preferences(
-        config, missing_salary_allowed, missing_fields, remote_level
+    penalties = list(soft_penalties)
+    penalties.extend(
+        evaluate_soft_preferences(
+            config, missing_salary_allowed, missing_fields, remote_level
+        )
     )
     matches_all = decision == "accepted"
 
@@ -85,7 +97,9 @@ def evaluate_hard_constraints(
     config: Mapping[str, object],
     region_data: RegionData,
     strict: bool,
+    run_mode: str,
 ) -> tuple[
+    list[str],
     list[str],
     list[str],
     int | None,
@@ -96,6 +110,7 @@ def evaluate_hard_constraints(
     """Evaluate hard constraints and return reasons plus derived metadata."""
 
     hard_reject_reasons: list[str] = []
+    soft_penalties: list[str] = []
     missing_fields: list[str] = []
     location_rules = config.get("location_rules", {})
     role_rules = config.get("role_targeting", {})
@@ -132,6 +147,9 @@ def evaluate_hard_constraints(
     location_text = posting.location_text or ""
     location_country_lower = location_country.lower()
     location_text_lower = location_text.lower()
+
+    if not posting.url or not posting.url.strip():
+        hard_reject_reasons.append("missing_url")
 
     location_missing = (
         not location_country_lower and not location_text_lower
@@ -173,13 +191,19 @@ def evaluate_hard_constraints(
             if strict or not allow_unknown_location:
                 hard_reject_reasons.append("location_missing_strict")
         else:
-            hard_reject_reasons.append("location_not_allowed")
+            if run_mode == "manual":
+                soft_penalties.append("location_not_allowed")
+            else:
+                hard_reject_reasons.append("location_not_allowed")
 
     title_lower = posting.title.lower()
-    if has_negative_hard_block(posting):
-        hard_reject_reasons.append("negative_hard_block")
+    if has_negative_domain_penalty(posting):
+        soft_penalties.append("negative_domain")
     if not any(target in title_lower for target in include_titles):
-        hard_reject_reasons.append("title_not_targeted")
+        if run_mode == "manual":
+            soft_penalties.append("title_not_targeted")
+        else:
+            hard_reject_reasons.append("title_not_targeted")
 
     salary_min_eur = None
     salary_max_eur = None
@@ -199,13 +223,17 @@ def evaluate_hard_constraints(
             salary_max, currency, currency_rates
         )
         if salary_max_eur < minimum_eur:
-            hard_reject_reasons.append("salary_below_minimum")
+            if run_mode == "manual":
+                soft_penalties.append("salary_below_minimum")
+            else:
+                hard_reject_reasons.append("salary_below_minimum")
 
     if missing_salary:
         missing_fields.append("salary")
 
     return (
         hard_reject_reasons,
+        soft_penalties,
         missing_fields,
         salary_min_eur,
         salary_max_eur,
@@ -254,3 +282,12 @@ def _location_matches_token(
 
     normalized_token = token.lower()
     return country == normalized_token or normalized_token in location_text
+
+
+def _resolve_run_mode(config: Mapping[str, object]) -> str:
+    runtime = config.get("runtime", {})
+    if isinstance(runtime, Mapping):
+        value = str(runtime.get("run_mode", "scheduled")).strip().lower()
+        if value in {"manual", "scheduled"}:
+            return value
+    return "scheduled"

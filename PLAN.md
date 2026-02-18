@@ -221,3 +221,18 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Kept artifact guarantees (`out/run_summary.json` and `out/` upload on `always()`) without introducing new secrets or secret logging.
 - Added/kept test coverage for Rome 08:00 time gate and scheduled no-matches Telegram attempt semantics.
 - Next step (P4): increase source volume to reduce `no_matches` days while preserving strict location/role/salary filters.
+
+### PR3 — Wide recall + soft penalties + explainable CV scoring (complete)
+**Status:** ✅ Done
+
+- Switched manual matching from hard-gate rejects to soft penalties for `location_not_allowed`, `title_not_targeted`, and `salary_below_minimum` (scheduled keeps salary below min as hard reject).
+- Kept hard rejects only for real blockers (`missing_url`, explicit excluded country/UK text, existing blacklist-like conditions).
+- Reworked deterministic CV-driven scoring (title-weighted + description/platform signals, strong negative-domain and quant penalties, score clamp 0-100).
+- Added explainability field `why[]` for selected jobs and surfaced `Why:` lines in Telegram digest/report outputs.
+- Extended observability: `report.csv` now includes `penalties_applied` and `why`; `out/run_summary.json` now includes hard/soft counters, top penalties/hard rejects, score statistics.
+- Added/updated pytest coverage for manual soft-penalty behavior, salary mode differences, report schema, run summary fields, and digest explainability.
+
+### PR4 — Multi-source volume expansion (next)
+- Increase daily candidate volume with additional public sources while preserving no-login/no-paywall policy.
+- Keep PR3 wide-recall scoring pipeline unchanged; plug new sources into the same normalization/matching/ranking contracts.
+- Goal: reduce low-volume days from Remotive-only fetches without sacrificing relevance.
