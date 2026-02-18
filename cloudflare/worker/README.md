@@ -12,7 +12,8 @@ Receives Telegram `callback_query` updates, validates time window/session/job ha
 Requires `X-Telegram-Bot-Api-Secret-Token`.
 
 Callback data contract:
-- `fb|<run_id>|<job_short_id>|<action>|<job_hash>`
+- `fb|<run_id>|<action>|<job_short_id>` (v1, backward compatible)
+- `fb|<run_id>|<action>|<job_short_id>|<job_hash8>` (v2, preferred)
 - max 64 bytes
 
 ### `POST /window/open`
@@ -50,3 +51,14 @@ This avoids GitHub scheduled workflows and keeps scheduling in Cloudflare.
 - Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES`
 
 See `docs/runbook_live.md` for operational checklist and troubleshooting.
+
+
+## Observability and Workers Logs
+
+`wrangler.toml` enables Cloudflare Observability and persisted Workers Logs:
+- `[observability].enabled = true`
+- `[observability.logs].enabled = true`
+- `[observability.logs].invocation_logs = true`
+
+After deploy, open **Cloudflare Dashboard → Workers & Pages → job-scout-telegram-feedback → Logs**.
+Filter by `request_id` (header `X-Request-Id`) or `run_id` to trace callback outcomes (`ok`, `invalid_callback`, `session_missing`, `forbidden`, `error`).

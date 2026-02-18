@@ -12,3 +12,10 @@ crons = ["0 6 * * *", "0 7 * * *"]
 [vars]
 FEEDBACK_WINDOW_MINUTES = "60"
 JOB_SCOUT_ENV = "staging"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true

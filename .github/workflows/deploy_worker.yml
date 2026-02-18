@@ -7,7 +7,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      WRANGLER_VERSION: "latest"
+      WRANGLER_VERSION: "4.41.0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,6 +37,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Verify Wrangler version
+        run: npx --yes wrangler@${WRANGLER_VERSION} --version
 
       - name: Diagnostics (worker config)
         run: |

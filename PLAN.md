@@ -232,6 +232,16 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Extended observability: `report.csv` now includes `penalties_applied` and `why`; `out/run_summary.json` now includes hard/soft counters, top penalties/hard rejects, score statistics.
 - Added/updated pytest coverage for manual soft-penalty behavior, salary mode differences, report schema, run summary fields, and digest explainability.
 
+
+### PR3.1 — Worker feedback observability + diagnostics (complete)
+**Status:** ✅ Done
+
+- Enabled Cloudflare Worker Observability persisted logs in `cloudflare/worker/wrangler.toml`.
+- Added structured JSON feedback callback logs with `request_id`, `run_id`, `job_short_id`, `action`, `outcome`, `error_code`, `reason`, and `duration_ms`.
+- Added deterministic `X-Request-Id` response header on every Worker response and response bodies including request correlation id.
+- Hardened callback validation to support both `fb|run|action|short_id` and `fb|run|action|short_id|job_hash8`, with session/job resolution fallback by short_id then hash.
+- Clarified feedback error taxonomy (`invalid_callback`, `session_missing`, `forbidden`) and updated Worker tests/docs/deploy workflow diagnostics.
+
 ### PR4 — Multi-source volume expansion (next)
 - Increase daily candidate volume with additional public sources while preserving no-login/no-paywall policy.
 - Keep PR3 wide-recall scoring pipeline unchanged; plug new sources into the same normalization/matching/ranking contracts.
