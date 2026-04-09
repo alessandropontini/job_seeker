@@ -66,6 +66,14 @@ Additional vars for GitHub dispatch mode:
 - `GITHUB_TOKEN`
 - `GITHUB_REF` (defaults to `main`)
 
+For this repository, staging defaults are checked in for:
+- `GITHUB_OWNER=alessandropontini`
+- `GITHUB_REPO=job_seeker`
+- `GITHUB_REF=main`
+
+The deploy workflow uploads `GITHUB_TOKEN` to Cloudflare as a Worker secret so
+`/jobscout mode=github` can call GitHub's workflow dispatch API at runtime.
+
 See `docs/runbook_live.md` for operational checklist and troubleshooting.
 
 
@@ -104,6 +112,10 @@ The workflow pins Wrangler to `4.41.0`, verifies `wrangler --version` is `4.41.x
 The workflow also replaces the staging placeholder `REPLACE_WITH_NAMESPACE_ID` in
 `wrangler.toml` with the repository secret `CLOUDFLARE_KV_NAMESPACE_ID` before deploy,
 so the checked-in config can stay non-sensitive.
+
+For GitHub dispatch mode, store the GitHub PAT in the repository secret
+`WORKER_GH_TOKEN`; the deploy workflow uploads it to Cloudflare as the Worker
+runtime secret `GITHUB_TOKEN`.
 
 ### How to verify Active Deployment in Cloudflare
 1. Open **Cloudflare Dashboard → Workers & Pages → job-scout-telegram-feedback**.

@@ -12,6 +12,9 @@ crons = ["0 6 * * *", "0 7 * * *"]
 [vars]
 FEEDBACK_WINDOW_MINUTES = "1440"
 JOB_SCOUT_ENV = "staging"
+GITHUB_OWNER = "alessandropontini"
+GITHUB_REPO = "job_seeker"
+GITHUB_REF = "main"
 
 [observability]
 enabled = true
