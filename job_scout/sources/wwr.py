@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import email.utils
+import html
 import os
 from pathlib import Path
+import re
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -16,6 +18,10 @@ import xml.etree.ElementTree as ET
 from job_scout.normalize import SourceJob
 
 WWR_RSS_URL = "https://weworkremotely.com/remote-jobs.rss"
+_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+_HEADQUARTERS_RE = re.compile(r"Headquarters:\s*([^\n|]+)", re.IGNORECASE)
+_SALARY_RE = re.compile(r"Salary:\s*([^\n]+)", re.IGNORECASE)
 
 
 class WWRSourceError(RuntimeError):
@@ -64,24 +70,26 @@ def _parse_wwr_rss(payload: str, since_days: int) -> list[SourceJob]:
 
     postings: list[SourceJob] = []
     for item in root.findall("./channel/item"):
-        title = (item.findtext("title") or "").strip()
+        raw_title = (item.findtext("title") or "").strip()
         url = (item.findtext("link") or "").strip()
         guid = (item.findtext("guid") or url).strip()
-        company = _extract_company_name(item.findtext("description") or "")
+        raw_description = item.findtext("description") or ""
+        plain_description = _html_to_text(raw_description)
+        company = _extract_company_name(raw_title, plain_description)
 
         posted_at = _parse_rfc2822(item.findtext("pubDate"))
         if posted_at is None or posted_at.timestamp() < cutoff:
             continue
 
-        location_text = _extract_location(title)
-        salary_text = _extract_salary(item.findtext("description") or "")
+        location_text = _extract_location(raw_title, plain_description)
+        salary_text = _extract_salary(plain_description)
 
         postings.append(
             SourceJob(
                 id=f"wwr-{guid}",
                 source="wwr",
                 company=company,
-                title=_extract_title(title),
+                title=_extract_title(raw_title),
                 location_text=location_text,
                 location_country=_extract_country(location_text),
                 location_city=_extract_city(location_text),
@@ -91,7 +99,7 @@ def _parse_wwr_rss(payload: str, since_days: int) -> list[SourceJob]:
                 salary_text=salary_text,
                 currency=_extract_currency(salary_text),
                 tags=[],
-                description_snippet=(item.findtext("description") or "")[:140].strip(),
+                description_snippet=plain_description[:140].strip(),
             )
         )
     return postings
@@ -115,15 +123,25 @@ def _parse_rfc2822(value: str | None) -> datetime | None:
 
 
 def _extract_title(raw_title: str) -> str:
+    candidate = raw_title.strip()
+    if ":" in candidate:
+        candidate = candidate.split(":", 1)[1].strip()
+    if "(" in candidate and candidate.endswith(")"):
+        paren_value = candidate[candidate.rfind("(") + 1 : -1].strip()
+        if _looks_like_location(paren_value):
+            candidate = candidate[: candidate.rfind("(")].strip(" -")
+    return candidate
+
+
+def _extract_location(raw_title: str, plain_description: str) -> str:
+    description_location = _extract_headquarters_location(plain_description)
+    if description_location:
+        return description_location
     if "(" in raw_title and raw_title.endswith(")"):
-        return raw_title[: raw_title.rfind("(")].strip(" -")
-    return raw_title
-
-
-def _extract_location(raw_title: str) -> str:
-    if "(" not in raw_title or not raw_title.endswith(")"):
-        return "Worldwide"
-    return raw_title[raw_title.rfind("(") + 1 : -1].strip() or "Worldwide"
+        paren_value = raw_title[raw_title.rfind("(") + 1 : -1].strip()
+        if _looks_like_location(paren_value):
+            return paren_value
+    return "Worldwide"
 
 
 def _extract_country(location: str) -> str:
@@ -144,14 +162,11 @@ def _extract_city(location: str) -> str:
     return parts[0]
 
 
-def _extract_salary(description: str) -> str | None:
-    lowered = description.lower()
-    marker = "salary:"
-    if marker not in lowered:
+def _extract_salary(plain_description: str) -> str | None:
+    match = _SALARY_RE.search(plain_description)
+    if not match:
         return None
-    start = lowered.find(marker) + len(marker)
-    tail = description[start:].strip()
-    return tail.split("<", 1)[0].strip() or None
+    return match.group(1).strip() or None
 
 
 def _extract_currency(salary_text: str | None) -> str | None:
@@ -167,14 +182,63 @@ def _extract_currency(salary_text: str | None) -> str | None:
     return None
 
 
-def _extract_company_name(description: str) -> str:
-    if not description:
+def _extract_company_name(raw_title: str, plain_description: str) -> str:
+    if ":" in raw_title:
+        company = raw_title.split(":", 1)[0].strip()
+        if company:
+            return company
+    if not plain_description:
         return "Unknown"
-    # WWR RSS usually starts with the company name before the first ' - '.
-    cleaned = description.replace("\n", " ").strip()
-    if " - " in cleaned:
-        return cleaned.split(" - ", 1)[0].strip() or "Unknown"
-    return cleaned[:80].strip() or "Unknown"
+    if " - " in plain_description:
+        return plain_description.split(" - ", 1)[0].strip() or "Unknown"
+    return plain_description[:80].strip() or "Unknown"
+
+
+def _html_to_text(value: str) -> str:
+    text = html.unescape(value)
+    text = text.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
+    text = _TAG_RE.sub(" ", text)
+    lines = [
+        _WHITESPACE_RE.sub(" ", line).strip()
+        for line in text.splitlines()
+    ]
+    return "\n".join(line for line in lines if line).strip()
+
+
+def _extract_headquarters_location(plain_description: str) -> str | None:
+    match = _HEADQUARTERS_RE.search(plain_description)
+    if not match:
+        return None
+    location = match.group(1).strip(" -")
+    if location.lower().startswith("remote - "):
+        return location[9:].strip() or "Worldwide"
+    if location.lower().startswith("remote, "):
+        return location[8:].strip() or "Worldwide"
+    if location.lower() == "remote":
+        return "Worldwide"
+    return location or None
+
+
+def _looks_like_location(value: str) -> bool:
+    lowered = value.lower()
+    location_tokens = {
+        "worldwide",
+        "europe",
+        "remote",
+        "usa",
+        "us",
+        "united states",
+        "united kingdom",
+        "uk",
+        "canada",
+        "germany",
+        "france",
+        "italy",
+        "netherlands",
+    }
+    if lowered in location_tokens:
+        return True
+    return "," in value
 
 
 def _load_fixture_payload() -> str | None:

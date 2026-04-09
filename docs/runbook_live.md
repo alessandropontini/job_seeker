@@ -65,6 +65,15 @@ Existing endpoints remain compatible:
 Additional route:
 - `POST /run_daily` (manual protected trigger; same live logic as cron)
 
+Telegram command trigger on the same webhook:
+- `/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7`
+- `/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7`
+
+Recommended rollout:
+1. Test loop first: Telegram -> Cloudflare -> source probe test -> Cloudflare -> Telegram
+2. Then enable GitHub dispatch mode: Telegram -> Cloudflare -> GitHub workflow dispatch -> Telegram acknowledgement
+3. If needed later, add a workflow callback/Webhook step so Cloudflare can post final run status back to Telegram
+
 ## Troubleshooting
 
 - **No jobs sent**: inspect logs for `live_daily_no_jobs` or `live_daily_send_failed`; verify source availability and filters.

@@ -246,6 +246,14 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Increase daily candidate volume with additional public sources while preserving no-login/no-paywall policy.
 - Keep PR3 wide-recall scoring pipeline unchanged; plug new sources into the same normalization/matching/ranking contracts.
 - Goal: reduce low-volume days from Remotive-only fetches without sacrificing relevance.
+- In progress:
+  - added a source catalog surfaced via `job_scout sources --list --details` so the CLI can state exactly which sites/endpoints it searches
+  - added `arbeitnow` public API support (`https://www.arbeitnow.com/api/job-board-api`) as a new no-auth source
+  - added offline fixture/unit coverage and an opt-in live integration test for `arbeitnow`
+  - queued next validation step: live multi-source fetch (`remotive`, `wwr`, `arbeitnow`) and ranking sanity-check against current EU/Italy/New York targeting rules
+  - fixed `wwr` RSS parsing quality so HTML is stripped before reporting and `Headquarters:` values drive company/location extraction more reliably
+  - tightened CV alignment in the matcher: generic manager/lead roles without core domain signals are now rejected in scheduled runs, and marketing/SEO/sales-family titles are hard-blocked
+  - added Telegram command trigger scaffolding in the Cloudflare Worker: `mode=test` performs source probes and replies on Telegram; `mode=github` dispatches a workflow and replies with an acknowledgement
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

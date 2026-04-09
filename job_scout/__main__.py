@@ -27,7 +27,7 @@ from job_scout.preferences import (
     save_profile,
 )
 from zoneinfo import ZoneInfo
-from job_scout.sources import AVAILABLE_SOURCES
+from job_scout.sources import AVAILABLE_SOURCES, SOURCE_CATALOG
 
 
 def _configure_logging() -> None:
@@ -118,6 +118,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "sources", help="Inspect available sources"
     )
     sources_parser.add_argument("--list", action="store_true")
+    sources_parser.add_argument(
+        "--details",
+        action="store_true",
+        help="Show source site, access URL, and attribution.",
+    )
     sources_parser.add_argument(
         "--test",
         nargs="?",
@@ -211,14 +216,30 @@ def main(argv: List[str] | None = None) -> int:
     if args.command == "sources":
         if args.list:
             for name in AVAILABLE_SOURCES:
-                print(name)
+                if args.details:
+                    entry = SOURCE_CATALOG[name]
+                    print(
+                        f"{name}: site={entry.site_url} "
+                        f"access={entry.access_url} "
+                        f"transport={entry.transport} "
+                        f"attribution={entry.attribution}"
+                    )
+                else:
+                    print(name)
             return 0
         if args.test:
             fetcher = AVAILABLE_SOURCES.get(args.test)
             if not fetcher:
                 parser.error(f"unknown source: {args.test}")
             postings = fetcher(args.since_days)
-            print(f"{args.test}: {len(postings)} postings")
+            entry = SOURCE_CATALOG.get(args.test)
+            if entry:
+                print(
+                    f"{args.test}: {len(postings)} postings "
+                    f"(site={entry.site_url}, access={entry.access_url})"
+                )
+            else:
+                print(f"{args.test}: {len(postings)} postings")
             return 0
         parser.error("sources requires --list or --test")
 

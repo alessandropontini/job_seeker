@@ -1,4 +1,6 @@
 const REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs";
+const WWR_RSS_URL = "https://weworkremotely.com/remote-jobs.rss";
+const ARBEITNOW_API_URL = "https://www.arbeitnow.com/api/job-board-api";
 const LIVE_RUN_TTL_SECONDS = 60 * 60 * 24 * 14;
 const MIN_SESSION_TTL_SECONDS = 60 * 60 * 24;
 
@@ -543,6 +545,17 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
     telegramUpdateType = "message";
   }
 
+  if (payload?.message?.text) {
+    return handleTelegramCommand({
+      payload,
+      env,
+      ctx,
+      baseLog,
+      startedAt,
+      telegramUpdateType,
+    });
+  }
+
   const callback = payload?.callback_query;
   if (!callback) {
     return feedbackExit({
@@ -776,6 +789,105 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
   };
 }
 
+async function handleTelegramCommand({
+  payload,
+  env,
+  ctx,
+  baseLog,
+  startedAt,
+  telegramUpdateType,
+}) {
+  const message = payload?.message || {};
+  const text = String(message.text || "").trim();
+  const parsed = parseTelegramCommand(text);
+  if (!parsed.ok) {
+    logInfo("telegram_message_ignored", {
+      ...baseLog,
+      outcome: "ok",
+      reason: parsed.reason,
+      telegram_update_type: telegramUpdateType,
+    });
+    return {
+      response: textResponse("No callback", 200, baseLog.request_id),
+      outcome: "ok",
+      reason: parsed.reason,
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  const chatId = message.chat?.id;
+  if (!chatId) {
+    return feedbackExit({
+      baseLog,
+      startedAt,
+      outcome: "invalid_callback",
+      reason: "missing_chat_id",
+      runId: null,
+      jobShortId: null,
+      action: null,
+      responseMessage: "Missing chat id",
+      env,
+      ctx,
+      responseStatus: 400,
+      telegramUpdateType,
+    });
+  }
+
+  let commandResult;
+  try {
+    if (parsed.value.mode === "github") {
+      commandResult = await dispatchGitHubWorkflowCommand(parsed.value, env);
+    } else {
+      commandResult = await runTelegramSearchTest(parsed.value);
+    }
+  } catch (error) {
+    logError("telegram_command_failed", {
+      ...baseLog,
+      error: serializeError(error),
+      command_mode: parsed.value.mode,
+      command_sources: parsed.value.sources,
+    });
+    commandResult = {
+      ok: false,
+      text: `Job Scout command failed.\nmode=${parsed.value.mode}\nreason=exception`,
+      reason: "exception",
+    };
+  }
+
+  const replyPromise = sendTelegramMessage(env, {
+    chatId,
+    text: commandResult.text,
+    replyToMessageId: message.message_id,
+    messageThreadId: message.message_thread_id,
+  }).catch((error) => {
+    logError("telegram_command_reply_failed", {
+      ...baseLog,
+      error: serializeError(error),
+    });
+  });
+  if (ctx) {
+    ctx.waitUntil(replyPromise);
+  } else {
+    await replyPromise;
+  }
+
+  logInfo("telegram_command_handled", {
+    ...baseLog,
+    outcome: commandResult.ok ? "ok" : "blocked",
+    reason: commandResult.reason,
+    command_mode: parsed.value.mode,
+    command_sources: parsed.value.sources,
+    since_days: parsed.value.sinceDays,
+    telegram_update_type: telegramUpdateType,
+  });
+  return {
+    response: textResponse("OK", 200, baseLog.request_id),
+    outcome: commandResult.ok ? "ok" : "blocked",
+    reason: commandResult.reason,
+    telegram_update_type: telegramUpdateType,
+  };
+}
+
 async function handleSmokeSession(request, env, baseLog) {
   if (request.method !== "POST") {
     logWarn("smoke_session_rejected", {
@@ -924,6 +1036,42 @@ async function handleFeedback(request, env, baseLog) {
     }),
     outcome: "ok",
     reason: "feedback_listed",
+  };
+}
+
+export function parseTelegramCommand(text) {
+  const normalized = String(text || "").trim();
+  if (!normalized.startsWith("/jobscout")) {
+    return { ok: false, reason: "message_not_jobscout_command" };
+  }
+  const tokens = normalized.split(/\s+/).slice(1);
+  const options = {};
+  for (const token of tokens) {
+    const [rawKey, ...rest] = token.split("=");
+    const key = String(rawKey || "").trim().toLowerCase();
+    const value = rest.join("=").trim();
+    if (!key || !value) {
+      continue;
+    }
+    options[key] = value;
+  }
+  const mode = ["test", "github"].includes(options.mode) ? options.mode : "test";
+  const sourceValue = options.sources || options.source || "remotive,wwr,arbeitnow";
+  const sources = sourceValue
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const sinceDays = parsePositiveInt(options.since_days || options.since || "7", 7);
+  return {
+    ok: true,
+    value: {
+      mode,
+      sources,
+      sinceDays,
+      forceSend: parseBooleanFlag(options.force_send || "false"),
+      runMode: options.run_mode || "manual",
+      raw: normalized,
+    },
   };
 }
 
@@ -1186,6 +1334,18 @@ function sessionTtlSeconds(env) {
   return Math.max(MIN_SESSION_TTL_SECONDS, windowSeconds);
 }
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function parseBooleanFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
 function isValidAction(action) {
   return ["L", "M", "D", "S", "X", "like", "maybe", "dislike", "love", "duplicate"].includes(action);
 }
@@ -1228,6 +1388,256 @@ async function answerCallback(env, callbackId, text) {
   } else {
     logInfo("telegram_callback_sent", { status: response.status });
   }
+}
+
+async function sendTelegramMessage(
+  env,
+  { chatId, text, replyToMessageId, messageThreadId }
+) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    throw new Error("missing telegram token");
+  }
+  const payload = {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+  };
+  if (replyToMessageId) {
+    payload.reply_parameters = { message_id: replyToMessageId };
+  }
+  if (messageThreadId) {
+    payload.message_thread_id = messageThreadId;
+  }
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await safeJson(response);
+  if (!response.ok || data?.ok === false) {
+    throw new Error(`telegram_send_failed:${response.status}`);
+  }
+  return data;
+}
+
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function runTelegramSearchTest(command) {
+  const lines = [];
+  lines.push("Job Scout test trigger");
+  lines.push(`mode=test`);
+  lines.push(`sources=${command.sources.join(",")}`);
+  lines.push(`since_days=${command.sinceDays}`);
+  lines.push("");
+
+  const results = [];
+  for (const source of command.sources) {
+    if (source === "remotive") {
+      results.push(await probeRemotiveSource(command.sinceDays));
+    } else if (source === "wwr") {
+      results.push(await probeWwrSource(command.sinceDays));
+    } else if (source === "arbeitnow") {
+      results.push(await probeArbeitnowSource(command.sinceDays));
+    } else if (source === "linkedin") {
+      results.push({
+        source,
+        ok: false,
+        reason: "manual_only_source",
+        count: null,
+        detail:
+          "LinkedIn is not automated here: no compliant no-login source connector is configured.",
+      });
+    } else {
+      results.push({
+        source,
+        ok: false,
+        reason: "unknown_source",
+        count: null,
+        detail: "Unknown source name",
+      });
+    }
+  }
+
+  for (const result of results) {
+    if (result.ok) {
+      lines.push(`- ${result.source}: ok (${result.count} postings)`);
+    } else {
+      lines.push(`- ${result.source}: ${result.reason}`);
+    }
+    if (result.detail) {
+      lines.push(`  ${result.detail}`);
+    }
+  }
+
+  lines.push("");
+  lines.push(
+    "To dispatch GitHub later: /jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7"
+  );
+  return {
+    ok: results.some((item) => item.ok),
+    reason: "test_completed",
+    text: lines.join("\n"),
+  };
+}
+
+async function dispatchGitHubWorkflowCommand(command, env) {
+  const owner = env.GITHUB_OWNER;
+  const repo = env.GITHUB_REPO;
+  const workflowId = env.GITHUB_WORKFLOW_ID || "live-daily-telegram.yml";
+  const token = env.GITHUB_TOKEN;
+  const ref = env.GITHUB_REF || "main";
+  if (!owner || !repo || !token) {
+    return {
+      ok: false,
+      reason: "missing_github_config",
+      text:
+        "Job Scout GitHub trigger blocked.\nmode=github\nreason=missing_github_config",
+    };
+  }
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowId}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2026-03-10",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ref,
+        inputs: {
+          sources: command.sources.join(","),
+          since_days: String(command.sinceDays),
+          run_mode: command.runMode || "manual",
+          force_send: command.forceSend ? "true" : "false",
+        },
+      }),
+    }
+  );
+  if (response.status !== 204 && response.status !== 200) {
+    const body = await response.text();
+    return {
+      ok: false,
+      reason: "github_dispatch_failed",
+      text: `Job Scout GitHub trigger failed.\nworkflow=${workflowId}\nstatus=${response.status}\nbody=${body.slice(0, 200)}`,
+    };
+  }
+  return {
+    ok: true,
+    reason: "github_dispatch_accepted",
+    text: [
+      "Job Scout GitHub trigger accepted.",
+      `workflow=${workflowId}`,
+      `repo=${owner}/${repo}`,
+      `ref=${ref}`,
+      `sources=${command.sources.join(",")}`,
+      `since_days=${command.sinceDays}`,
+    ].join("\n"),
+  };
+}
+
+async function probeRemotiveSource(sinceDays) {
+  const response = await fetch(REMOTIVE_API_URL, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    return {
+      source: "remotive",
+      ok: false,
+      reason: `http_${response.status}`,
+      count: null,
+      detail: REMOTIVE_API_URL,
+    };
+  }
+  const payload = await response.json();
+  const now = Date.now();
+  const cutoff = now - sinceDays * 86400 * 1000;
+  const jobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
+  const count = jobs.filter((job) => {
+    const date = Date.parse(String(job?.publication_date || ""));
+    return Number.isFinite(date) && date >= cutoff;
+  }).length;
+  return {
+    source: "remotive",
+    ok: true,
+    reason: "ok",
+    count,
+    detail: REMOTIVE_API_URL,
+  };
+}
+
+async function probeArbeitnowSource(sinceDays) {
+  const response = await fetch(ARBEITNOW_API_URL, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    return {
+      source: "arbeitnow",
+      ok: false,
+      reason: `http_${response.status}`,
+      count: null,
+      detail: ARBEITNOW_API_URL,
+    };
+  }
+  const payload = await response.json();
+  const now = Date.now();
+  const cutoff = now - sinceDays * 86400 * 1000;
+  const jobs = Array.isArray(payload?.data) ? payload.data : [];
+  const count = jobs.filter((job) => {
+    const createdAt = Number(job?.created_at || 0) * 1000;
+    return Number.isFinite(createdAt) && createdAt >= cutoff;
+  }).length;
+  return {
+    source: "arbeitnow",
+    ok: true,
+    reason: "ok",
+    count,
+    detail: ARBEITNOW_API_URL,
+  };
+}
+
+async function probeWwrSource(sinceDays) {
+  const response = await fetch(WWR_RSS_URL, {
+    method: "GET",
+    headers: { Accept: "application/rss+xml, application/xml;q=0.9,*/*;q=0.8" },
+  });
+  if (!response.ok) {
+    return {
+      source: "wwr",
+      ok: false,
+      reason: `http_${response.status}`,
+      count: null,
+      detail: WWR_RSS_URL,
+    };
+  }
+  const payload = await response.text();
+  const items = [...payload.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+  const cutoff = Date.now() - sinceDays * 86400 * 1000;
+  let count = 0;
+  for (const item of items) {
+    const pubDateMatch = item[1].match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+    const pubDate = Date.parse(pubDateMatch?.[1] || "");
+    if (Number.isFinite(pubDate) && pubDate >= cutoff) {
+      count += 1;
+    }
+  }
+  return {
+    source: "wwr",
+    ok: true,
+    reason: "ok",
+    count,
+    detail: WWR_RSS_URL,
+  };
 }
 
 function feedbackExit({

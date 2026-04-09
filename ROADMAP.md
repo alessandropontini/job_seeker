@@ -3,7 +3,7 @@
 ## Where We Are Now (Phase 6 Validation)
 - Phases 1–5 (rules, explainability, hard/soft separation, scoring, QA hardening) are complete.
 - Runnable CLI pipeline that loads config, fetches sources, matches, and writes reports.
-- Sources implemented today: `dummy` (offline) and `remotive` (public API).
+- Sources implemented today: `dummy` (offline), `remotive` (public API), `wwr` (public RSS), and `arbeitnow` (public API).
 - Location rules are enforced: EU + Italy + New York are allowed; UK is explicitly rejected.
 - Role targeting is enforced: only manager/lead/head titles pass.
 - Salary minimum is enforced at 52,000 EUR (with currency conversion when possible).

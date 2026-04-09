@@ -13,7 +13,7 @@ from job_scout.normalize import (
     parse_salary_range,
 )
 from job_scout.regions import RegionData, normalize_country
-from job_scout.targeting import has_negative_domain_penalty
+from job_scout.targeting import has_negative_domain_penalty, passes_core_gate
 
 
 @dataclass(frozen=True)
@@ -198,12 +198,19 @@ def evaluate_hard_constraints(
 
     title_lower = posting.title.lower()
     if has_negative_domain_penalty(posting):
-        soft_penalties.append("negative_domain")
+        hard_reject_reasons.append("negative_domain")
+
     if not any(target in title_lower for target in include_titles):
         if run_mode == "manual":
             soft_penalties.append("title_not_targeted")
         else:
             hard_reject_reasons.append("title_not_targeted")
+
+    if not passes_core_gate(posting):
+        if run_mode == "manual":
+            soft_penalties.append("cv_domain_not_targeted")
+        else:
+            hard_reject_reasons.append("cv_domain_not_targeted")
 
     salary_min_eur = None
     salary_max_eur = None

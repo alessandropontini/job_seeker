@@ -220,3 +220,30 @@ def test_cli_run_summary_includes_reason_when_zero(tmp_path, monkeypatch):
     assert exit_code == 0
     summary = json.loads((output_dir / "run_summary.json").read_text(encoding="utf-8"))
     assert summary["reason_when_zero"] == "no_candidates_after_hard_filters"
+
+
+def test_cli_sources_list_details(capsys):
+    exit_code = main(["sources", "--list", "--details"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "remotive: site=https://remotive.com/remote-jobs" in output
+    assert "wwr: site=https://weworkremotely.com/remote-jobs" in output
+    assert "arbeitnow: site=https://www.arbeitnow.com/jobs" in output
+
+
+def test_cli_sources_test_includes_site(capsys, monkeypatch):
+    from job_scout import __main__ as main_mod
+
+    monkeypatch.setitem(
+        main_mod.AVAILABLE_SOURCES,
+        "dummy",
+        lambda _since_days: [],
+    )
+
+    exit_code = main(["sources", "--test", "dummy", "--since-days", "1"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out.strip()
+    assert output.startswith("dummy: 0 postings")
+    assert "site=https://example.com" in output

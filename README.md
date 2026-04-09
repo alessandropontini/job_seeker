@@ -53,11 +53,12 @@ bash tools/install_dev_deps.sh
 Edit `config/config.yaml` to adjust defaults. Missing fields fall back to defaults in `job_scout/config.py`.
 
 Key sections:
-- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`).
+- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`, `arbeitnow`).
 - `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
 - `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
 - `role_targeting.include_titles`: manager/lead/head plus data governance and data management keyword families (including Italian variants) used for title targeting.
+- CV/domain gate: accepted jobs must also contain data-governance / metadata / compliance / privacy / lineage / platform signals in title or description; generic manager roles are no longer enough on their own.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
 - `salary_rules.currency_rates`: approximate rates used for conversion (EUR=1.0, USD=0.92, GBP=1.17).
@@ -137,9 +138,13 @@ python -m job_scout run --config config/e2e_fake.yaml --source dummy --fixture-f
 Inspect sources:
 ```bash
 python -m job_scout sources --list
+python -m job_scout sources --list --details
 python -m job_scout sources --test
+python -m job_scout sources --test arbeitnow --since-days 7
 python -m job_scout sources --test remotive --since-days 7
 ```
+
+If `python` is not available in your shell, run the same commands with `python3`.
 
 ## Phase 5 — Reliability & Extensibility (overview)
 - Added golden snapshot tests to validate deterministic CSV/Markdown outputs offline.
@@ -310,15 +315,46 @@ plus `telegram_payload.json`/`digest.md` when dry-run mode is enabled.
 - `dummy`: offline test data.
 - `remotive`: public Remotive API (no authentication). Attribution: Remotive public API.
 - `wwr`: public We Work Remotely RSS feed (no authentication). Attribution: We Work Remotely RSS.
+- `arbeitnow`: public Arbeitnow Job Board API (no authentication). Attribution: Arbeitnow free public Job Board API.
 
 All connectors are API/RSS based and **do not** scrape behind logins or paywalls.
+
+### Where Job Scout searches
+Use `python -m job_scout sources --list --details` to print the current source catalog with the site and access URL used by the fetcher.
+
+Current implemented public sources:
+- `remotive`: site `https://remotive.com/remote-jobs`, access `https://remotive.com/api/remote-jobs`
+- `wwr`: site `https://weworkremotely.com/remote-jobs`, access `https://weworkremotely.com/remote-jobs.rss`
+- `arbeitnow`: site `https://www.arbeitnow.com/jobs`, access `https://www.arbeitnow.com/api/job-board-api`
+
+Recent source-quality fix:
+- `wwr` now strips HTML from RSS descriptions and derives company/location from `title` plus `Headquarters:` content before matching/reporting.
+
+Reviewed for future expansion:
+- `himalayas`: site `https://himalayas.app/jobs`, documented public API `https://himalayas.app/jobs/api`
+- `linkedin`: manual-only candidate via public Job Library; no automated source connector is enabled because this project does not use LinkedIn login-gated scraping
 
 ## Notes
 - Prefer full-remote roles when available, but do not exclude non-remote roles by default.
 - Missing salaries are tagged with `missing_salary` when `allow_missing_salary` is enabled.
 - Scores are deterministic and derived from configured preference weights.
+- Marketing / SEO / sales-family roles are hard-blocked even if they match location and seniority.
+- LinkedIn is not automated as a crawler source here. The only compliant future option is a public/manual integration path such as LinkedIn Job Library, not login-gated scraping.
 - External dependency failures (HTTP 403/429, NO_NETWORK) are treated as environment
   limitations during QA validation, not project defects.
+
+## Telegram trigger
+The Cloudflare Worker can also accept a Telegram message command on the webhook and either run a source probe test or dispatch GitHub Actions.
+
+Command syntax:
+```text
+/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7
+/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7
+```
+
+- `mode=test`: Cloudflare fetches the configured public sources and replies on Telegram with counts.
+- `mode=github`: Cloudflare dispatches the configured workflow and replies with an acknowledgement.
+- `sources`: comma-separated list. `linkedin` is accepted only as a manual-only placeholder and is not crawled.
 
 ## Telegram notifications (Phase 6 live)
 - Telegram is always enabled by default (`notifications.telegram.enabled: true`).

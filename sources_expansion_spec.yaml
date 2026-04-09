@@ -25,6 +25,10 @@ implemented:
       type: rss
       endpoint: "https://weworkremotely.com/remote-jobs.rss"
       attribution: "We Work Remotely public RSS"
+    - name: arbeitnow
+      type: api
+      endpoint: "https://www.arbeitnow.com/api/job-board-api"
+      attribution: "Arbeitnow free public Job Board API"
 
   normalized_schema:
     - id
@@ -41,4 +45,5 @@ implemented:
 
 tests:
   - parse_wwr_rss_fixture
+  - parse_arbeitnow_payload_fixture
   - run_summary_source_counts

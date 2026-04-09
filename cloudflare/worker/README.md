@@ -4,12 +4,21 @@ This Worker provides:
 - secure Telegram feedback webhook handling
 - signed feedback/session endpoints used by `job_scout`
 - live daily digest orchestration (Cron 08:00 Europe/Rome)
+- Telegram bot command handling for source probe tests and future GitHub dispatch
 
 ## Endpoints
 
 ### `POST /telegram/feedback`
 Receives Telegram `callback_query` updates, validates time window/session/job hash, and writes feedback to KV.
 Requires `X-Telegram-Bot-Api-Secret-Token`.
+
+The same webhook also accepts Telegram `message` updates containing bot commands.
+Supported command today:
+- `/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7`
+- `/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7`
+
+`mode=test` performs an in-Worker source probe and replies on Telegram with source counts.
+`mode=github` dispatches the configured GitHub Actions workflow and replies with an acknowledgement.
 
 Callback data contract:
 - `fb|<run_id>|<action>|<job_short_id>` (v1, backward compatible)
@@ -49,6 +58,13 @@ This avoids GitHub scheduled workflows and keeps scheduling in Cloudflare.
 - KV binding: `JOB_SCOUT_KV`
 - Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `JOB_SCOUT_WEBHOOK_SECRET`, `ALLOWED_TELEGRAM_USER_ID`, `JOB_SCOUT_SMOKE_TOKEN`
 - Vars: `JOB_SCOUT_ENV`, `FEEDBACK_WINDOW_MINUTES` (`1440` recommended in production, i.e. 24h)
+
+Additional vars for GitHub dispatch mode:
+- `GITHUB_OWNER`
+- `GITHUB_REPO`
+- `GITHUB_WORKFLOW_ID` (default can be `live-daily-telegram.yml`)
+- `GITHUB_TOKEN`
+- `GITHUB_REF` (defaults to `main`)
 
 See `docs/runbook_live.md` for operational checklist and troubleshooting.
 

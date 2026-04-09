@@ -3,10 +3,14 @@ name: live-daily-telegram
 on:
   workflow_dispatch:
     inputs:
-      source:
-        description: "Source name"
+      sources:
+        description: "Source names (comma-separated)"
         required: false
-        default: remotive
+        default: remotive,wwr,arbeitnow
+      source:
+        description: "Legacy single-source input"
+        required: false
+        default: ""
       since_days:
         description: "Fetch horizon in days (manual debug: 7/30)"
         required: false
@@ -176,14 +180,14 @@ jobs:
           JOB_SCOUT_TRIGGER_TYPE: manual
         run: |
           set -euo pipefail
-          source_name="${{ inputs.source || 'remotive' }}"
+          sources_value="${{ inputs.sources || inputs.source || 'remotive' }}"
           since_days="${{ inputs.since_days || '1' }}"
           force_send="${{ inputs.force_send && '1' || '0' }}"
           run_mode="${{ inputs.run_mode || 'manual' }}"
           args=(
             -m job_scout run
             --config config/config.yaml
-            --source "${source_name}"
+            --sources "${sources_value}"
             --since-days "${since_days}"
             --state-suffix live
             --output-dir out

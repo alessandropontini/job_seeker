@@ -68,6 +68,11 @@ function buildEnv({
   allowedUserId,
   telegramToken,
   smokeToken,
+  githubOwner,
+  githubRepo,
+  githubWorkflowId,
+  githubToken,
+  githubRef,
 }) {
   return {
     JOB_SCOUT_WEBHOOK_SECRET: secret,
@@ -76,6 +81,11 @@ function buildEnv({
     JOB_SCOUT_KV: kv,
     ALLOWED_TELEGRAM_USER_ID: allowedUserId,
     JOB_SCOUT_SMOKE_TOKEN: smokeToken,
+    GITHUB_OWNER: githubOwner,
+    GITHUB_REPO: githubRepo,
+    GITHUB_WORKFLOW_ID: githubWorkflowId,
+    GITHUB_TOKEN: githubToken,
+    GITHUB_REF: githubRef,
   };
 }
 
@@ -86,6 +96,26 @@ function buildRequest({ secretHeader, data } = {}) {
       data: data ?? "fb|run123|like|job1",
       from: { id: 42 },
       message: { message_id: 11 },
+    },
+  };
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (secretHeader) {
+    headers.set("X-Telegram-Bot-Api-Secret-Token", secretHeader);
+  }
+  return new Request("https://example.com/telegram/feedback", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+}
+
+function buildMessageRequest({ secretHeader, text } = {}) {
+  const payload = {
+    message: {
+      message_id: 77,
+      text: text ?? "/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7",
+      from: { id: 42 },
+      chat: { id: 123456 },
     },
   };
   const headers = new Headers({ "Content-Type": "application/json" });
@@ -391,6 +421,83 @@ maybeTest("feedback callback logging emits structured payload and uses error log
   assert.equal(errorLogs.some((line) => line.includes('"event":"feedback_callback"')), true);
 });
 
+maybeTest("parseTelegramCommand parses sources and mode", async () => {
+  const module = await loadWorkerModule();
+  const { parseTelegramCommand } = module;
+  const parsed = parseTelegramCommand(
+    "/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7 force_send=true"
+  );
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.value.mode, "github");
+  assert.deepEqual(parsed.value.sources, ["remotive", "wwr", "arbeitnow"]);
+  assert.equal(parsed.value.sinceDays, 7);
+  assert.equal(parsed.value.forceSend, true);
+});
+
+maybeTest("telegram webhook handles /jobscout message in test mode and replies on Telegram", async () => {
+  const { consoleMock, logs } = createConsoleMock();
+  const fetchMock = createTelegramCommandFetchMock();
+  const module = await loadWorkerModule({
+    consoleOverride: consoleMock,
+    fetchOverride: fetchMock.fetch,
+  });
+  const worker = module.default;
+  const env = buildEnv({
+    secret: "topsecret",
+    kv: new MockKV(),
+    telegramToken: "token",
+  });
+  const response = await worker.fetch(
+    buildMessageRequest({ secretHeader: "topsecret" }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const telegramSend = fetchMock.calls.find((call) =>
+    String(call.url).includes("/sendMessage")
+  );
+  assert.ok(telegramSend);
+  const body = JSON.parse(telegramSend.options.body);
+  assert.match(body.text, /Job Scout test trigger/);
+  assert.match(body.text, /remotive: ok/);
+  assert.match(body.text, /wwr: ok/);
+  assert.match(body.text, /arbeitnow: ok/);
+  assert.ok(findLogEvent(logs, "telegram_command_handled"));
+});
+
+maybeTest("telegram webhook handles /jobscout message in github mode and dispatches workflow", async () => {
+  const fetchMock = createTelegramCommandFetchMock();
+  const module = await loadWorkerModule({
+    fetchOverride: fetchMock.fetch,
+  });
+  const worker = module.default;
+  const env = buildEnv({
+    secret: "topsecret",
+    kv: new MockKV(),
+    telegramToken: "token",
+    githubOwner: "openai",
+    githubRepo: "job-seeker",
+    githubWorkflowId: "live-daily-telegram.yml",
+    githubToken: "ghs_token",
+    githubRef: "main",
+  });
+  const response = await worker.fetch(
+    buildMessageRequest({
+      secretHeader: "topsecret",
+      text: "/jobscout mode=github sources=remotive,wwr since_days=3",
+    }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const githubDispatch = fetchMock.calls.find((call) =>
+    String(call.url).includes("/dispatches")
+  );
+  assert.ok(githubDispatch);
+  const dispatchPayload = JSON.parse(githubDispatch.options.body);
+  assert.equal(dispatchPayload.ref, "main");
+  assert.equal(dispatchPayload.inputs.sources, "remotive,wwr");
+  assert.equal(dispatchPayload.inputs.since_days, "3");
+});
+
 maybeTest("logs route_not_found for unknown paths", async () => {
   const { consoleMock, logs } = createConsoleMock();
   const module = await loadWorkerModule({ consoleOverride: consoleMock });
@@ -445,6 +552,66 @@ function createFetchMock() {
   const calls = [];
   const fetchMock = async (url, options = {}) => {
     calls.push({ url, options });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  return { fetch: fetchMock, calls };
+}
+
+function createTelegramCommandFetchMock() {
+  const calls = [];
+  const fetchMock = async (url, options = {}) => {
+    calls.push({ url, options });
+    const value = String(url);
+    if (value === "https://remotive.com/api/remote-jobs") {
+      return new Response(
+        JSON.stringify({
+          jobs: [
+            { publication_date: new Date().toISOString() },
+            { publication_date: new Date().toISOString() },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (value === "https://www.arbeitnow.com/api/job-board-api") {
+      return new Response(
+        JSON.stringify({
+          data: [
+            { created_at: Math.floor(Date.now() / 1000) },
+            { created_at: Math.floor(Date.now() / 1000) },
+            { created_at: Math.floor(Date.now() / 1000) },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (value === "https://weworkremotely.com/remote-jobs.rss") {
+      return new Response(
+        `<rss><channel>
+          <item><pubDate>${new Date().toUTCString()}</pubDate></item>
+          <item><pubDate>${new Date().toUTCString()}</pubDate></item>
+        </channel></rss>`,
+        { status: 200, headers: { "Content-Type": "application/xml" } }
+      );
+    }
+    if (value.includes("api.github.com/repos/") && value.endsWith("/dispatches")) {
+      return new Response("", { status: 204 });
+    }
+    if (value.includes("api.telegram.org/bottoken/sendMessage")) {
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (value.includes("api.telegram.org/bottoken/answerCallbackQuery")) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },

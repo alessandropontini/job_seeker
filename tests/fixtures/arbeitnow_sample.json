@@ -1,0 +1,30 @@
+{
+  "data": [
+    {
+      "slug": "data-governance-manager-berlin-001",
+      "company_name": "DataCo",
+      "title": "Data Governance Manager",
+      "description": "<p>Lead enterprise governance and data quality programs.</p><br/><br/>Country: <br/>Germany<br/><br/>City: <br/>Berlin",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/jobs/companies/dataco/data-governance-manager-berlin-001",
+      "tags": ["Remote", "Data Governance"],
+      "job_types": ["Full-time"],
+      "location": "Berlin",
+      "created_at": 1707480000
+    },
+    {
+      "slug": "metadata-lead-milan-002",
+      "company_name": "MetaBank",
+      "title": "Metadata Lead",
+      "description": "<p>Own catalog, lineage, and stewardship standards for the group.</p><br/><br/>Country: <br/>Italy<br/><br/>City: <br/>Milan",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/metabank/metadata-lead-milan-002",
+      "tags": ["Metadata", "Hybrid"],
+      "job_types": ["Full-time"],
+      "location": "Milan, Italy",
+      "created_at": 1707393600
+    }
+  ],
+  "links": {},
+  "meta": {}
+}

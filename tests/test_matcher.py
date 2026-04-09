@@ -34,7 +34,7 @@ def _posting(**overrides) -> JobPosting:
         salary_text="€80k-€95k",
         currency="EUR",
         tags=[],
-        description_snippet="Example",
+        description_snippet="Lead data governance, metadata, and data quality initiatives.",
     )
     data.update(overrides)
     return JobPosting(**data)
@@ -207,6 +207,7 @@ def test_manual_soft_penalty_for_location_and_title(base_config, region_data):
         title="Senior Engineer",
         location_text="Toronto, Canada",
         location_country="Canada",
+        description_snippet="Platform engineering leadership",
     )
     _, result = match_posting(
         posting,
@@ -218,10 +219,14 @@ def test_manual_soft_penalty_for_location_and_title(base_config, region_data):
     assert result.decision == "accepted"
     assert "location_not_allowed" in result.penalties
     assert "title_not_targeted" in result.penalties
+    assert "cv_domain_not_targeted" in result.penalties
 
 
-def test_accepts_manager_title(base_config, region_data):
-    posting = _posting(title="Product Manager")
+def test_accepts_manager_title_with_core_signal(base_config, region_data):
+    posting = _posting(
+        title="Product Manager",
+        description_snippet="Own data governance roadmap and metadata standards",
+    )
     _, result = match_posting(
         posting,
         base_config,
@@ -247,7 +252,10 @@ def test_accepts_lead_title(base_config, region_data):
 
 
 def test_accepts_head_title(base_config, region_data):
-    posting = _posting(title="Head of Engineering")
+    posting = _posting(
+        title="Head of Engineering",
+        description_snippet="Lead data platform and data quality modernization",
+    )
     _, result = match_posting(
         posting,
         base_config,
@@ -440,8 +448,8 @@ def test_rejects_marketing_brand_titles_with_hard_block(base_config, region_data
         strict=False,
         allow_missing_salary=True,
     )
-    assert result.decision == "accepted"
-    assert "negative_domain" in result.penalties
+    assert result.decision == "rejected"
+    assert "negative_domain" in result.hard_reject_reasons
 
 
 def test_missing_salary_does_not_reject(base_config, region_data):
@@ -494,5 +502,6 @@ def test_non_core_keyword_role_fails_channel_gate(base_config, region_data):
         strict=False,
         allow_missing_salary=True,
     )
-    assert result.decision == "accepted"
+    assert result.decision == "rejected"
+    assert "cv_domain_not_targeted" in result.hard_reject_reasons
     assert passes_core_gate(posting) is False
