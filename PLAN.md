@@ -256,6 +256,7 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - added Telegram command trigger scaffolding in the Cloudflare Worker: `mode=test` performs source probes and replies on Telegram; `mode=github` dispatches a workflow and replies with an acknowledgement
   - fixed staging Worker deploy by injecting `CLOUDFLARE_KV_NAMESPACE_ID` into `wrangler.toml` during GitHub Actions execution instead of relying on a checked-in KV id
   - wired `mode=github` runtime config for staging by checking in repo defaults (`GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_REF`) and uploading the repository secret `WORKER_GH_TOKEN` to the Worker runtime secret `GITHUB_TOKEN` during deploy
+  - fixed Telegram `mode=github` dispatch to use the stable GitHub REST API version header (`2022-11-28`) instead of a non-working future version
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done
