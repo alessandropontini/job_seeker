@@ -1510,6 +1510,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
         Authorization: `Bearer ${token}`,
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",
+        "User-Agent": "job-scout-telegram-worker",
       },
       body: JSON.stringify({
         ref,

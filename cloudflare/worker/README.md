@@ -74,6 +74,8 @@ For this repository, staging defaults are checked in for:
 The deploy workflow uploads `GITHUB_TOKEN` to Cloudflare as a Worker secret so
 `/jobscout mode=github` can call GitHub's workflow dispatch API at runtime.
 The Worker uses the stable GitHub REST API version `2022-11-28` for workflow dispatch.
+The Worker also sends an explicit `User-Agent` header because GitHub REST requests
+from Cloudflare are rejected without it.
 
 See `docs/runbook_live.md` for operational checklist and troubleshooting.
 
