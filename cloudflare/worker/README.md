@@ -118,7 +118,8 @@ so the checked-in config can stay non-sensitive.
 
 For GitHub dispatch mode, store the GitHub PAT in the repository secret
 `WORKER_GH_TOKEN`; the deploy workflow uploads it to Cloudflare as the Worker
-runtime secret `GITHUB_TOKEN`.
+runtime secret `GITHUB_TOKEN` after the Worker deployment step, because Cloudflare
+rejects secret edits until the latest Worker version is deployed.
 
 ### How to verify Active Deployment in Cloudflare
 1. Open **Cloudflare Dashboard → Workers & Pages → job-scout-telegram-feedback**.

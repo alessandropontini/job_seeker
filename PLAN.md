@@ -258,6 +258,7 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - wired `mode=github` runtime config for staging by checking in repo defaults (`GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_REF`) and uploading the repository secret `WORKER_GH_TOKEN` to the Worker runtime secret `GITHUB_TOKEN` during deploy
   - fixed Telegram `mode=github` dispatch to use the stable GitHub REST API version header (`2022-11-28`) instead of a non-working future version
   - fixed Telegram `mode=github` dispatch to include a GitHub-required `User-Agent` header for Cloudflare-originated REST calls
+  - fixed the Worker deploy workflow ordering so `WORKER_GH_TOKEN` is uploaded after deploy, matching Cloudflare's versioned-secret constraints
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

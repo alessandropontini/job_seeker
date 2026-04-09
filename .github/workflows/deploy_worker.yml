@@ -121,19 +121,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
 
-      - name: Upload GitHub token to Worker secret
-        run: |
-          set -euo pipefail
-          cd "${{ steps.locate.outputs.worker_dir }}"
-          if [ "${TARGET_ENV}" = "staging" ]; then
-            printf '%s' "${WORKER_GH_TOKEN}" | wrangler secret put GITHUB_TOKEN --config wrangler.toml
-          else
-            printf '%s' "${WORKER_GH_TOKEN}" | wrangler secret put GITHUB_TOKEN --config wrangler.toml --env "${TARGET_ENV}"
-          fi
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
-
       - name: Deploy Worker
         run: |
           set -euo pipefail
@@ -142,6 +129,19 @@ jobs:
             wrangler deploy --config wrangler.toml
           else
             wrangler deploy --config wrangler.toml --env "${TARGET_ENV}"
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+
+      - name: Upload GitHub token to Worker secret
+        run: |
+          set -euo pipefail
+          cd "${{ steps.locate.outputs.worker_dir }}"
+          if [ "${TARGET_ENV}" = "staging" ]; then
+            printf '%s' "${WORKER_GH_TOKEN}" | wrangler secret put GITHUB_TOKEN --config wrangler.toml
+          else
+            printf '%s' "${WORKER_GH_TOKEN}" | wrangler secret put GITHUB_TOKEN --config wrangler.toml --env "${TARGET_ENV}"
           fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ env.CF_API_TOKEN }}
