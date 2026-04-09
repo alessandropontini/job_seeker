@@ -259,6 +259,7 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - fixed Telegram `mode=github` dispatch to use the stable GitHub REST API version header (`2022-11-28`) instead of a non-working future version
   - fixed Telegram `mode=github` dispatch to include a GitHub-required `User-Agent` header for Cloudflare-originated REST calls
   - fixed the Worker deploy workflow ordering so `WORKER_GH_TOKEN` is uploaded after deploy, matching Cloudflare's versioned-secret constraints
+  - started technical hardening on pipeline/digest diagnostics: centralized candidate-pool logic, split `run_summary` into explicit accepted/selection/digest counters, and aligned zero-result diagnostics with final digest counts
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

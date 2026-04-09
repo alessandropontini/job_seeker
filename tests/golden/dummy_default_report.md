@@ -16,39 +16,6 @@ No postings found.
 
 ## Matches
 
-- **Product Lead** at **Luna Retail** (Milan, Italy) - full-remote
-  - Posted: 2024-02-04
-  - Salary: €80k-€95k
-  - Remote level: full-remote
-  - Tags: ecommerce
-  - Score: 8
-  - Why: match remote_full
-  - Score adjustments: +remote_full
-  - Link: https://example.com/jobs/luna-retail-product-lead
-  - Note: Own the roadmap for EU retail experiences.
-
-- **Operations Lead** at **Aurora Energy** (Berlin, Germany) - full-remote
-  - Posted: 2024-02-03
-  - Salary: €70k-€85k
-  - Remote level: full-remote
-  - Tags: energy
-  - Score: 8
-  - Why: match remote_full
-  - Score adjustments: +remote_full
-  - Link: https://example.com/jobs/aurora-energy-ops-lead
-  - Note: Scale field operations across EU markets.
-
-- **Customer Success Manager** at **Vento Mobility** (Rome, Italy) - full-remote
-  - Posted: 2024-02-02
-  - Salary: €60k-€72k
-  - Remote level: full-remote
-  - Tags: mobility
-  - Score: 8
-  - Why: match remote_full
-  - Score adjustments: +remote_full
-  - Link: https://example.com/jobs/vento-mobility-csm
-  - Note: Lead enterprise success programs for fleet clients.
-
 - **Engineering Manager** at **Atlas Health** (New York, NY) - hybrid
   - Posted: 2024-02-05
   - Salary: $140k-$165k
@@ -60,18 +27,6 @@ No postings found.
   - Score adjustments: +core_description: data platform; -prefer_full_remote
   - Link: https://example.com/jobs/atlas-health-eng-manager
   - Note: Lead a team delivering patient data platforms.
-
-- **Platform Engineering Manager** at **Sage Cloud** (Paris, France) - hybrid
-  - Posted: 2024-01-31
-  - Salary: €90k-€110k
-  - Remote level: hybrid
-  - Tags: cloud
-  - Penalties: prefer_full_remote
-  - Score: 0
-  - Why: penalty prefer_full_remote
-  - Score adjustments: -prefer_full_remote
-  - Link: https://example.com/jobs/sage-cloud-platform-manager
-  - Note: Lead the platform team modernizing infra tooling.
 
 ## Missing Salary (allowed)
 
@@ -89,13 +44,53 @@ No postings found.
 
 ## Rejected
 
+- **Product Lead** at **Luna Retail** (Milan, Italy) - full-remote
+  - Posted: 2024-02-04
+  - Salary: €80k-€95k
+  - Remote level: full-remote
+  - Tags: ecommerce
+  - Decision: rejected
+  - Reject reasons: cv_domain_not_targeted
+  - Link: https://example.com/jobs/luna-retail-product-lead
+  - Note: Own the roadmap for EU retail experiences.
+
 - **Engineering Manager** at **Thames Fintech** (London, UK) - onsite
   - Posted: 2024-02-03
   - Salary: £90k-£110k
   - Remote level: onsite
   - Tags: fintech
   - Decision: rejected
-  - Reject reasons: excluded_country, excluded_country_text, location_not_allowed
+  - Reject reasons: excluded_country, excluded_country_text, location_not_allowed, cv_domain_not_targeted
   - Link: https://example.com/jobs/thames-fintech-manager
   - Note: Own delivery for the payments platform team.
+
+- **Operations Lead** at **Aurora Energy** (Berlin, Germany) - full-remote
+  - Posted: 2024-02-03
+  - Salary: €70k-€85k
+  - Remote level: full-remote
+  - Tags: energy
+  - Decision: rejected
+  - Reject reasons: cv_domain_not_targeted
+  - Link: https://example.com/jobs/aurora-energy-ops-lead
+  - Note: Scale field operations across EU markets.
+
+- **Customer Success Manager** at **Vento Mobility** (Rome, Italy) - full-remote
+  - Posted: 2024-02-02
+  - Salary: €60k-€72k
+  - Remote level: full-remote
+  - Tags: mobility
+  - Decision: rejected
+  - Reject reasons: cv_domain_not_targeted
+  - Link: https://example.com/jobs/vento-mobility-csm
+  - Note: Lead enterprise success programs for fleet clients.
+
+- **Platform Engineering Manager** at **Sage Cloud** (Paris, France) - hybrid
+  - Posted: 2024-01-31
+  - Salary: €90k-€110k
+  - Remote level: hybrid
+  - Tags: cloud
+  - Decision: rejected
+  - Reject reasons: cv_domain_not_targeted
+  - Link: https://example.com/jobs/sage-cloud-platform-manager
+  - Note: Lead the platform team modernizing infra tooling.
 

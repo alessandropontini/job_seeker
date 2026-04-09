@@ -268,6 +268,13 @@ help you pinpoint the issue:
 - If results are still below `min_results`, the system sends the best available jobs by score (**LOW_CONFIDENCE (anti-zero)** mode).
 - The selected mode is shown in Telegram headers/messages (`Mode: TOP`, `Mode: ADAPTIVE`, `Mode: LOW_CONFIDENCE (anti-zero)`).
 - Runtime diagnostics are persisted in `out/run_summary.json` via `digest_mode`, `anti_zero_triggered`, `threshold_initial`, `threshold_final`, `min_results`, `selected_count`, and `reason_when_zero` (`no_candidates_after_hard_filters` or `fetched_count_zero`).
+- `out/run_summary.json` now separates pipeline and digest counters explicitly:
+  - `accepted_count`: all accepted rows before digest selection
+  - `accepted_missing_salary_count`: accepted rows kept only because missing salary is allowed
+  - `strict_matches_count`: accepted rows with salary present
+  - `selection_pool_count`: rows that survived hard filters and entered digest thresholding
+  - `selected_count`: rows selected by thresholding before channel split
+  - `digest_top_matches_count` / `digest_data_only_count` / `digest_count`: final digest composition actually sent or persisted
 
 ## Outputs
 The pipeline writes reports to `out/`:

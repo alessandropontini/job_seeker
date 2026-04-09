@@ -71,7 +71,10 @@ def test_quantitative_title_gets_soft_penalty_and_is_not_top_score():
     config = deepcopy(DEFAULT_CONFIG)
     posting = _posting(
         title="Quantitative Research Team Lead",
-        description_snippet="Lead quantitative research for trading portfolios.",
+        description_snippet=(
+            "Lead quantitative research for trading portfolios while defining "
+            "data governance and metadata controls for the platform."
+        ),
     )
     region_data = load_region_data("config/regions.json")
     _, match = match_posting(

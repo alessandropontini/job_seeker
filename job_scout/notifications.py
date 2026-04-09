@@ -13,6 +13,7 @@ from typing import Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from job_scout.channels import select_channels
+from job_scout.digesting import is_candidate_after_hard_filters, score_bounds
 from job_scout.feedback import (
     FeedbackRegistrationResult,
     build_callback_data,
@@ -37,8 +38,6 @@ from job_scout.state import (
 from job_scout.writers import ReportRow
 
 logger = logging.getLogger(__name__)
-
-_CANDIDATE_SOFT_REJECT_REASONS = {"title_not_targeted"}
 
 
 @dataclass(frozen=True)
@@ -65,7 +64,16 @@ class NotificationResult:
     threshold_initial: int = 70
     threshold_final: int = 70
     min_results: int = 5
+    window_rows_count: int = 0
+    selection_pool_count: int = 0
     selected_count: int = 0
+    digest_top_matches_count: int = 0
+    digest_data_only_count: int = 0
+    digest_count: int = 0
+    selected_min_score: int = 0
+    selected_max_score: int = 0
+    digest_min_score: int = 0
+    digest_max_score: int = 0
     reason_when_zero: str | None = None
 
 
@@ -193,7 +201,7 @@ def maybe_notify(
             now,
             minimum_score=min_score,
         )
-    total_in_window = len(daily_rows)
+    window_rows_count = len(daily_rows)
     digest_scope = "daily_window"
     if not daily_rows:
         fallback_rows = _select_fallback_rows(rows, minimum_score=min_score)
@@ -203,7 +211,7 @@ def maybe_notify(
                 len(fallback_rows),
             )
             daily_rows = fallback_rows
-            total_in_window = len(fallback_rows)
+            window_rows_count = len(fallback_rows)
             digest_scope = "fallback_recent"
 
     digest_settings = _as_dict(digest_config.get("selection"))
@@ -231,6 +239,7 @@ def maybe_notify(
         ]
         if selection_pool and digest_scope != "fallback_recent":
             digest_scope = "fallback_recent"
+    selection_pool_count = len(selection_pool)
 
     (
         selected_rows,
@@ -250,7 +259,7 @@ def maybe_notify(
             run_mode=run_mode,
         )
     )
-    total_in_window = len(selected_rows)
+    selected_min_score, selected_max_score = score_bounds(selected_rows)
 
     reason_when_zero = None
     if selected_count == 0:
@@ -275,6 +284,12 @@ def maybe_notify(
             data_only_best_picks=[],
             data_only_reasons={},
         )
+    digest_rows = (
+        channel_selection.top_matches
+        + channel_selection.data_only_best_picks
+    )
+    digest_count = len(digest_rows)
+    digest_min_score, digest_max_score = score_bounds(digest_rows)
 
     _annotate_report_mode(
         output_dir=output_dir,
@@ -285,7 +300,7 @@ def maybe_notify(
     digest = _format_dual_channel_digest(
         channel_selection.top_matches,
         channel_selection.data_only_best_picks,
-        total_in_window=total_in_window,
+        digest_count=digest_count,
         window_hours=window_hours,
         digest_scope=digest_scope,
         digest_mode=digest_mode,
@@ -328,7 +343,7 @@ def maybe_notify(
         feedback_close_at=feedback_close_at.isoformat(),
         window_hours=window_hours,
         digest_scope=digest_scope,
-        total_in_window=total_in_window,
+        total_in_window=digest_count,
         digest_mode=digest_mode,
         anti_zero_triggered=anti_zero_triggered,
         threshold_initial=high_threshold,
@@ -378,7 +393,9 @@ def maybe_notify(
             base_snapshot,
             digest_payload,
             summary=_build_run_summary(
-                total_in_window=total_in_window,
+                window_rows_count=window_rows_count,
+                selection_pool_count=selection_pool_count,
+                selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
                 data_only_count=len(
                     channel_selection.data_only_best_picks
@@ -410,7 +427,18 @@ def maybe_notify(
             threshold_initial=high_threshold,
             threshold_final=final_threshold,
             min_results=min_results,
+            window_rows_count=window_rows_count,
+            selection_pool_count=selection_pool_count,
             selected_count=selected_count,
+            digest_top_matches_count=len(channel_selection.top_matches),
+            digest_data_only_count=len(
+                channel_selection.data_only_best_picks
+            ),
+            digest_count=digest_count,
+            selected_min_score=selected_min_score,
+            selected_max_score=selected_max_score,
+            digest_min_score=digest_min_score,
+            digest_max_score=digest_max_score,
             reason_when_zero=reason_when_zero,
         )
 
@@ -424,7 +452,9 @@ def maybe_notify(
             base_snapshot,
             digest_payload,
             summary=_build_run_summary(
-                total_in_window=total_in_window,
+                window_rows_count=window_rows_count,
+                selection_pool_count=selection_pool_count,
+                selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
                 data_only_count=len(
                     channel_selection.data_only_best_picks
@@ -452,18 +482,29 @@ def maybe_notify(
             threshold_initial=high_threshold,
             threshold_final=final_threshold,
             min_results=min_results,
+            window_rows_count=window_rows_count,
+            selection_pool_count=selection_pool_count,
             selected_count=selected_count,
+            digest_top_matches_count=len(channel_selection.top_matches),
+            digest_data_only_count=len(
+                channel_selection.data_only_best_picks
+            ),
+            digest_count=digest_count,
+            selected_min_score=selected_min_score,
+            selected_max_score=selected_max_score,
+            digest_min_score=digest_min_score,
+            digest_max_score=digest_max_score,
             reason_when_zero=reason_when_zero,
         )
 
-    if run_mode == "scheduled" and total_in_window == 0:
+    if run_mode == "scheduled" and digest_count == 0:
         logger.info("Scheduled run has no matches; sending diagnostic Telegram message.")
 
     message_payloads = _build_message_payloads(
         channel_selection.top_matches,
         channel_selection.data_only_best_picks,
         data_only_reasons=channel_selection.data_only_reasons,
-        total_in_window=total_in_window,
+        digest_count=digest_count,
         window_hours=window_hours,
         digest_scope=digest_scope,
         digest_mode=digest_mode,
@@ -585,7 +626,9 @@ def maybe_notify(
             updated_snapshot,
             digest_payload,
             summary=_build_run_summary(
-                total_in_window=total_in_window,
+                window_rows_count=window_rows_count,
+                selection_pool_count=selection_pool_count,
+                selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
                 data_only_count=len(
                     channel_selection.data_only_best_picks
@@ -629,7 +672,9 @@ def maybe_notify(
             base_snapshot,
             digest_payload,
             summary=_build_run_summary(
-                total_in_window=total_in_window,
+                window_rows_count=window_rows_count,
+                selection_pool_count=selection_pool_count,
+                selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
                 data_only_count=len(
                     channel_selection.data_only_best_picks
@@ -644,7 +689,7 @@ def maybe_notify(
             live_state=live_state_payload,
         )
     outcome_reason = None
-    if total_in_window == 0:
+    if digest_count == 0:
         outcome_reason = "no_matches"
     elif not sent:
         outcome_reason = reason
@@ -652,7 +697,10 @@ def maybe_notify(
     diagnostics = {
         "run_mode": run_mode,
         "timezone": timezone_name,
-        "total_in_window": total_in_window,
+        "window_rows_count": window_rows_count,
+        "selection_pool_count": selection_pool_count,
+        "selected_count": selected_count,
+        "digest_count": digest_count,
         "digest_scope": digest_scope,
         "digest_mode": digest_mode,
         "threshold_final": final_threshold,
@@ -682,7 +730,18 @@ def maybe_notify(
         threshold_initial=high_threshold,
         threshold_final=final_threshold,
         min_results=min_results,
+        window_rows_count=window_rows_count,
+        selection_pool_count=selection_pool_count,
         selected_count=selected_count,
+        digest_top_matches_count=len(channel_selection.top_matches),
+        digest_data_only_count=len(
+            channel_selection.data_only_best_picks
+        ),
+        digest_count=digest_count,
+        selected_min_score=selected_min_score,
+        selected_max_score=selected_max_score,
+        digest_min_score=digest_min_score,
+        digest_max_score=digest_max_score,
         reason_when_zero=reason_when_zero,
     )
 
@@ -793,13 +852,13 @@ def _posted_within_window(
 def _format_dual_channel_digest(
     top_rows: Sequence[ReportRow],
     data_only_rows: Sequence[ReportRow],
-    total_in_window: int,
+    digest_count: int,
     window_hours: int,
     digest_scope: str,
     digest_mode: str,
     data_only_reasons: Mapping[str, list[str]] | None = None,
 ) -> str:
-    if total_in_window == 0:
+    if digest_count == 0:
         return "No new job postings published in the last 24 hours."
     lines: list[str] = []
     if digest_scope == "fallback_recent":
@@ -807,11 +866,11 @@ def _format_dual_channel_digest(
         lines.append(
             "No new postings in the last 24h; showing latest accepted matches."
         )
-        lines.append(f"Total in digest: {total_in_window}")
+        lines.append(f"Total in digest: {digest_count}")
     else:
         lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
         lines.append("Published yesterday")
-        lines.append(f"Total in window: {total_in_window}")
+        lines.append(f"Total in digest: {digest_count}")
     mode_label = digest_mode
     if digest_mode == "LOW_CONFIDENCE":
         mode_label = "LOW_CONFIDENCE (anti-zero)"
@@ -1137,7 +1196,9 @@ def _build_digest_payload(
 
 def _build_run_summary(
     *,
-    total_in_window: int,
+    window_rows_count: int,
+    selection_pool_count: int,
+    selected_count: int,
     top_count: int,
     data_only_count: int,
     digest_mode: str,
@@ -1149,7 +1210,9 @@ def _build_run_summary(
     notified_count: int = 0,
 ) -> dict[str, int | bool | str]:
     summary: dict[str, int | bool | str] = {
-        "total_in_window": total_in_window,
+        "window_rows_count": window_rows_count,
+        "selection_pool_count": selection_pool_count,
+        "selected_count": selected_count,
         "top_matches_count": top_count,
         "data_only_count": data_only_count,
         "digest_count": top_count + data_only_count,
@@ -1168,9 +1231,7 @@ def _build_run_summary(
 def _is_candidate_after_hard_filters(row: ReportRow) -> bool:
     """Return True when a row survives hard filters for digest candidate pool."""
 
-    reasons = set(row.match.reject_reasons or [])
-    reasons.difference_update(_CANDIDATE_SOFT_REJECT_REASONS)
-    return not reasons
+    return is_candidate_after_hard_filters(row)
 
 def _assign_short_ids(rows: Sequence[ReportRow]) -> dict[str, str]:
     used: set[str] = set()
@@ -1186,7 +1247,7 @@ def _build_message_payloads(
     data_only_rows: Sequence[ReportRow],
     *,
     data_only_reasons: Mapping[str, list[str]] | None,
-    total_in_window: int,
+    digest_count: int,
     window_hours: int,
     digest_scope: str,
     digest_mode: str,
@@ -1199,7 +1260,7 @@ def _build_message_payloads(
     force_send: bool,
     reason_when_zero: str | None = None,
 ) -> list[dict[str, object]]:
-    if total_in_window == 0:
+    if digest_count == 0:
         headline = "No matches today."
         if reason_when_zero == "no_candidates_after_hard_filters":
             headline = "No candidates after hard filters."
@@ -1207,7 +1268,7 @@ def _build_message_payloads(
             "text": (
                 f"{headline}\n"
                 f"run_mode={run_mode} force_send={str(force_send).lower()}\n"
-                f"total_in_window={total_in_window} top_matches=0 data_only=0\n"
+                "digest_count=0 top_matches=0 data_only=0\n"
                 "Diagnostics: check out/run_summary.json artifact."
             )
         }]
@@ -1216,7 +1277,7 @@ def _build_message_payloads(
         payloads.append(
             {
                 "text": _format_digest_header(
-                    total_in_window=total_in_window,
+                    digest_count=digest_count,
                     window_hours=window_hours,
                     digest_scope=digest_scope,
                     digest_mode=digest_mode,
@@ -1229,7 +1290,7 @@ def _build_message_payloads(
                 "text": _format_dual_channel_digest(
                     top_rows,
                     data_only_rows,
-                    total_in_window=total_in_window,
+                    digest_count=digest_count,
                     window_hours=window_hours,
                     digest_scope=digest_scope,
                     digest_mode=digest_mode,
@@ -1264,7 +1325,7 @@ def _build_message_payloads(
 
 def _format_digest_header(
     *,
-    total_in_window: int,
+    digest_count: int,
     window_hours: int,
     digest_scope: str,
     digest_mode: str,
@@ -1275,12 +1336,12 @@ def _format_digest_header(
     if digest_scope == "fallback_recent":
         return (
             "Job Scout — Daily Digest (fallback)\n"
-            f"Total in digest: {total_in_window}\n"
+            f"Total in digest: {digest_count}\n"
             f"Mode: {mode_label}"
         )
     return (
         f"Job Scout — Daily Digest (last {window_hours}h)\n"
-        f"Total in window: {total_in_window}\n"
+        f"Total in digest: {digest_count}\n"
         f"Mode: {mode_label}"
     )
 

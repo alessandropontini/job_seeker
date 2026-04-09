@@ -25,8 +25,10 @@ Per evitare digest vuoti quando `fetched_count > 0`, il sistema ha inviato i mig
 - `anti_zero_triggered`: `true` indica che è stato usato il fallback top-K.
 - `threshold_initial` / `threshold_final`: mostrano quanto la soglia è stata abbassata.
 - `min_results`: target minimo richiesto.
-- `selected_count`: quanti job sono stati inviati davvero.
-- `fetched_count`, `candidates_count`, `matches_count`: aiutano a capire se il problema è a monte (raccolta/candidati) o solo di soglia.
+- `selection_pool_count`: quanti job sono entrati nella selezione digest dopo gli hard filter.
+- `selected_count`: quanti job hanno passato la soglia digest prima dello split canali.
+- `digest_count`: quanti job sono finiti davvero nel digest finale.
+- `fetched_count`, `candidates_count`, `accepted_count`, `strict_matches_count`: aiutano a capire se il problema è a monte (raccolta/candidati), nel matching, o solo di soglia/canali.
 
 ### Azioni consigliate
 

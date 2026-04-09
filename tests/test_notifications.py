@@ -84,7 +84,7 @@ def test_dual_channel_digest_includes_sections():
     digest = notifications._format_dual_channel_digest(
         [top_row],
         [data_row],
-        total_in_window=2,
+        digest_count=2,
         window_hours=24,
         digest_scope="daily_window",
         digest_mode="TOP",
@@ -385,6 +385,7 @@ def test_scheduled_mode_sends_no_match_diagnostic(tmp_path):
     assert result.telegram_attempted is False
     assert result.digest_mode == "TOP"
     assert "No matches today" in payload["messages"][0]["text"]
+    assert "digest_count=0" in payload["messages"][0]["text"]
 
 
 
@@ -440,6 +441,7 @@ def test_manual_mode_forces_no_match_diagnostic_payload(tmp_path):
     payload = json.loads((output_dir / "telegram_payload.json").read_text(encoding="utf-8"))
     assert result.notified is True
     assert "No matches today" in payload["messages"][0]["text"]
+    assert "digest_count=0" in payload["messages"][0]["text"]
 
 
 
@@ -465,6 +467,47 @@ def test_manual_mode_reports_no_candidates_after_hard_filters(tmp_path):
     assert result.selected_count == 0
     assert result.reason_when_zero == "no_candidates_after_hard_filters"
     assert "No candidates after hard filters" in payload["messages"][0]["text"]
+    assert "digest_count=0" in payload["messages"][0]["text"]
+
+
+def test_last_run_summary_uses_explicit_digest_counters(tmp_path, monkeypatch):
+    fixed_now = datetime(2024, 2, 9, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    row = _make_row("alpha", 111, [])
+    row.posting.posted_at = fixed_now - timedelta(hours=1)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+
+    result = notifications.maybe_notify(
+        [row],
+        output_dir,
+        config,
+        run_mode="manual",
+        force_send=True,
+        fetched_count=1,
+    )
+
+    last_run = json.loads(
+        (output_dir / "last_run.json").read_text(encoding="utf-8")
+    )
+    summary = last_run["summary"]
+
+    assert result.window_rows_count == 1
+    assert result.selection_pool_count == 1
+    assert result.selected_count == 1
+    assert result.digest_top_matches_count == 1
+    assert result.digest_data_only_count == 0
+    assert result.digest_count == 1
+    assert summary["window_rows_count"] == 1
+    assert summary["selection_pool_count"] == 1
+    assert summary["selected_count"] == 1
+    assert summary["top_matches_count"] == 1
+    assert summary["data_only_count"] == 0
+    assert summary["digest_count"] == 1
 
 def test_telegram_response_metadata_propagated(tmp_path, monkeypatch):
     fixed_now = datetime(2024, 2, 9, 8, 0, tzinfo=timezone.utc)

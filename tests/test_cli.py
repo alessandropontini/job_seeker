@@ -62,7 +62,19 @@ def test_cli_run_summary_contains_telegram_fields(tmp_path, monkeypatch):
         "run_pipeline",
         lambda **_kwargs: (
             [],
-            PipelineSummary(3, 3, 1, 1, {"remotive": 2, "wwr": 1}),
+            PipelineSummary(
+                3,
+                3,
+                1,
+                1,
+                {"remotive": 2, "wwr": 1},
+                accepted_count=2,
+                accepted_missing_salary_count=1,
+                strict_matches_count=1,
+                rejected_count=1,
+                strict_match_min_score=81,
+                strict_match_max_score=81,
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -107,14 +119,27 @@ def test_cli_run_summary_contains_telegram_fields(tmp_path, monkeypatch):
     assert "threshold_initial" in summary
     assert "threshold_final" in summary
     assert "min_results" in summary
+    assert "window_rows_count" in summary
+    assert "selection_pool_count" in summary
     assert "selected_count" in summary
+    assert "digest_top_matches_count" in summary
+    assert "digest_data_only_count" in summary
+    assert "digest_count" in summary
+    assert "accepted_count" in summary
+    assert "accepted_missing_salary_count" in summary
+    assert "strict_matches_count" in summary
+    assert "rejected_count" in summary
     assert "hard_rejected_count" in summary
     assert "soft_penalized_count" in summary
     assert "top_penalties" in summary
     assert "top_hard_rejects" in summary
     assert "avg_score" in summary
+    assert "strict_match_min_score" in summary
+    assert "strict_match_max_score" in summary
     assert "selected_min_score" in summary
     assert "selected_max_score" in summary
+    assert "digest_min_score" in summary
+    assert "digest_max_score" in summary
 
     assert summary["source_counts"] == {"remotive": 2, "wwr": 1}
 

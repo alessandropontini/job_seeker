@@ -9,6 +9,7 @@ from typing import Iterable, Mapping
 from collections import Counter
 
 from job_scout.channels import select_channels
+from job_scout.digesting import is_candidate_after_hard_filters, score_bounds
 from job_scout.matcher import match_posting
 from job_scout.normalize import (
     job_posting_from_normalized,
@@ -23,8 +24,6 @@ from job_scout.writers import ReportRow, SourceStatus, write_reports
 
 logger = logging.getLogger(__name__)
 
-_CANDIDATE_SOFT_REJECT_REASONS = {"title_not_targeted"}
-
 
 @dataclass(frozen=True)
 class PipelineSummary:
@@ -35,6 +34,10 @@ class PipelineSummary:
     candidates_count: int
     matches_count: int
     source_counts: dict[str, int]
+    accepted_count: int = 0
+    accepted_missing_salary_count: int = 0
+    strict_matches_count: int = 0
+    rejected_count: int = 0
     gate_pass_count: int = 0
     hard_block_count: int = 0
     soft_penalty_count: int = 0
@@ -44,8 +47,8 @@ class PipelineSummary:
     top_hard_rejects: dict[str, int] | None = None
     avg_score: float = 0.0
     max_score: int = 0
-    selected_min_score: int = 0
-    selected_max_score: int = 0
+    strict_match_min_score: int = 0
+    strict_match_max_score: int = 0
 
 
 def _resolve_sources(selected: Iterable[str] | None) -> list[str]:
@@ -198,7 +201,7 @@ def run_pipeline(
     candidates_count = sum(
         1
         for row in all_rows
-        if not _is_hard_blocked_candidate(row)
+        if is_candidate_after_hard_filters(row)
     )
     penalty_counts = Counter(
         penalty
@@ -211,13 +214,17 @@ def run_pipeline(
         for reason in row.match.hard_reject_reasons
     )
     scored_rows = [row for row in all_rows if row.match.score is not None]
-    selected_scores = [row.match.score or 0 for row in matches if row.match.score is not None]
+    strict_match_min_score, strict_match_max_score = score_bounds(matches)
     summary = PipelineSummary(
         fetched_count=fetched_total,
         normalized_count=normalized_total,
         candidates_count=candidates_count,
         matches_count=len(matches),
         source_counts=source_counts,
+        accepted_count=len(matches) + len(missing_salary_allowed),
+        accepted_missing_salary_count=len(missing_salary_allowed),
+        strict_matches_count=len(matches),
+        rejected_count=len(rejected),
         gate_pass_count=gate_pass_count,
         hard_block_count=hard_block_count,
         soft_penalty_count=soft_penalty_count,
@@ -227,15 +234,7 @@ def run_pipeline(
         top_hard_rejects=dict(hard_reject_counts.most_common(5)),
         avg_score=(sum((row.match.score or 0) for row in scored_rows) / len(scored_rows)) if scored_rows else 0.0,
         max_score=max((row.match.score or 0) for row in scored_rows) if scored_rows else 0,
-        selected_min_score=min(selected_scores) if selected_scores else 0,
-        selected_max_score=max(selected_scores) if selected_scores else 0,
+        strict_match_min_score=strict_match_min_score,
+        strict_match_max_score=strict_match_max_score,
     )
     return all_rows, summary
-
-
-def _is_hard_blocked_candidate(row: ReportRow) -> bool:
-    """Return True when a row is rejected by hard blockers only."""
-
-    reasons = set(row.match.reject_reasons or [])
-    reasons.difference_update(_CANDIDATE_SOFT_REJECT_REASONS)
-    return bool(reasons)
