@@ -254,6 +254,7 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - fixed `wwr` RSS parsing quality so HTML is stripped before reporting and `Headquarters:` values drive company/location extraction more reliably
   - tightened CV alignment in the matcher: generic manager/lead roles without core domain signals are now rejected in scheduled runs, and marketing/SEO/sales-family titles are hard-blocked
   - added Telegram command trigger scaffolding in the Cloudflare Worker: `mode=test` performs source probes and replies on Telegram; `mode=github` dispatches a workflow and replies with an acknowledgement
+  - fixed staging Worker deploy by injecting `CLOUDFLARE_KV_NAMESPACE_ID` into `wrangler.toml` during GitHub Actions execution instead of relying on a checked-in KV id
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

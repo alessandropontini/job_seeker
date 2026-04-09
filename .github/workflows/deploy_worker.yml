@@ -25,6 +25,7 @@ jobs:
       WRANGLER_VERSION: "4.41.0"
       CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
       TARGET_ENV: ${{ github.event.inputs.environment || 'staging' }}
     steps:
       - name: Checkout
@@ -39,6 +40,10 @@ jobs:
           fi
           if [ -z "${CF_ACCOUNT_ID:-}" ]; then
             echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID"
+            exit 1
+          fi
+          if [ -z "${CF_KV_NAMESPACE_ID:-}" ]; then
+            echo "::error::Missing GitHub secret CLOUDFLARE_KV_NAMESPACE_ID"
             exit 1
           fi
 
@@ -90,6 +95,18 @@ jobs:
         run: |
           set -euo pipefail
           node --check "${{ steps.locate.outputs.worker_dir }}/worker.js"
+
+      - name: Inject KV namespace id into wrangler.toml
+        run: |
+          set -euo pipefail
+          TOML="${{ steps.locate.outputs.worker_toml }}"
+          sed -i.bak "s/REPLACE_WITH_NAMESPACE_ID/${CF_KV_NAMESPACE_ID}/g" "${TOML}"
+          rm -f "${TOML}.bak"
+          if grep -q "REPLACE_WITH_NAMESPACE_ID" "${TOML}"; then
+            echo "::error::KV namespace placeholder still present in ${TOML}"
+            exit 1
+          fi
+          echo "Injected Cloudflare KV namespace id into ${TOML}"
 
       - name: Wrangler identity (whoami)
         run: |

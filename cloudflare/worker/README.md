@@ -87,6 +87,7 @@ Use workflow `.github/workflows/deploy_worker.yml` to deploy `job-scout-telegram
 Create these repository secrets before running deploy:
 - `CLOUDFLARE_API_TOKEN` (token with Workers deploy permissions)
 - `CLOUDFLARE_ACCOUNT_ID` (Cloudflare account id)
+- `CLOUDFLARE_KV_NAMESPACE_ID` (the KV namespace id injected into `wrangler.toml` at deploy time)
 
 ### How to run deploy
 1. Open **GitHub → Actions → deploy-feedback-worker**.
@@ -99,6 +100,10 @@ Create these repository secrets before running deploy:
 The workflow pins Wrangler to `4.41.0`, verifies `wrangler --version` is `4.41.x`, validates worker name in `wrangler.toml`, runs `node --check worker.js`, and executes:
 - `wrangler deploy --config wrangler.toml` (staging)
 - `wrangler deploy --config wrangler.toml --env <environment>` (non-staging)
+
+The workflow also replaces the staging placeholder `REPLACE_WITH_NAMESPACE_ID` in
+`wrangler.toml` with the repository secret `CLOUDFLARE_KV_NAMESPACE_ID` before deploy,
+so the checked-in config can stay non-sensitive.
 
 ### How to verify Active Deployment in Cloudflare
 1. Open **Cloudflare Dashboard → Workers & Pages → job-scout-telegram-feedback**.
