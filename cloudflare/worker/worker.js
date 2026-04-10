@@ -1498,7 +1498,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       ok: false,
       reason: "missing_github_config",
       text:
-        "Non riesco ancora ad avviare la ricerca da GitHub.\nManca una parte della configurazione del worker (`missing_github_config`).",
+        "⚠️ Non riesco ancora ad avviare la ricerca da GitHub.\nManca una parte della configurazione del worker (`missing_github_config`).",
     };
   }
   const response = await fetch(
@@ -1529,7 +1529,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       ok: false,
       reason: "github_dispatch_failed",
       text: [
-        "Ho provato ad avviare la ricerca su GitHub, ma qualcosa ha risposto con un errore.",
+        "⚠️ Ho provato ad avviare la ricerca su GitHub, ma è tornato un errore.",
         `Workflow: ${workflowId}`,
         `Status: ${response.status}`,
         `Dettaglio: ${body.slice(0, 200)}`,
@@ -1540,7 +1540,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
     ok: true,
     reason: "github_dispatch_accepted",
     text: [
-      "Ho avviato una nuova ricerca.",
+      "🚀 Ho avviato una nuova ricerca.",
       `Workflow: ${workflowId}`,
       `Repo: ${owner}/${repo}`,
       `Branch: ${ref}`,

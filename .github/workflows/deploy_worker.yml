@@ -30,7 +30,7 @@ jobs:
       TARGET_ENV: ${{ github.event.inputs.environment || 'staging' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate required Cloudflare secrets
         run: |
@@ -53,7 +53,7 @@ jobs:
           fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 

@@ -496,6 +496,13 @@ maybeTest("telegram webhook handles /jobscout message in github mode and dispatc
   assert.equal(dispatchPayload.ref, "main");
   assert.equal(dispatchPayload.inputs.sources, "remotive,wwr");
   assert.equal(dispatchPayload.inputs.since_days, "3");
+  const telegramSend = fetchMock.calls.find((call) =>
+    String(call.url).includes("/sendMessage")
+  );
+  assert.ok(telegramSend);
+  const body = JSON.parse(telegramSend.options.body);
+  assert.match(body.text, /🚀 Ho avviato una nuova ricerca\./);
+  assert.match(body.text, /Fonti: remotive, wwr/);
 });
 
 maybeTest("logs route_not_found for unknown paths", async () => {
