@@ -293,6 +293,71 @@ def test_fallback_digest_when_window_empty(tmp_path, monkeypatch):
     assert last_run["summary"]["digest_count"] == len(digest["jobs"])
 
 
+def test_manual_mode_respects_selection_window_days(tmp_path, monkeypatch):
+    fixed_now = datetime(2024, 2, 7, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    row = _make_row("manual-30d", 105, [])
+    row.posting.posted_at = fixed_now - timedelta(days=10)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+
+    result = notifications.maybe_notify(
+        [row],
+        output_dir,
+        config,
+        run_mode="manual",
+        force_send=True,
+        fetched_count=1,
+        selection_window_days=30,
+    )
+
+    last_run = json.loads(
+        (output_dir / "last_run.json").read_text(encoding="utf-8")
+    )
+    digest = last_run["digest"]
+    payload = json.loads(
+        (output_dir / "telegram_payload.json").read_text(encoding="utf-8")
+    )
+
+    assert result.window_rows_count == 1
+    assert result.selection_window_days == 30
+    assert digest["scope"] == "manual_since_days"
+    assert digest["selection_window_days"] == 30
+    assert "Job Scout — Manual Digest (last 30d)" in payload["messages"][0]["text"]
+
+
+def test_manual_zero_result_message_uses_requested_window(tmp_path, monkeypatch):
+    fixed_now = datetime(2024, 2, 7, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+
+    notifications.maybe_notify(
+        [],
+        output_dir,
+        config,
+        run_mode="manual",
+        force_send=True,
+        fetched_count=12,
+        selection_window_days=30,
+    )
+
+    payload = json.loads(
+        (output_dir / "telegram_payload.json").read_text(encoding="utf-8")
+    )
+
+    assert "Negli ultimi 30 giorni" in payload["messages"][0]["text"]
+    assert "finestra=30d" in payload["messages"][0]["text"]
+
+
 def test_fake_send_mode_registers_window_and_persists_payload(
     tmp_path, monkeypatch
 ):

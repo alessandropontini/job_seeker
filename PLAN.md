@@ -265,6 +265,8 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - hardened role/domain explainability by storing explicit `role_fit`, `domain_fit`, and `location_fit` states in the matcher and using those fit states in score explainability instead of relying only on reject labels
   - improved Telegram operator UX by rewriting GitHub-trigger and zero-result messages in a more human format while keeping `out/run_summary.json` as the technical drill-down path
   - upgraded GitHub Actions workflow dependencies from `actions/checkout@v4` / `actions/setup-node@v4` to `v5` to remove the Node 20 deprecation warning from worker deploys and related workflows
+  - fixed an `arbeitnow` normalization gap where city-only German locations (for example `Munich`) were missing `location_country`, causing false `location_not_allowed` rejects on otherwise relevant EU jobs
+  - aligned manual digest selection with `since_days`, so Telegram-triggered manual runs now select over the requested time range instead of always collapsing back to a 24h digest window
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

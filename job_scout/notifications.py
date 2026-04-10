@@ -75,6 +75,7 @@ class NotificationResult:
     digest_min_score: int = 0
     digest_max_score: int = 0
     reason_when_zero: str | None = None
+    selection_window_days: int = 1
 
 
 def select_digest_items(
@@ -144,6 +145,7 @@ def maybe_notify(
     run_mode: str = "scheduled",
     force_send: bool = False,
     fetched_count: int | None = None,
+    selection_window_days: int = 1,
 ) -> NotificationResult:
     """Send the daily digest notification for the current run."""
 
@@ -166,6 +168,7 @@ def maybe_notify(
             digest_mode,
         )
     window_hours = _parse_int(digest_config.get("window_hours", 24), 24)
+    selection_window_days = max(_parse_int(selection_window_days, 1), 1)
 
     state_config = _as_dict(config.get("state"))
     state_dir = state_config.get("dir")
@@ -194,15 +197,19 @@ def maybe_notify(
             timezone_name=timezone_name,
             minimum_score=min_score,
         )
+        digest_scope = "daily_window"
     else:
+        window_start = now - timedelta(days=selection_window_days)
         daily_rows = _select_daily_window_rows(
             rows,
             window_start,
             now,
             minimum_score=min_score,
         )
+        digest_scope = (
+            "manual_since_days" if selection_window_days > 1 else "daily_window"
+        )
     window_rows_count = len(daily_rows)
-    digest_scope = "daily_window"
     if not daily_rows:
         fallback_rows = _select_fallback_rows(rows, minimum_score=min_score)
         if fallback_rows:
@@ -305,6 +312,7 @@ def maybe_notify(
         digest_scope=digest_scope,
         digest_mode=digest_mode,
         data_only_reasons=channel_selection.data_only_reasons,
+        selection_window_days=selection_window_days,
     )
 
     dedupe_enabled = bool(dedupe_config.get("enabled", True))
@@ -343,6 +351,7 @@ def maybe_notify(
         feedback_close_at=feedback_close_at.isoformat(),
         window_hours=window_hours,
         digest_scope=digest_scope,
+        selection_window_days=selection_window_days,
         total_in_window=digest_count,
         digest_mode=digest_mode,
         anti_zero_triggered=anti_zero_triggered,
@@ -508,6 +517,7 @@ def maybe_notify(
         window_hours=window_hours,
         digest_scope=digest_scope,
         digest_mode=digest_mode,
+        selection_window_days=selection_window_days,
         run_id=run_id,
         short_ids=short_ids,
         digest_hash=digest_hash,
@@ -743,6 +753,7 @@ def maybe_notify(
         digest_min_score=digest_min_score,
         digest_max_score=digest_max_score,
         reason_when_zero=reason_when_zero,
+        selection_window_days=selection_window_days,
     )
 
 
@@ -857,6 +868,7 @@ def _format_dual_channel_digest(
     digest_scope: str,
     digest_mode: str,
     data_only_reasons: Mapping[str, list[str]] | None = None,
+    selection_window_days: int = 1,
 ) -> str:
     if digest_count == 0:
         return "No new job postings published in the last 24 hours."
@@ -868,8 +880,14 @@ def _format_dual_channel_digest(
         )
         lines.append(f"Total in digest: {digest_count}")
     else:
-        lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
-        lines.append("Published yesterday")
+        if digest_scope == "manual_since_days":
+            lines.append(
+                f"Job Scout — Manual Digest (last {selection_window_days}d)"
+            )
+            lines.append("Published in the selected manual range")
+        else:
+            lines.append(f"Job Scout — Daily Digest (last {window_hours}h)")
+            lines.append("Published yesterday")
         lines.append(f"Total in digest: {digest_count}")
     mode_label = digest_mode
     if digest_mode == "LOW_CONFIDENCE":
@@ -1141,6 +1159,7 @@ def _build_digest_payload(
     feedback_close_at: str,
     window_hours: int,
     digest_scope: str,
+    selection_window_days: int,
     total_in_window: int,
     digest_mode: str,
     anti_zero_triggered: bool,
@@ -1178,6 +1197,7 @@ def _build_digest_payload(
         "feedback_open_at": feedback_open_at,
         "feedback_close_at": feedback_close_at,
         "window_hours": window_hours,
+        "selection_window_days": selection_window_days,
         "scope": digest_scope,
         "digest_mode": digest_mode,
         "anti_zero_triggered": anti_zero_triggered,
@@ -1251,6 +1271,7 @@ def _build_message_payloads(
     window_hours: int,
     digest_scope: str,
     digest_mode: str,
+    selection_window_days: int,
     run_id: str,
     short_ids: Mapping[str, str],
     digest_hash: str,
@@ -1265,16 +1286,41 @@ def _build_message_payloads(
         detail = (
             "Ho controllato le fonti configurate, ma nessun annuncio è entrato nel digest finale."
         )
+        context_line = (
+            f"Contesto: digest=0, run_mode={run_mode}, "
+            f"force_send={str(force_send).lower()}"
+        )
+        if run_mode == "manual" and selection_window_days > 1:
+            headline = (
+                f"🔎 Negli ultimi {selection_window_days} giorni non ho trovato offerte davvero in linea."
+            )
+            detail = (
+                "Ho controllato le fonti configurate sull'intera finestra richiesta, "
+                "ma nessun annuncio è entrato nel digest finale."
+            )
+            context_line = (
+                f"Contesto: digest=0, run_mode={run_mode}, "
+                f"finestra={selection_window_days}d, "
+                f"force_send={str(force_send).lower()}"
+            )
         if reason_when_zero == "no_candidates_after_hard_filters":
             headline = "🧭 Oggi non ho trovato offerte che superano i filtri principali."
             detail = (
                 "Le offerte viste ci sono state, ma nessuna ha passato i vincoli più importanti."
             )
+            if run_mode == "manual" and selection_window_days > 1:
+                headline = (
+                    f"🧭 Negli ultimi {selection_window_days} giorni non ho trovato offerte che superano i filtri principali."
+                )
+                detail = (
+                    "Le offerte viste ci sono state nella finestra richiesta, "
+                    "ma nessuna ha passato i vincoli più importanti."
+                )
         return [{
             "text": (
                 f"{headline}\n"
                 f"{detail}\n"
-                f"Contesto: digest=0, run_mode={run_mode}, force_send={str(force_send).lower()}\n"
+                f"{context_line}\n"
                 "📄 Se vuoi approfondire, controlla `out/run_summary.json`."
             )
         }]
@@ -1287,6 +1333,7 @@ def _build_message_payloads(
                     window_hours=window_hours,
                     digest_scope=digest_scope,
                     digest_mode=digest_mode,
+                    selection_window_days=selection_window_days,
                 )
             }
         )
@@ -1301,6 +1348,7 @@ def _build_message_payloads(
                     digest_scope=digest_scope,
                     digest_mode=digest_mode,
                     data_only_reasons=data_only_reasons,
+                    selection_window_days=selection_window_days,
                 )
             }
         )
@@ -1335,6 +1383,7 @@ def _format_digest_header(
     window_hours: int,
     digest_scope: str,
     digest_mode: str,
+    selection_window_days: int,
 ) -> str:
     mode_label = digest_mode
     if digest_mode == "LOW_CONFIDENCE":
@@ -1342,6 +1391,12 @@ def _format_digest_header(
     if digest_scope == "fallback_recent":
         return (
             "Job Scout — Daily Digest (fallback)\n"
+            f"Total in digest: {digest_count}\n"
+            f"Mode: {mode_label}"
+        )
+    if digest_scope == "manual_since_days":
+        return (
+            f"Job Scout — Manual Digest (last {selection_window_days}d)\n"
             f"Total in digest: {digest_count}\n"
             f"Mode: {mode_label}"
         )

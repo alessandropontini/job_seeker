@@ -119,6 +119,7 @@ def test_cli_run_summary_contains_telegram_fields(tmp_path, monkeypatch):
     assert "threshold_initial" in summary
     assert "threshold_final" in summary
     assert "min_results" in summary
+    assert "selection_window_days" in summary
     assert "window_rows_count" in summary
     assert "selection_pool_count" in summary
     assert "selected_count" in summary

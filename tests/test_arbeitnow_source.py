@@ -21,3 +21,29 @@ def test_parse_arbeitnow_payload_fixture():
     assert first.url.startswith("https://www.arbeitnow.com/jobs/")
     assert first.posted_at.tzinfo == timezone.utc
 
+
+def test_parse_arbeitnow_infers_germany_from_city_only_location():
+    payload = {
+        "data": [
+            {
+                "slug": "finance-and-compliance-officer-munich-360860",
+                "title": "Finance and Compliance Officer",
+                "company_name": "Solas Capital AG",
+                "location": "Munich",
+                "remote": False,
+                "created_at": 1760000000,
+                "description": (
+                    "<p>This is a permanent role in Germany working either remotely "
+                    "or based in our office in Munich.</p>"
+                ),
+                "url": "https://www.arbeitnow.com/jobs/companies/solas-capital-ag/finance-and-compliance-officer-munich-360860",
+                "tags": ["Compliance", "Security"],
+            }
+        ]
+    }
+
+    postings = parse_arbeitnow_payload(payload, since_days=4000)
+
+    assert len(postings) == 1
+    assert postings[0].location_text == "Munich"
+    assert postings[0].location_country == "Germany"

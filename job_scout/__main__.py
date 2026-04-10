@@ -356,6 +356,7 @@ def main(argv: List[str] | None = None) -> int:
             run_mode=run_mode,
             force_send=force_send,
             fetched_count=summary.fetched_count,
+            selection_window_days=args.since_days if run_mode == "manual" else 1,
         )
         feedback_smoke = {"ok": False, "reason": "not_enabled"}
         if args.feedback_smoke_check or run_mode == "manual":
@@ -413,6 +414,7 @@ def main(argv: List[str] | None = None) -> int:
             "threshold_initial": notification.threshold_initial,
             "threshold_final": notification.threshold_final,
             "min_results": notification.min_results,
+            "selection_window_days": notification.selection_window_days,
             "window_rows_count": notification.window_rows_count,
             "selection_pool_count": notification.selection_pool_count,
             "selected_count": notification.selected_count,

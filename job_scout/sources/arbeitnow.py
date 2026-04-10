@@ -17,6 +17,10 @@ _COUNTRY_RE = re.compile(
     r"Country:\s*([A-Za-z .-]+?)(?:\s+City:|$)",
     re.IGNORECASE,
 )
+_GERMANY_HINT_RE = re.compile(
+    r"\bGermany\b|\bGerman\b|\bDeutschland\b",
+    re.IGNORECASE,
+)
 
 
 class ArbeitnowSourceError(RuntimeError):
@@ -126,9 +130,16 @@ def _parse_created_at(value: object) -> datetime | None:
 
 
 def _extract_country(description: str, location_text: str) -> str:
-    match = _COUNTRY_RE.search(_strip_html(description))
+    plain_description = _strip_html(description)
+    match = _COUNTRY_RE.search(plain_description)
     if match:
         return match.group(1).strip()
+    if (
+        location_text
+        and "," not in location_text
+        and _GERMANY_HINT_RE.search(plain_description)
+    ):
+        return "Germany"
     if "," in location_text:
         parts = [part.strip() for part in location_text.split(",") if part.strip()]
         if parts:

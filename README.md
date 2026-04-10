@@ -54,6 +54,7 @@ Edit `config/config.yaml` to adjust defaults. Missing fields fall back to defaul
 
 Key sections:
 - `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`, `arbeitnow`).
+- `arbeitnow` normalization now infers `Germany` for city-only locations when the posting description explicitly references Germany, reducing false `location_not_allowed` rejects for German jobs such as `Munich` or `Berlin`.
 - `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
 - `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
@@ -96,6 +97,7 @@ Key sections:
 - `digest.selection.low_threshold`: soglia minima per modalità ADAPTIVE (default: 40).
 - `digest.selection.step`: decremento soglia ad ogni iterazione (default: 5).
 - Telegram command replies are intentionally short and operator-friendly: the Worker confirms when a GitHub run starts, zero-result runs explain the outcome in plain language, and the most important messages use light emoji markers for fast scanning while still pointing to `out/run_summary.json` for diagnostics.
+- In manual runs, `since_days` now affects both fetch and digest selection. Example: `/jobscout mode=github since_days=30` searches and selects across the last 30 days instead of keeping a 24h digest window with a fallback.
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
