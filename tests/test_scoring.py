@@ -47,6 +47,8 @@ def test_scoring_prioritizes_title_and_description_keywords():
         bonus.startswith("core_description:") for bonus in scored.score_bonuses
     )
     assert scored.why
+    assert any(reason.startswith("fit role_targeted") for reason in scored.why)
+    assert any(reason.startswith("fit domain_targeted") for reason in scored.why)
 
 
 def test_scoring_skips_rejected_postings():

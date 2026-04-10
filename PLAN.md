@@ -260,6 +260,9 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - fixed Telegram `mode=github` dispatch to include a GitHub-required `User-Agent` header for Cloudflare-originated REST calls
   - fixed the Worker deploy workflow ordering so `WORKER_GH_TOKEN` is uploaded after deploy, matching Cloudflare's versioned-secret constraints
   - started technical hardening on pipeline/digest diagnostics: centralized candidate-pool logic, split `run_summary` into explicit accepted/selection/digest counters, and aligned zero-result diagnostics with final digest counts
+  - started matching hardening by switching role/domain keyword checks to phrase-boundary matching, reducing false positives from naive substring matches in titles
+  - hardened location matching by centralizing allow/deny evaluation: explicit acceptance for `Worldwide` / `Europe` / `EU` full-remote roles, explicit rejection of UK text aliases, and deterministic rejection of broad non-target regions such as `EMEA` and `North America`
+  - hardened role/domain explainability by storing explicit `role_fit`, `domain_fit`, and `location_fit` states in the matcher and using those fit states in score explainability instead of relying only on reject labels
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

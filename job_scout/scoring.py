@@ -11,6 +11,7 @@ from job_scout.targeting import (
     CORE_KEYWORDS,
     PLATFORM_KEYWORDS,
     ROLE_BONUS_KEYWORDS,
+    contains_phrase,
     has_negative_domain_penalty,
     has_negative_soft_penalty,
 )
@@ -108,7 +109,7 @@ def compute_score(
         applied_penalties.append("negative_soft_penalty")
 
     final_score = min(max(score, 0), 100)
-    why = _build_why(applied_bonuses, applied_penalties)
+    why = _build_why(match, applied_bonuses, applied_penalties)
     return final_score, applied_penalties, applied_bonuses, why
 
 
@@ -124,7 +125,7 @@ def _find_keywords(text: str, keywords: object) -> list[str]:
         if not isinstance(entry, str):
             continue
         lowered = entry.lower()
-        if lowered and lowered in text:
+        if lowered and contains_phrase(text, lowered):
             matches.append(entry)
     return sorted(set(matches), key=str.lower)
 
@@ -133,8 +134,16 @@ def _format_keyword_bonus(prefix: str, keywords: list[str]) -> str:
     return f"{prefix}: {', '.join(keywords)}"
 
 
-def _build_why(bonuses: list[str], penalties: list[str]) -> list[str]:
+def _build_why(
+    match: MatchResult, bonuses: list[str], penalties: list[str]
+) -> list[str]:
     reasons: list[str] = []
+    if match.role_fit == "targeted":
+        reasons.append("fit role_targeted")
+    if match.domain_fit == "targeted":
+        reasons.append("fit domain_targeted")
+    if match.location_fit.startswith("allowed") or match.location_fit == "missing_allowed":
+        reasons.append(f"fit location_{match.location_fit}")
     for bonus in bonuses[:2]:
         reasons.append(f"match {bonus}")
     if penalties:

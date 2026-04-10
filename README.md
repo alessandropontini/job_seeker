@@ -59,6 +59,7 @@ Key sections:
 - `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
 - `role_targeting.include_titles`: manager/lead/head plus data governance and data management keyword families (including Italian variants) used for title targeting.
 - CV/domain gate: accepted jobs must also contain data-governance / metadata / compliance / privacy / lineage / platform signals in title or description; generic manager roles are no longer enough on their own.
+- Matching now tracks three explicit fit dimensions internally: `role_fit`, `domain_fit`, and `location_fit`. Reason codes such as `title_not_targeted` and `cv_domain_not_targeted` are still preserved for compatibility, but scoring explainability now reflects the underlying fit state instead of only reject labels.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
 - `salary_rules.currency_rates`: approximate rates used for conversion (EUR=1.0, USD=0.92, GBP=1.17).
@@ -232,7 +233,7 @@ help you pinpoint the issue:
   invalid token) vs. transport problems (empty response + curl stderr).
 
 ## Matching rules overview (PR3 wide recall)
-- **Location:** allow EU countries, Italy, New York city matches, and full-remote jobs marked as `Worldwide` or `Europe`. Explicitly reject UK. In `run_mode=manual`, non-target locations become soft penalties (`location_not_allowed`) instead of hard rejects.
+- **Location:** allow EU countries, Italy, New York city matches, and full-remote jobs marked as `Worldwide`, `Europe`, or `EU`. Explicitly reject UK (including UK-related text variants such as `United Kingdom`, `England`, `Scotland`, `Wales`, and `Great Britain`). Broad non-target remote regions such as `EMEA`, `North America`, `USA only`, or `Canada only` are treated as non-target locations. In `run_mode=manual`, non-target locations become soft penalties (`location_not_allowed`) instead of hard rejects.
 - **Role:** manager/lead/head titles plus data governance/data quality/metadata/data management variants are accepted.
 - **Salary:** minimum 52,000 EUR; missing salary is flagged and kept in results. Salary below minimum is a soft penalty in manual runs and a hard reject in scheduled runs.
 - **Remote:** remote level is normalized and reported; non-remote roles are not rejected by default.
@@ -250,7 +251,7 @@ help you pinpoint the issue:
 - Core CV terms (data governance/quality/management/metadata/lineage/compliance/risk data) are weighted highest.
 - Cloud/data-platform terms (`GCP`, `BigQuery`, `Kafka`, `ETL/ELT`, `Airflow`, `dbt`, `SQL`) add medium-high signal.
 - Negative domains (`brand/growth marketing`, `SEO`, `paid ads`, `sales`, `affiliate`) and quant-trading titles receive strong penalties.
-- Scores are clamped to 0-100 and each selected job includes explainability `why[]` (2-3 reasons).
+- Scores are clamped to 0-100 and each selected job includes explainability `why[]` (2-3 reasons), now anchored to explicit fit signals (`role`, `domain`, `location`) plus score adjustments.
 - Reports order accepted postings by score (desc), then by newest `posted_at`.
 
 ## Personalization (optional)
@@ -346,6 +347,7 @@ Reviewed for future expansion:
 - Missing salaries are tagged with `missing_salary` when `allow_missing_salary` is enabled.
 - Scores are deterministic and derived from configured preference weights.
 - Marketing / SEO / sales-family roles are hard-blocked even if they match location and seniority.
+- Title and domain keyword matching now use phrase boundaries instead of raw substring checks, reducing false positives such as `lead` inside `leadership`.
 - LinkedIn is not automated as a crawler source here. The only compliant future option is a public/manual integration path such as LinkedIn Job Library, not login-gated scraping.
 - External dependency failures (HTTP 403/429, NO_NETWORK) are treated as environment
   limitations during QA validation, not project defects.

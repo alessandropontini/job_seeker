@@ -92,6 +92,19 @@ def test_accepts_europe_when_full_remote(base_config, region_data):
     assert "location_not_allowed" not in result.hard_reject_reasons
 
 
+def test_accepts_eu_when_full_remote(base_config, region_data):
+    posting = _posting(location_text="Remote - EU only", location_country="")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "location_not_allowed" not in result.hard_reject_reasons
+
+
 def test_rejects_uk_when_full_remote(base_config, region_data):
     posting = _posting(
         location_text="Remote - United Kingdom", location_country="United Kingdom"
@@ -103,7 +116,8 @@ def test_rejects_uk_when_full_remote(base_config, region_data):
         strict=False,
         allow_missing_salary=True,
     )
-    assert "location_not_allowed" in result.hard_reject_reasons
+    assert "excluded_country" in result.hard_reject_reasons
+    assert "excluded_country_text" in result.hard_reject_reasons
 
 
 def test_rejects_usa_only_when_full_remote(base_config, region_data):
@@ -117,6 +131,19 @@ def test_rejects_usa_only_when_full_remote(base_config, region_data):
     )
     assert "location_not_allowed" in result.hard_reject_reasons
 
+
+def test_rejects_emea_when_full_remote(base_config, region_data):
+    posting = _posting(location_text="Remote - EMEA", location_country="")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "location_not_allowed" in result.hard_reject_reasons
+
 def test_accepts_eu_country(base_config, region_data):
     posting = _posting(location_text="Berlin, Germany", location_country="Germany")
     _, result = match_posting(
@@ -128,6 +155,7 @@ def test_accepts_eu_country(base_config, region_data):
     )
     assert result.decision == "accepted"
     assert result.matches_all is True
+    assert result.location_fit == "allowed_eu_country"
 
 
 def test_accepts_city_match(base_config, region_data):
@@ -220,6 +248,9 @@ def test_manual_soft_penalty_for_location_and_title(base_config, region_data):
     assert "location_not_allowed" in result.penalties
     assert "title_not_targeted" in result.penalties
     assert "cv_domain_not_targeted" in result.penalties
+    assert result.role_fit == "not_targeted"
+    assert result.domain_fit == "not_targeted"
+    assert result.location_fit == "not_targeted"
 
 
 def test_accepts_manager_title_with_core_signal(base_config, region_data):
@@ -236,6 +267,9 @@ def test_accepts_manager_title_with_core_signal(base_config, region_data):
     )
     assert result.decision == "accepted"
     assert "title_not_targeted" not in result.hard_reject_reasons
+    assert result.role_fit == "targeted"
+    assert result.domain_fit == "targeted"
+    assert "manager" in result.role_matches
 
 
 def test_accepts_lead_title(base_config, region_data):
@@ -278,6 +312,55 @@ def test_rejects_non_target_title(base_config, region_data):
     )
     assert result.decision == "rejected"
     assert "title_not_targeted" in result.hard_reject_reasons
+
+
+def test_does_not_match_lead_inside_leadership_word(base_config, region_data):
+    posting = _posting(
+        title="Data Leadership Coach",
+        description_snippet="Data governance mentoring and metadata coaching.",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "title_not_targeted" in result.hard_reject_reasons
+
+
+def test_matches_head_as_role_phrase(base_config, region_data):
+    posting = _posting(
+        title="Head of Data Governance",
+        description_snippet="Own metadata, data quality, and compliance standards.",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "title_not_targeted" not in result.hard_reject_reasons
+
+
+def test_accepts_pluralized_domain_phrase(base_config, region_data):
+    posting = _posting(
+        title="Engineering Manager",
+        description_snippet="Lead a team delivering patient data platforms.",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "cv_domain_not_targeted" not in result.hard_reject_reasons
+    assert "data platform" in result.domain_matches
 
 
 def test_accepts_data_governance_specialist_title(base_config, region_data):

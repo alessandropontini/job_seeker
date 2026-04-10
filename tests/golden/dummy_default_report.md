@@ -23,7 +23,7 @@ No postings found.
   - Tags: health-tech
   - Penalties: prefer_full_remote
   - Score: 1
-  - Why: match core_description: data platform; penalty prefer_full_remote
+  - Why: fit role_targeted; fit domain_targeted; fit location_allowed_city
   - Score adjustments: +core_description: data platform; -prefer_full_remote
   - Link: https://example.com/jobs/atlas-health-eng-manager
   - Note: Lead a team delivering patient data platforms.
@@ -37,7 +37,7 @@ No postings found.
   - Tags: analytics, missing_salary
   - Penalties: missing_salary
   - Score: 15
-  - Why: match core_description: data platform; match remote_full
+  - Why: fit role_targeted; fit domain_targeted; fit location_allowed_eu_country
   - Score adjustments: +core_description: data platform, +remote_full
   - Link: https://example.com/jobs/polar-analytics-data-lead
   - Note: Guide the data platform team for EU clients.
@@ -60,7 +60,7 @@ No postings found.
   - Remote level: onsite
   - Tags: fintech
   - Decision: rejected
-  - Reject reasons: excluded_country, excluded_country_text, location_not_allowed, cv_domain_not_targeted
+  - Reject reasons: excluded_country, excluded_country_text, cv_domain_not_targeted
   - Link: https://example.com/jobs/thames-fintech-manager
   - Note: Own delivery for the payments platform team.
 
