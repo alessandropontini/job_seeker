@@ -1261,15 +1261,21 @@ def _build_message_payloads(
     reason_when_zero: str | None = None,
 ) -> list[dict[str, object]]:
     if digest_count == 0:
-        headline = "No matches today."
+        headline = "Oggi non ho trovato offerte abbastanza in linea."
+        detail = (
+            "Ho controllato le fonti configurate, ma nessun annuncio è entrato nel digest finale."
+        )
         if reason_when_zero == "no_candidates_after_hard_filters":
-            headline = "No candidates after hard filters."
+            headline = "Oggi non ho trovato offerte che superano i filtri principali."
+            detail = (
+                "Le offerte viste ci sono state, ma nessuna ha passato i vincoli più importanti."
+            )
         return [{
             "text": (
                 f"{headline}\n"
-                f"run_mode={run_mode} force_send={str(force_send).lower()}\n"
-                "digest_count=0 top_matches=0 data_only=0\n"
-                "Diagnostics: check out/run_summary.json artifact."
+                f"{detail}\n"
+                f"Contesto: digest=0, run_mode={run_mode}, force_send={str(force_send).lower()}\n"
+                "Se vuoi approfondire, controlla `out/run_summary.json`."
             )
         }]
     payloads: list[dict[str, object]] = []

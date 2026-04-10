@@ -95,6 +95,7 @@ Key sections:
 - `digest.selection.high_threshold`: soglia iniziale per modalità TOP (default: 70).
 - `digest.selection.low_threshold`: soglia minima per modalità ADAPTIVE (default: 40).
 - `digest.selection.step`: decremento soglia ad ogni iterazione (default: 5).
+- Telegram command replies are intentionally short and operator-friendly: the Worker confirms when a GitHub run starts, and zero-result runs now explain the outcome in plain language while still pointing to `out/run_summary.json` for diagnostics.
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):

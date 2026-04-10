@@ -384,8 +384,8 @@ def test_scheduled_mode_sends_no_match_diagnostic(tmp_path):
     assert result.skipped_reason == "no_matches"
     assert result.telegram_attempted is False
     assert result.digest_mode == "TOP"
-    assert "No matches today" in payload["messages"][0]["text"]
-    assert "digest_count=0" in payload["messages"][0]["text"]
+    assert "Oggi non ho trovato offerte abbastanza in linea" in payload["messages"][0]["text"]
+    assert "Contesto: digest=0" in payload["messages"][0]["text"]
 
 
 
@@ -440,8 +440,8 @@ def test_manual_mode_forces_no_match_diagnostic_payload(tmp_path):
 
     payload = json.loads((output_dir / "telegram_payload.json").read_text(encoding="utf-8"))
     assert result.notified is True
-    assert "No matches today" in payload["messages"][0]["text"]
-    assert "digest_count=0" in payload["messages"][0]["text"]
+    assert "Oggi non ho trovato offerte abbastanza in linea" in payload["messages"][0]["text"]
+    assert "Contesto: digest=0" in payload["messages"][0]["text"]
 
 
 
@@ -466,8 +466,8 @@ def test_manual_mode_reports_no_candidates_after_hard_filters(tmp_path):
     payload = json.loads((output_dir / "telegram_payload.json").read_text(encoding="utf-8"))
     assert result.selected_count == 0
     assert result.reason_when_zero == "no_candidates_after_hard_filters"
-    assert "No candidates after hard filters" in payload["messages"][0]["text"]
-    assert "digest_count=0" in payload["messages"][0]["text"]
+    assert "Oggi non ho trovato offerte che superano i filtri principali" in payload["messages"][0]["text"]
+    assert "Contesto: digest=0" in payload["messages"][0]["text"]
 
 
 def test_last_run_summary_uses_explicit_digest_counters(tmp_path, monkeypatch):

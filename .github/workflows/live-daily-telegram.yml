@@ -160,7 +160,7 @@ jobs:
               raise SystemExit(0)
 
           result = telegram_notifier.send_messages_detailed([
-              {"text": "No matches today. See artifact out/run_summary.json"}
+              {"text": "Oggi non ho trovato offerte da mandare. Se vuoi i dettagli tecnici, guarda l'artifact `out/run_summary.json`."}
           ])
           summary["telegram_attempted"] = bool(result.attempted)
           summary["telegram_ok"] = bool(result.sent)

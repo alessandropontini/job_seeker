@@ -1498,7 +1498,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       ok: false,
       reason: "missing_github_config",
       text:
-        "Job Scout GitHub trigger blocked.\nmode=github\nreason=missing_github_config",
+        "Non riesco ancora ad avviare la ricerca da GitHub.\nManca una parte della configurazione del worker (`missing_github_config`).",
     };
   }
   const response = await fetch(
@@ -1528,19 +1528,25 @@ async function dispatchGitHubWorkflowCommand(command, env) {
     return {
       ok: false,
       reason: "github_dispatch_failed",
-      text: `Job Scout GitHub trigger failed.\nworkflow=${workflowId}\nstatus=${response.status}\nbody=${body.slice(0, 200)}`,
+      text: [
+        "Ho provato ad avviare la ricerca su GitHub, ma qualcosa ha risposto con un errore.",
+        `Workflow: ${workflowId}`,
+        `Status: ${response.status}`,
+        `Dettaglio: ${body.slice(0, 200)}`,
+      ].join("\n"),
     };
   }
   return {
     ok: true,
     reason: "github_dispatch_accepted",
     text: [
-      "Job Scout GitHub trigger accepted.",
-      `workflow=${workflowId}`,
-      `repo=${owner}/${repo}`,
-      `ref=${ref}`,
-      `sources=${command.sources.join(",")}`,
-      `since_days=${command.sinceDays}`,
+      "Ho avviato una nuova ricerca.",
+      `Workflow: ${workflowId}`,
+      `Repo: ${owner}/${repo}`,
+      `Branch: ${ref}`,
+      `Fonti: ${command.sources.join(", ")}`,
+      `Finestra: ultimi ${command.sinceDays} giorni`,
+      "Ti aggiorno qui appena il run finisce.",
     ].join("\n"),
   };
 }

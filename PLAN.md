@@ -263,6 +263,7 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - started matching hardening by switching role/domain keyword checks to phrase-boundary matching, reducing false positives from naive substring matches in titles
   - hardened location matching by centralizing allow/deny evaluation: explicit acceptance for `Worldwide` / `Europe` / `EU` full-remote roles, explicit rejection of UK text aliases, and deterministic rejection of broad non-target regions such as `EMEA` and `North America`
   - hardened role/domain explainability by storing explicit `role_fit`, `domain_fit`, and `location_fit` states in the matcher and using those fit states in score explainability instead of relying only on reject labels
+  - improved Telegram operator UX by rewriting GitHub-trigger and zero-result messages in a more human format while keeping `out/run_summary.json` as the technical drill-down path
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done
