@@ -1431,10 +1431,10 @@ async function safeJson(response) {
 
 async function runTelegramSearchTest(command) {
   const lines = [];
-  lines.push("Job Scout test trigger");
-  lines.push(`mode=test`);
-  lines.push(`sources=${command.sources.join(",")}`);
-  lines.push(`since_days=${command.sinceDays}`);
+  lines.push("🧪 Job Scout test trigger");
+  lines.push(`⚙️ Mode: test`);
+  lines.push(`🗂 Fonti: ${command.sources.join(",")}`);
+  lines.push(`🕒 Finestra: ultimi ${command.sinceDays} giorni`);
   lines.push("");
 
   const results = [];
@@ -1467,9 +1467,9 @@ async function runTelegramSearchTest(command) {
 
   for (const result of results) {
     if (result.ok) {
-      lines.push(`- ${result.source}: ok (${result.count} postings)`);
+      lines.push(`✅ ${result.source}: ok (${result.count} postings)`);
     } else {
-      lines.push(`- ${result.source}: ${result.reason}`);
+      lines.push(`⚠️ ${result.source}: ${result.reason}`);
     }
     if (result.detail) {
       lines.push(`  ${result.detail}`);
@@ -1478,7 +1478,7 @@ async function runTelegramSearchTest(command) {
 
   lines.push("");
   lines.push(
-    "To dispatch GitHub later: /jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7"
+    "🚀 Per avviare GitHub: /jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7"
   );
   return {
     ok: results.some((item) => item.ok),
@@ -1498,7 +1498,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       ok: false,
       reason: "missing_github_config",
       text:
-        "⚠️ Non riesco ancora ad avviare la ricerca da GitHub.\nManca una parte della configurazione del worker (`missing_github_config`).",
+        "⚠️ Non riesco ancora ad avviare la ricerca da GitHub.\n🧩 Manca una parte della configurazione del worker (`missing_github_config`).",
     };
   }
   const response = await fetch(
@@ -1530,9 +1530,9 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       reason: "github_dispatch_failed",
       text: [
         "⚠️ Ho provato ad avviare la ricerca su GitHub, ma è tornato un errore.",
-        `Workflow: ${workflowId}`,
-        `Status: ${response.status}`,
-        `Dettaglio: ${body.slice(0, 200)}`,
+        `🔧 Workflow: ${workflowId}`,
+        `📟 Status: ${response.status}`,
+        `📝 Dettaglio: ${body.slice(0, 200)}`,
       ].join("\n"),
     };
   }
@@ -1541,12 +1541,12 @@ async function dispatchGitHubWorkflowCommand(command, env) {
     reason: "github_dispatch_accepted",
     text: [
       "🚀 Ho avviato una nuova ricerca.",
-      `Workflow: ${workflowId}`,
-      `Repo: ${owner}/${repo}`,
-      `Branch: ${ref}`,
-      `Fonti: ${command.sources.join(", ")}`,
-      `Finestra: ultimi ${command.sinceDays} giorni`,
-      "Ti aggiorno qui appena il run finisce.",
+      `🔧 Workflow: ${workflowId}`,
+      `📦 Repo: ${owner}/${repo}`,
+      `🌿 Branch: ${ref}`,
+      `🗂 Fonti: ${command.sources.join(", ")}`,
+      `🕒 Finestra: ultimi ${command.sinceDays} giorni`,
+      "📬 Ti aggiorno qui appena il run finisce.",
     ].join("\n"),
   };
 }

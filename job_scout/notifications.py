@@ -982,25 +982,25 @@ def _build_feedback_keyboard_for_job(
     keyboard = [
         [
             {
-                "text": "Mi piace",
+                "text": "👍 Mi piace",
                 "callback_data": build_callback_data(
                     run_id, short_id, "L", job_hash
                 ),
             },
             {
-                "text": "Forse",
+                "text": "🤔 Forse",
                 "callback_data": build_callback_data(
                     run_id, short_id, "M", job_hash
                 ),
             },
             {
-                "text": "Non mi piace",
+                "text": "👎 Non mi piace",
                 "callback_data": build_callback_data(
                     run_id, short_id, "D", job_hash
                 ),
             },
             {
-                "text": "Non rilevante",
+                "text": "🚫 Non rilevante",
                 "callback_data": build_callback_data(
                     run_id, short_id, "X", job_hash
                 ),
@@ -1289,7 +1289,7 @@ def _build_message_payloads(
     if digest_count == 0:
         headline = "🔎 Oggi non ho trovato offerte davvero in linea."
         detail = (
-            "Ho controllato le fonti configurate, ma nessun annuncio è entrato nel digest finale."
+            "📚 Ho controllato le fonti configurate, ma nessun annuncio è entrato nel digest finale."
         )
         context_line = (
             f"Contesto: digest=0, run_mode={run_mode}, "
@@ -1300,7 +1300,7 @@ def _build_message_payloads(
                 f"🔎 Negli ultimi {selection_window_days} giorni non ho trovato offerte davvero in linea."
             )
             detail = (
-                "Ho controllato le fonti configurate sull'intera finestra richiesta, "
+                "📚 Ho controllato le fonti configurate sull'intera finestra richiesta, "
                 "ma nessun annuncio è entrato nel digest finale."
             )
             context_line = (
@@ -1311,14 +1311,14 @@ def _build_message_payloads(
         if reason_when_zero == "no_candidates_after_hard_filters":
             headline = "🧭 Oggi non ho trovato offerte che superano i filtri principali."
             detail = (
-                "Le offerte viste ci sono state, ma nessuna ha passato i vincoli più importanti."
+                "🧱 Le offerte viste ci sono state, ma nessuna ha passato i vincoli più importanti."
             )
             if run_mode == "manual" and selection_window_days > 1:
                 headline = (
                     f"🧭 Negli ultimi {selection_window_days} giorni non ho trovato offerte che superano i filtri principali."
                 )
                 detail = (
-                    "Le offerte viste ci sono state nella finestra richiesta, "
+                    "🧱 Le offerte viste ci sono state nella finestra richiesta, "
                     "ma nessuna ha passato i vincoli più importanti."
                 )
         return [{

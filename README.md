@@ -169,7 +169,7 @@ If `python` is not available in your shell, run the same commands with `python3`
 - CI tests and build workflows remain intentionally removed/disabled.
 - Daily digest uses a 24-hour window (UTC) based on `posted_at` timestamps.
 - Telegram notifications are always on and send exactly one message per run.
-- Inline feedback buttons are attached to each digest item (👍/👎/⭐/🧻).
+- Inline feedback buttons are attached to each digest item (`👍 Mi piace`, `🤔 Forse`, `👎 Non mi piace`, `🚫 Non rilevante`).
 - Snapshot updates tolerate missing/malformed entries; warnings are logged and the
   run continues without crashing.
 - If secrets are missing or invalid, the run completes with a warning and no notification.

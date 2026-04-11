@@ -457,10 +457,10 @@ maybeTest("telegram webhook handles /jobscout message in test mode and replies o
   );
   assert.ok(telegramSend);
   const body = JSON.parse(telegramSend.options.body);
-  assert.match(body.text, /Job Scout test trigger/);
-  assert.match(body.text, /remotive: ok/);
-  assert.match(body.text, /wwr: ok/);
-  assert.match(body.text, /arbeitnow: ok/);
+  assert.match(body.text, /🧪 Job Scout test trigger/);
+  assert.match(body.text, /✅ remotive: ok/);
+  assert.match(body.text, /✅ wwr: ok/);
+  assert.match(body.text, /✅ arbeitnow: ok/);
   assert.ok(findLogEvent(logs, "telegram_command_handled"));
 });
 
@@ -502,7 +502,7 @@ maybeTest("telegram webhook handles /jobscout message in github mode and dispatc
   assert.ok(telegramSend);
   const body = JSON.parse(telegramSend.options.body);
   assert.match(body.text, /🚀 Ho avviato una nuova ricerca\./);
-  assert.match(body.text, /Fonti: remotive, wwr/);
+  assert.match(body.text, /🗂 Fonti: remotive, wwr/);
 });
 
 maybeTest("logs route_not_found for unknown paths", async () => {

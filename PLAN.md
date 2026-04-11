@@ -288,3 +288,4 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Normalized callback parse failure reasons (`bad_format`, `bad_action`, `missing_fields`) and session-missing reasons (`session_expired`, `no_session_for_run_id`).
 - Kept request correlation deterministic with `X-Request-Id` and request-id text in error bodies.
 - Added/updated tests for reason distinction, request-id presence, and structured callback diagnostics logs.
+- 2026-04-11: hardened `e2e-telegram-real` automatic mode so it validates feedback retrieval after callback replay, and refreshed Telegram feedback/button UX with clearer emoji labels.

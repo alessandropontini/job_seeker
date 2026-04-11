@@ -46,7 +46,7 @@ Confronti operativi:
 ## Modalità callback
 
 - `manual` (default): click umano durante il timeout del workflow.
-- `automatic`: replay controllato di payload Telegram-like verso `/telegram/feedback`.
+- `automatic`: replay controllato di payload Telegram-like verso `/telegram/feedback`, seguito da `fetch_feedback(run_id)` per confermare persistenza + retrieval.
 
 ## Troubleshooting rapido
 

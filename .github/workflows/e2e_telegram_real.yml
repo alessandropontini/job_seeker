@@ -158,10 +158,29 @@ jobs:
             echo "Unexpected status ${status}"
             exit 1
           fi
-          if ! grep -q '{"ok":true}' out/feedback_response.txt; then
-            echo "Expected JSON body {\"ok\":true}"
-            exit 1
-          fi
+
+      - name: Fetch feedback after automatic callback replay
+        if: ${{ inputs.callback_mode == 'automatic' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from job_scout.feedback import fetch_feedback
+
+          last_run = json.loads(Path("out/last_run.json").read_text(encoding="utf-8"))
+          run_id = last_run.get("digest", {}).get("run_id")
+          if not run_id:
+              raise SystemExit("Missing run_id in out/last_run.json")
+          items, reason = fetch_feedback(run_id=run_id, config={"feedback": {"enabled": True}})
+          if reason:
+              raise SystemExit(f"Feedback fetch failed: {reason}")
+          if not items:
+              raise SystemExit("No feedback found after automatic callback replay")
+          Path("out/automatic_feedback_items.json").write_text(json.dumps(items, indent=2), encoding="utf-8")
+          print(f"feedback_items={len(items)}")
+          PY
 
       - name: Assert callback response semantics
         if: always()
