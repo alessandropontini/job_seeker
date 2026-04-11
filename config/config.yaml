@@ -8,6 +8,18 @@ sources:
   enabled:
     - dummy
   placeholders: []
+  greenhouse:
+    boards:
+      - datadog
+      - mongodb
+      - sumup
+      - doctolib
+      - elastic
+      - monzo
+      - contentful
+      - n26
+  lever:
+    companies: []
 
 regions_path: config/regions.json
 
@@ -28,26 +40,17 @@ role_targeting:
     - manager
     - lead
     - head
-    - data governance
-    - data quality
-    - metadata
-    - data management
-    - data steward
+    - director
+    - architect
+    - solution architect
+    - solutions architect
+    - data architect
+    - enterprise architect
+    - platform architect
+    - cloud architect
+    - technology owner
     - data owner
-    - data catalog
-    - master data
-    - mdm
-    - bcbs 239
-    - compliance
-    - gdpr
-    - privacy
-    - risk data
-    - data policy
-    - data controls
-    - lineage
-    - governance dati
-    - qualità dati
-    - catalogo dati
+    - data technology owner
 
 salary_rules:
   minimum_eur: 52000
@@ -80,12 +83,14 @@ channels:
       - master data
       - reference data
       - governance
-      - compliance
       - bcbs 239
       - collibra
       - informatica
       - alation
     secondary_keywords:
+      - compliance
+      - privacy
+      - gdpr
       - catalog
       - lineage
       - steward
@@ -109,6 +114,8 @@ personalization:
     - manager
     - lead
     - head
+    - director
+    - architect
   duplicate_action: skip
 
 scoring:
@@ -127,6 +134,7 @@ scoring:
     - data quality
     - data stewardship
     - metadata
+    - metadata management
     - data lineage
     - data catalog
     - data ownership
@@ -134,15 +142,32 @@ scoring:
     - master data
     - reference data
     - bcbs 239
+    - governance controls
+    - data standards
+    - data operating model
+    - data architecture
+    - solution architecture
+    - enterprise architecture
     - dama-dmbok
+    - axon
     - collibra
     - informatica
     - alation
+    - erwin
+    - edc
     - microsoft purview
   data_governance_secondary_keywords:
     - bigquery
     - gcp
     - cloud data platform
+    - dataflow
+    - dataproc
+    - databricks
+    - power bi
+    - tableau
+    - superset
+    - sql
+    - python
 
 notifications:
   telegram:

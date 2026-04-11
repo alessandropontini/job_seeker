@@ -294,6 +294,9 @@ def evaluate_hard_constraints(
         else:
             hard_reject_reasons.append("cv_domain_not_targeted")
 
+    if run_mode == "manual" and not role_matches and not domain_matches:
+        hard_reject_reasons.append("cv_alignment_missing")
+
     salary_min_eur = None
     salary_max_eur = None
     missing_salary = False

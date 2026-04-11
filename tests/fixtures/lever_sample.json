@@ -1,0 +1,25 @@
+{
+  "fixtureco": [
+    {
+      "id": "lever-001",
+      "text": "Data Platform Lead",
+      "hostedUrl": "https://jobs.lever.co/fixtureco/lever-001",
+      "createdAt": 1760000000000,
+      "country": "Germany",
+      "workplaceType": "remote",
+      "categories": {
+        "location": "Berlin, Germany",
+        "department": "Engineering",
+        "team": "Data Platform"
+      },
+      "salaryRange": {
+        "currency": "EUR",
+        "min": 70000,
+        "max": 90000
+      },
+      "descriptionPlain": "Lead the data platform and metadata strategy across analytics and governance workflows.",
+      "openingPlain": "Remote role across Germany and the EU.",
+      "additionalPlain": "Work closely with data governance stakeholders."
+    }
+  ]
+}

@@ -6,7 +6,7 @@ on:
       sources:
         description: "Source names (comma-separated)"
         required: false
-        default: remotive,wwr,arbeitnow
+        default: remotive,wwr,arbeitnow,greenhouse
       source:
         description: "Legacy single-source input"
         required: false

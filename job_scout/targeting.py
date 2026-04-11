@@ -10,6 +10,7 @@ CORE_KEYWORDS = [
     "data governance",
     "data quality",
     "metadata",
+    "metadata management",
     "data management",
     "data steward",
     "data owner",
@@ -19,20 +20,47 @@ CORE_KEYWORDS = [
     "mdm",
     "lineage",
     "data controls",
-    "compliance",
-    "gdpr",
-    "privacy",
     "risk data",
     "bcbs 239",
+    "reference data",
+    "business glossary",
+    "information governance",
+    "data office",
+    "data architecture",
+    "solution architecture",
+    "enterprise architecture",
+    "cloud governance",
+    "governance controls",
+    "data standards",
+    "data operating model",
+    "operating model",
+    "data strategy",
+    "regulatory data",
+    "collibra",
+    "axon",
+    "alation",
+    "informatica",
+    "purview",
+    "erwin",
+    "edc",
     "bigquery",
     "gcp",
     "google cloud",
+]
+
+SUPPORTING_DOMAIN_KEYWORDS = [
+    "compliance",
+    "gdpr",
+    "privacy",
 ]
 
 PLATFORM_KEYWORDS = [
     "gcp",
     "bigquery",
     "google cloud",
+    "dataflow",
+    "dataproc",
+    "databricks",
     "kafka",
     "etl",
     "elt",
@@ -42,16 +70,46 @@ PLATFORM_KEYWORDS = [
     "airflow",
     "dbt",
     "sql",
+    "python",
+    "r",
+    "superset",
+    "power bi",
+    "tableau",
+    "postgresql",
+    "mysql",
 ]
 
 ROLE_BONUS_KEYWORDS = [
     "data governance manager",
-    "data governance specialist",
+    "data governance lead",
+    "head of data governance",
     "data manager",
     "data platform",
     "data product",
     "data owner",
     "data lead",
+    "data architect",
+    "solution architect",
+    "solutions architect",
+    "enterprise architect",
+    "cloud architect",
+    "platform architect",
+    "data technology owner",
+    "technology owner",
+]
+
+MANAGERIAL_TITLE_KEYWORDS = [
+    "manager",
+    "lead",
+    "head",
+    "director",
+    "architect",
+    "solution architect",
+    "solutions architect",
+    "enterprise architect",
+    "data architect",
+    "cloud architect",
+    "platform architect",
 ]
 
 NEGATIVE_DOMAIN_KEYWORDS = [
@@ -69,13 +127,18 @@ NEGATIVE_SOFT_PENALTY_TITLES = [
     "trading",
     "hedge fund",
     "portfolio",
+    "junior",
+    "graduate",
+    "intern",
+    "trainee",
 ]
 
 
 def build_search_text(posting: JobPosting) -> str:
     """Return lowercased title+description text for keyword matching."""
 
-    return f"{posting.title}\n{posting.description_snippet}".lower()
+    tags = " ".join(posting.tags or [])
+    return f"{posting.title}\n{posting.description_snippet}\n{tags}".lower()
 
 
 def contains_phrase(text: str, keyword: str) -> bool:
@@ -147,6 +210,19 @@ def find_domain_keyword_matches(posting: JobPosting) -> list[str]:
 
     text = build_search_text(posting)
     return find_matches(text, CORE_KEYWORDS)
+
+
+def find_supporting_domain_keyword_matches(posting: JobPosting) -> list[str]:
+    """Return secondary domain matches that help ranking but do not open the gate."""
+
+    text = build_search_text(posting)
+    return find_matches(text, SUPPORTING_DOMAIN_KEYWORDS)
+
+
+def find_managerial_keyword_matches(title: str) -> list[str]:
+    """Return management-seniority keyword matches for a title."""
+
+    return find_matches(title.lower(), MANAGERIAL_TITLE_KEYWORDS)
 
 
 def has_negative_domain_penalty(posting: JobPosting) -> bool:

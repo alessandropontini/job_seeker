@@ -244,10 +244,8 @@ def test_manual_soft_penalty_for_location_and_title(base_config, region_data):
         strict=False,
         allow_missing_salary=True,
     )
-    assert result.decision == "accepted"
-    assert "location_not_allowed" in result.penalties
-    assert "title_not_targeted" in result.penalties
-    assert "cv_domain_not_targeted" in result.penalties
+    assert result.decision == "rejected"
+    assert "cv_alignment_missing" in result.hard_reject_reasons
     assert result.role_fit == "not_targeted"
     assert result.domain_fit == "not_targeted"
     assert result.location_fit == "not_targeted"
@@ -301,8 +299,46 @@ def test_accepts_head_title(base_config, region_data):
     assert result.matches_all is True
 
 
+def test_accepts_solution_architect_with_data_signal(base_config, region_data):
+    posting = _posting(
+        title="IT Solution Architect",
+        description_snippet=(
+            "Define data governance, metadata management, BigQuery and Dataflow "
+            "architecture across cloud platforms."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert result.role_fit == "targeted"
+    assert result.domain_fit == "targeted"
+
+
 def test_rejects_non_target_title(base_config, region_data):
     posting = _posting(title="Senior Engineer")
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "title_not_targeted" in result.hard_reject_reasons
+
+
+def test_rejects_generic_product_owner_without_data_architecture_signal(
+    base_config, region_data
+):
+    posting = _posting(
+        title="Product Owner",
+        description_snippet="Own the product backlog for customer growth tools.",
+    )
     _, result = match_posting(
         posting,
         base_config,
@@ -363,7 +399,9 @@ def test_accepts_pluralized_domain_phrase(base_config, region_data):
     assert "data platform" in result.domain_matches
 
 
-def test_accepts_data_governance_specialist_title(base_config, region_data):
+def test_rejects_data_governance_specialist_title_without_management_seniority(
+    base_config, region_data
+):
     posting = _posting(title="Data Governance Specialist")
     _, result = match_posting(
         posting,
@@ -372,7 +410,8 @@ def test_accepts_data_governance_specialist_title(base_config, region_data):
         strict=False,
         allow_missing_salary=True,
     )
-    assert "title_not_targeted" not in result.hard_reject_reasons
+    assert "title_not_targeted" in result.hard_reject_reasons
+    assert result.decision == "rejected"
 
 
 def test_parses_eur_salary_range(base_config, region_data):
@@ -588,3 +627,20 @@ def test_non_core_keyword_role_fails_channel_gate(base_config, region_data):
     assert result.decision == "rejected"
     assert "cv_domain_not_targeted" in result.hard_reject_reasons
     assert passes_core_gate(posting) is False
+
+
+def test_manual_rejects_postings_with_no_role_and_no_data_alignment(base_config, region_data):
+    base_config["runtime"]["run_mode"] = "manual"
+    posting = _posting(
+        title="Finance and Compliance Officer",
+        description_snippet="Compliance controls for finance processes.",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "cv_alignment_missing" in result.hard_reject_reasons

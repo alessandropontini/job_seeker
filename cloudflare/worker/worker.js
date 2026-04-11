@@ -1056,7 +1056,7 @@ export function parseTelegramCommand(text) {
     options[key] = value;
   }
   const mode = ["test", "github"].includes(options.mode) ? options.mode : "test";
-  const sourceValue = options.sources || options.source || "remotive,wwr,arbeitnow";
+  const sourceValue = options.sources || options.source || "remotive,wwr,arbeitnow,greenhouse";
   const sources = sourceValue
     .split(",")
     .map((item) => item.trim().toLowerCase())
@@ -1478,7 +1478,7 @@ async function runTelegramSearchTest(command) {
 
   lines.push("");
   lines.push(
-    "To dispatch GitHub later: /jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7"
+    "To dispatch GitHub later: /jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7"
   );
   return {
     ok: results.some((item) => item.ok),

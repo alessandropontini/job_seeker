@@ -1,0 +1,38 @@
+{
+  "datadog": {
+    "jobs": [
+      {
+        "id": 7194969,
+        "title": "Senior Data Governance Manager",
+        "company_name": "Datadog",
+        "absolute_url": "https://careers.datadoghq.com/detail/7194969/?gh_jid=7194969",
+        "first_published": "2026-04-02T10:34:20-04:00",
+        "updated_at": "2026-04-03T14:20:47-04:00",
+        "location": {
+          "name": "Paris, France"
+        },
+        "content": "<p>Lead data governance, metadata, lineage and data quality practices across the platform.</p>",
+        "departments": [
+          {
+            "name": "Engineering"
+          }
+        ],
+        "offices": [
+          {
+            "name": "Paris"
+          }
+        ],
+        "metadata": [
+          {
+            "name": "Area - Engineering",
+            "value": "Data Platform"
+          },
+          {
+            "name": "IC or MG",
+            "value": "MG"
+          }
+        ]
+      }
+    ]
+  }
+}

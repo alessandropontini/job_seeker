@@ -53,14 +53,18 @@ bash tools/install_dev_deps.sh
 Edit `config/config.yaml` to adjust defaults. Missing fields fall back to defaults in `job_scout/config.py`.
 
 Key sections:
-- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`, `arbeitnow`).
+- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`, `arbeitnow`, `greenhouse`, `lever`).
 - `arbeitnow` normalization now infers `Germany` for city-only locations when the posting description explicitly references Germany, reducing false `location_not_allowed` rejects for German jobs such as `Munich` or `Berlin`.
+- `sources.greenhouse.boards`: curated Greenhouse public board tokens. The default set is tuned for companies with meaningful EU/data hiring volume (`datadog`, `mongodb`, `sumup`, `doctolib`, `elastic`, `monzo`, `contentful`, `n26`).
+- `sources.lever.companies`: optional Lever company slugs. Lever support is integrated, but you should curate these explicitly because generic Lever boards often skew toward sales/commercial roles.
 - `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
 - `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
-- `role_targeting.include_titles`: manager/lead/head plus data governance and data management keyword families (including Italian variants) used for title targeting.
+- `role_targeting.include_titles`: management and architecture titles used for role targeting (`manager`, `lead`, `head`, `director`, `architect`, `solution architect`, `data architect`, `cloud architect`, `platform architect`, `technology owner`, `data owner`). Domain targeting is handled separately so generic `compliance` or `privacy` titles do not masquerade as senior data roles.
 - CV/domain gate: accepted jobs must also contain data-governance / metadata / compliance / privacy / lineage / platform signals in title or description; generic manager roles are no longer enough on their own.
 - Matching now tracks three explicit fit dimensions internally: `role_fit`, `domain_fit`, and `location_fit`. Reason codes such as `title_not_targeted` and `cv_domain_not_targeted` are still preserved for compatibility, but scoring explainability now reflects the underlying fit state instead of only reject labels.
+- Domain targeting is stricter and more data-centric: primary keywords now favor governance/metadata/lineage/reference-data/data-office/platform terms plus architecture signals (`data architecture`, `solution architecture`, `enterprise architecture`) and governance tooling such as `Collibra`, `Axon`, `Erwin`, `EDC`, `Purview`.
+- Technical stack signals from the CV are also ranked explicitly through platform keywords such as `GCP`, `BigQuery`, `Dataflow`, `Dataproc`, `Databricks`, `SQL`, `Python`, `Power BI`, `Tableau`, and `Superset`.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
 - `salary_rules.currency_rates`: approximate rates used for conversion (EUR=1.0, USD=0.92, GBP=1.17).
@@ -269,7 +273,7 @@ help you pinpoint the issue:
 - Candidate pool is built **after hard filters only** (for example: excluded country, invalid hard blocks). Soft gates like `title_not_targeted` do not zero the pool in P1.
 - Selection starts in **TOP** mode at `high_threshold` and keeps only jobs above that score.
 - If fewer than `min_results` jobs are available, thresholding automatically relaxes in `step` increments down to `low_threshold` (**ADAPTIVE** mode).
-- If results are still below `min_results`, the system sends the best available jobs by score (**LOW_CONFIDENCE (anti-zero)** mode).
+- If results are still below `min_results`, the system sends the best available jobs by score (**LOW_CONFIDENCE (anti-zero)** mode), preferring positive-score rows before falling back to score-0 rows.
 - The selected mode is shown in Telegram headers/messages (`Mode: TOP`, `Mode: ADAPTIVE`, `Mode: LOW_CONFIDENCE (anti-zero)`).
 - Runtime diagnostics are persisted in `out/run_summary.json` via `digest_mode`, `anti_zero_triggered`, `threshold_initial`, `threshold_final`, `min_results`, `selected_count`, and `reason_when_zero` (`no_candidates_after_hard_filters` or `fetched_count_zero`).
 - `out/run_summary.json` now separates pipeline and digest counters explicitly:
@@ -360,8 +364,8 @@ The Cloudflare Worker can also accept a Telegram message command on the webhook 
 
 Command syntax:
 ```text
-/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7
-/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7
+/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7
+/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7
 ```
 
 - `mode=test`: Cloudflare fetches the configured public sources and replies on Telegram with counts.

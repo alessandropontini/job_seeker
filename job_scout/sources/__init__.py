@@ -8,6 +8,16 @@ from typing import Callable
 from job_scout.normalize import SourceJob
 from job_scout.sources.arbeitnow import fetch_arbeitnow
 from job_scout.sources.dummy import fetch_dummy
+from job_scout.sources.greenhouse import (
+    GREENHOUSE_BOARD_API_TEMPLATE,
+    GREENHOUSE_DEFAULT_BOARDS,
+    fetch_greenhouse,
+)
+from job_scout.sources.lever import (
+    LEVER_DEFAULT_COMPANIES,
+    LEVER_POSTINGS_API_TEMPLATE,
+    fetch_lever,
+)
 from job_scout.sources.remotive import REMOTIVE_API_URL, fetch_remotive
 from job_scout.sources.wwr import WWR_RSS_URL, fetch_wwr
 
@@ -56,6 +66,32 @@ SOURCE_CATALOG = {
         transport="api",
         attribution="Arbeitnow free public Job Board API",
         fetcher=fetch_arbeitnow,
+    ),
+    "greenhouse": SourceCatalogEntry(
+        name="greenhouse",
+        site_url="https://www.greenhouse.io/",
+        access_url=GREENHOUSE_BOARD_API_TEMPLATE.format(board="{board_token}"),
+        transport="api",
+        attribution=(
+            "Greenhouse Job Board API over curated public company boards: "
+            + ", ".join(GREENHOUSE_DEFAULT_BOARDS)
+        ),
+        fetcher=fetch_greenhouse,
+    ),
+    "lever": SourceCatalogEntry(
+        name="lever",
+        site_url="https://www.lever.co/",
+        access_url=LEVER_POSTINGS_API_TEMPLATE.format(company="{company}"),
+        transport="api",
+        attribution=(
+            "Lever Postings API (public). "
+            + (
+                "Default companies: " + ", ".join(LEVER_DEFAULT_COMPANIES)
+                if LEVER_DEFAULT_COMPANIES
+                else "Requires configured company slugs or test fixtures."
+            )
+        ),
+        fetcher=fetch_lever,
     ),
 }
 

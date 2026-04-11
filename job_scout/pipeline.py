@@ -109,7 +109,7 @@ def run_pipeline(
             continue
         logger.info("Fetching from source: %s", name)
         try:
-            source_jobs = fetcher(since_days)
+            source_jobs = _fetch_source_jobs(fetcher, since_days, config)
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("Source %s failed: %s", name, exc)
             source_statuses.append(
@@ -238,3 +238,14 @@ def run_pipeline(
         strict_match_max_score=strict_match_max_score,
     )
     return all_rows, summary
+
+
+def _fetch_source_jobs(
+    fetcher,
+    since_days: int,
+    config: Mapping[str, object],
+):
+    try:
+        return fetcher(since_days, config)
+    except TypeError:
+        return fetcher(since_days)

@@ -97,6 +97,9 @@ def select_digest_items(
         candidates_scored,
         key=lambda row: (-(row.match.score or 0), row.posting.id),
     )
+    positive_scored_jobs = [
+        row for row in sorted_jobs if (row.match.score or 0) > 0
+    ]
     target_results = max(min_results, 1)
     floor_threshold = min(high_threshold, low_threshold)
     step_size = max(step, 1)
@@ -119,7 +122,8 @@ def select_digest_items(
     if len(selected) < target_results and fetched_count > 0:
         anti_zero_triggered = True
         mode = "LOW_CONFIDENCE"
-        selected = sorted_jobs[: min(target_results, len(sorted_jobs))]
+        fallback_pool = positive_scored_jobs or sorted_jobs
+        selected = fallback_pool[: min(target_results, len(fallback_pool))]
 
     if (
         fetched_count > 0
@@ -130,7 +134,8 @@ def select_digest_items(
     ):
         anti_zero_triggered = True
         mode = "LOW_CONFIDENCE"
-        selected = sorted_jobs[:1]
+        fallback_pool = positive_scored_jobs or sorted_jobs
+        selected = fallback_pool[:1]
 
     return selected, mode, anti_zero_triggered, threshold, len(selected)
 

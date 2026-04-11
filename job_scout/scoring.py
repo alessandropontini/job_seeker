@@ -9,9 +9,12 @@ from job_scout.matcher import MatchResult
 from job_scout.models import JobPosting
 from job_scout.targeting import (
     CORE_KEYWORDS,
+    SUPPORTING_DOMAIN_KEYWORDS,
+    MANAGERIAL_TITLE_KEYWORDS,
     PLATFORM_KEYWORDS,
     ROLE_BONUS_KEYWORDS,
     contains_phrase,
+    find_managerial_keyword_matches,
     has_negative_domain_penalty,
     has_negative_soft_penalty,
 )
@@ -55,8 +58,10 @@ def compute_score(
 
     title_core_matches = _find_keywords(title_text, CORE_KEYWORDS)
     description_core_matches = _find_keywords(description_text, CORE_KEYWORDS)
+    supporting_matches = _find_keywords(search_text, SUPPORTING_DOMAIN_KEYWORDS)
     platform_matches = _find_keywords(search_text, PLATFORM_KEYWORDS)
     role_matches = _find_keywords(title_text, ROLE_BONUS_KEYWORDS)
+    managerial_matches = find_managerial_keyword_matches(posting.title)
 
     score += min(40, len(title_core_matches) * 12)
     if title_core_matches:
@@ -68,6 +73,12 @@ def compute_score(
     if description_core_matches:
         applied_bonuses.append(
             _format_keyword_bonus("core_description", description_core_matches)
+        )
+
+    score += min(10, len(supporting_matches) * 3)
+    if supporting_matches:
+        applied_bonuses.append(
+            _format_keyword_bonus("supporting_domain", supporting_matches)
         )
 
     score += min(20, len(platform_matches) * 5)
@@ -82,13 +93,29 @@ def compute_score(
             _format_keyword_bonus("target_role", role_matches)
         )
 
+    if managerial_matches:
+        score += 15
+        applied_bonuses.append(
+            _format_keyword_bonus("seniority_title", managerial_matches)
+        )
+    else:
+        score -= 25
+        applied_penalties.append("non_managerial_title")
+
+    if managerial_matches and title_core_matches:
+        score += 15
+        applied_bonuses.append("seniority_data_title")
+
     if match.remote_level == "full-remote":
         score += 8
         applied_bonuses.append("remote_full")
 
     for penalty in match.penalties:
-        if penalty in {"location_not_allowed", "title_not_targeted"}:
+        if penalty == "location_not_allowed":
             score -= 12
+            applied_penalties.append(penalty)
+        elif penalty == "title_not_targeted":
+            score -= 20
             applied_penalties.append(penalty)
         elif penalty == "salary_below_minimum":
             score -= 15
@@ -98,6 +125,9 @@ def compute_score(
             applied_penalties.append(penalty)
         elif penalty == "negative_domain":
             score -= 40
+            applied_penalties.append(penalty)
+        elif penalty == "cv_domain_not_targeted":
+            score -= 25
             applied_penalties.append(penalty)
 
     if has_negative_domain_penalty(posting):
@@ -114,7 +144,8 @@ def compute_score(
 
 
 def _build_search_text(posting: JobPosting) -> str:
-    return f"{posting.title}\n{posting.description_snippet}".lower()
+    tags = " ".join(posting.tags or [])
+    return f"{posting.title}\n{posting.description_snippet}\n{tags}".lower()
 
 
 def _find_keywords(text: str, keywords: object) -> list[str]:

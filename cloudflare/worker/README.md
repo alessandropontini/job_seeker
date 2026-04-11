@@ -14,8 +14,8 @@ Requires `X-Telegram-Bot-Api-Secret-Token`.
 
 The same webhook also accepts Telegram `message` updates containing bot commands.
 Supported command today:
-- `/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7`
-- `/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7`
+- `/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
+- `/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
 
 `mode=test` performs an in-Worker source probe and replies on Telegram with source counts.
 `mode=github` dispatches the configured GitHub Actions workflow and replies with an acknowledgement.

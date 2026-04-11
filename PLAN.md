@@ -267,6 +267,10 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - upgraded GitHub Actions workflow dependencies from `actions/checkout@v4` / `actions/setup-node@v4` to `v5` to remove the Node 20 deprecation warning from worker deploys and related workflows
   - fixed an `arbeitnow` normalization gap where city-only German locations (for example `Munich`) were missing `location_country`, causing false `location_not_allowed` rejects on otherwise relevant EU jobs
   - aligned manual digest selection with `since_days`, so Telegram-triggered manual runs now select over the requested time range instead of always collapsing back to a 24h digest window
+  - expanded source coverage with Greenhouse public company boards and a Lever connector, and switched Telegram/GitHub default source lists to include Greenhouse for higher recall on real data-platform/data-governance employers
+  - tightened role/domain targeting so management seniority is no longer inferred from generic domain words like `compliance`, and rebalanced scoring toward managerial data titles over non-managerial compliance-only roles
+  - refined anti-zero selection so low-confidence digests prefer positive-score jobs and only fall back to score-0 rows when nothing else survives
+  - extended the target profile toward technical architecture roles (`IT Solution Architect`, `Data Architect`, `Platform Architect`, `Cloud Architect`) and added explicit boosts for CV-aligned stack/tooling signals (`GCP`, `BigQuery`, `Dataflow`, `Dataproc`, `Databricks`, `Axon`, `Erwin`, `EDC`, `Power BI`, `Tableau`, `Superset`)
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done

@@ -22,9 +22,9 @@ No postings found.
   - Remote level: hybrid
   - Tags: health-tech
   - Penalties: prefer_full_remote
-  - Score: 1
+  - Score: 16
   - Why: fit role_targeted; fit domain_targeted; fit location_allowed_city
-  - Score adjustments: +core_description: data platform; -prefer_full_remote
+  - Score adjustments: +core_description: data platform, +seniority_title: manager; -prefer_full_remote
   - Link: https://example.com/jobs/atlas-health-eng-manager
   - Note: Lead a team delivering patient data platforms.
 
@@ -36,9 +36,9 @@ No postings found.
   - Remote level: full-remote
   - Tags: analytics, missing_salary
   - Penalties: missing_salary
-  - Score: 15
+  - Score: 30
   - Why: fit role_targeted; fit domain_targeted; fit location_allowed_eu_country
-  - Score adjustments: +core_description: data platform, +remote_full
+  - Score adjustments: +core_description: data platform, +seniority_title: lead, +remote_full
   - Link: https://example.com/jobs/polar-analytics-data-lead
   - Note: Guide the data platform team for EU clients.
 

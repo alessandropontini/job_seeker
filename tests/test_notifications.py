@@ -156,6 +156,31 @@ def test_select_digest_items_low_confidence_with_few_rows():
     assert anti_zero_triggered is True
 
 
+def test_low_confidence_prefers_positive_scores_over_zeroes():
+    scored_jobs = [
+        _make_row("alpha", 18, []),
+        _make_row("beta", 7, []),
+        _make_row("gamma", 0, ["missing_salary"]),
+    ]
+
+    selected, mode, anti_zero_triggered, _final_threshold, _selected_count = (
+        notifications.select_digest_items(
+            scored_jobs,
+            fetched_count=3,
+            min_results=5,
+            high_threshold=70,
+            low_threshold=40,
+            step=5,
+            force_send=True,
+            run_mode="manual",
+        )
+    )
+
+    assert [row.posting.id for row in selected] == ["alpha", "beta"]
+    assert mode == "LOW_CONFIDENCE"
+    assert anti_zero_triggered is True
+
+
 
 
 def test_select_digest_items_top_mode_when_threshold_met():

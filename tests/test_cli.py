@@ -256,6 +256,8 @@ def test_cli_sources_list_details(capsys):
     assert "remotive: site=https://remotive.com/remote-jobs" in output
     assert "wwr: site=https://weworkremotely.com/remote-jobs" in output
     assert "arbeitnow: site=https://www.arbeitnow.com/jobs" in output
+    assert "greenhouse: site=https://www.greenhouse.io/" in output
+    assert "lever: site=https://www.lever.co/" in output
 
 
 def test_cli_sources_test_includes_site(capsys, monkeypatch):

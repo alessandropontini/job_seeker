@@ -29,6 +29,14 @@ implemented:
       type: api
       endpoint: "https://www.arbeitnow.com/api/job-board-api"
       attribution: "Arbeitnow free public Job Board API"
+    - name: greenhouse
+      type: api
+      endpoint: "https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true"
+      attribution: "Greenhouse Job Board API across curated public company boards"
+    - name: lever
+      type: api
+      endpoint: "https://api.lever.co/v0/postings/{company}?mode=json"
+      attribution: "Lever public Postings API"
 
   normalized_schema:
     - id
@@ -46,4 +54,6 @@ implemented:
 tests:
   - parse_wwr_rss_fixture
   - parse_arbeitnow_payload_fixture
+  - parse_greenhouse_payload_fixture
+  - parse_lever_payload_fixture
   - run_summary_source_counts

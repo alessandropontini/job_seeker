@@ -66,8 +66,8 @@ Additional route:
 - `POST /run_daily` (manual protected trigger; same live logic as cron)
 
 Telegram command trigger on the same webhook:
-- `/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7`
-- `/jobscout mode=github sources=remotive,wwr,arbeitnow since_days=7`
+- `/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
+- `/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
 
 Recommended rollout:
 1. Test loop first: Telegram -> Cloudflare -> source probe test -> Cloudflare -> Telegram
