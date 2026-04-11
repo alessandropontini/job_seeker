@@ -64,8 +64,7 @@ jobs:
             --workflow live-daily-telegram \
             --limit 20 \
             --json databaseId,status,conclusion \
-            --jq ".[] | select((.databaseId | tostring) != \"${current_run_id}\") | select(.status == \"completed\" and .conclusion == \"success\") | .databaseId" \
-            | head -n 1)"
+            --jq "map(select((.databaseId | tostring) != \"${current_run_id}\") | select(.status == \"completed\" and .conclusion == \"success\"))[0].databaseId // \"\"")"
           if [[ -z "${previous_run_id}" ]]; then
             echo "No previous successful live run found."
             exit 0
