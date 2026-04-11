@@ -4,6 +4,7 @@ from job_scout import feedback
 from job_scout.feedback import (
     apply_feedback_items,
     build_callback_data,
+    build_run_id,
     build_short_id,
     is_window_open,
     parse_callback_data,
@@ -28,10 +29,29 @@ def _empty_profile() -> PreferenceProfile:
 
 
 def test_callback_data_length_under_limit():
-    run_id = "26020508a1b2"
+    run_id = "26020508153045123a1b2"
     short_id = "dg01f3c9abcd"
     payload = build_callback_data(run_id, short_id, "L", "a1b2c3d4")
     assert len(payload.encode("utf-8")) <= 64
+
+
+def test_build_run_id_is_precise_and_stable():
+    now = datetime(2026, 4, 11, 8, 15, 30, 123000, tzinfo=timezone.utc)
+    run_id = build_run_id(now, "a1b2c3d4e5f6")
+    assert run_id == "260411081530123a1b2"
+    assert len(run_id) == 19
+
+
+def test_build_run_id_changes_with_milliseconds():
+    first = build_run_id(
+        datetime(2026, 4, 11, 8, 15, 30, 123000, tzinfo=timezone.utc),
+        "a1b2c3d4e5f6",
+    )
+    second = build_run_id(
+        datetime(2026, 4, 11, 8, 15, 30, 124000, tzinfo=timezone.utc),
+        "a1b2c3d4e5f6",
+    )
+    assert first != second
 
 
 def test_short_id_is_stable_and_unique():

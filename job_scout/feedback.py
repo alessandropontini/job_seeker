@@ -60,9 +60,10 @@ class FeedbackRegistrationResult:
 def build_run_id(now: datetime, digest_hash: str) -> str:
     """Build a short run id that fits Telegram callback payloads."""
 
-    timestamp = now.strftime("%y%m%d%H")
+    timestamp = now.strftime("%y%m%d%H%M%S")
+    millis = f"{now.microsecond // 1000:03d}"
     digest_stub = digest_hash[:4]
-    return f"{timestamp}{digest_stub}"
+    return f"{timestamp}{millis}{digest_stub}"
 
 
 def build_short_id(job_key: str, used: set[str]) -> str:

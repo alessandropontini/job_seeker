@@ -308,8 +308,9 @@ The pipeline writes reports to `out/`:
   - `digest.top_matches` / `digest.data_only_best_picks`: channel-specific lists.
   - `digest.scope`: `daily_window` (default) or `fallback_recent` when no jobs fall
     inside the 24h window.
-  - `digest.run_id` and `digest.feedback_open_at` / `digest.feedback_close_at` for
-    time-gated feedback collection.
+- `digest.run_id` and `digest.feedback_open_at` / `digest.feedback_close_at` for
+  time-gated feedback collection.
+- `digest.run_id` is now built with second+millisecond precision plus digest stub to avoid collisions between nearby manual runs.
   - `digest.jobs[].short_id` for compact feedback button identifiers.
   - Top-level aliases: `counts` (run summary) and `digest_hash`.
 - `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
