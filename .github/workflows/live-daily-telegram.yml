@@ -52,6 +52,37 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Restore previous live state from latest successful artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          current_run_id="${{ github.run_id }}"
+          previous_run_id="$(gh run list \
+            --workflow live-daily-telegram \
+            --limit 20 \
+            --json databaseId,status,conclusion \
+            --jq ".[] | select((.databaseId | tostring) != \"${current_run_id}\") | select(.status == \"completed\" and .conclusion == \"success\") | .databaseId" \
+            | head -n 1)"
+          if [[ -z "${previous_run_id}" ]]; then
+            echo "No previous successful live run found."
+            exit 0
+          fi
+          tmp_dir="$(mktemp -d)"
+          if ! gh run download "${previous_run_id}" -n live-daily-telegram -D "${tmp_dir}" >/dev/null 2>&1; then
+            echo "Unable to download previous live artifact from run ${previous_run_id}."
+            exit 0
+          fi
+          artifact_dir="${tmp_dir}/live-daily-telegram"
+          for name in last_run_live.json preferences_live.json feedback_summary_live.json last_notified_live.json; do
+            if [[ -f "${artifact_dir}/${name}" ]]; then
+              cp "${artifact_dir}/${name}" "out/${name}"
+              echo "Restored ${name} from run ${previous_run_id}."
+            fi
+          done
+
       - name: Time gate (Europe/Rome 08:00 ±10m) for schedule
         id: time_gate
         if: ${{ github.event_name == 'schedule' }}
@@ -233,3 +264,4 @@ jobs:
             out/telegram_send_response.json
             out/telegram_chat_check.json
             out/feedback_registration_result.log
+            out/feedback_summary_live.json
