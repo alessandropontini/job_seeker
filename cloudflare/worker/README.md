@@ -14,14 +14,14 @@ Requires `X-Telegram-Bot-Api-Secret-Token`.
 
 The same webhook also accepts Telegram `message` updates containing bot commands.
 Supported command today:
-- `/jobscout` -> guided flow: ask profession, then ask search area, then ask day range via inline keyboard, then dispatch GitHub
+- `/jobscout` -> guided flow: ask one or more professions, then ask search area, then ask day range via inline keyboard, then dispatch GitHub
 - `/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
 - `/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
 - `/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=30 profession=IT_Solution_Architect location_scope=world`
 
 `mode=test` performs an in-Worker source probe and replies on Telegram with source counts.
 `mode=github` dispatches the configured GitHub Actions workflow and replies with an acknowledgement.
-The guided `/jobscout` flow stores a short-lived command session in KV keyed by chat/user, so free-text profession input, location-scope selection, and the follow-up day-range callback can be stitched together safely.
+The guided `/jobscout` flow stores a short-lived command session in KV keyed by chat/user, so free-text profession input, location-scope selection, and the follow-up day-range callback can be stitched together safely. Profession input can contain multiple roles separated by commas; the runtime matcher treats them as OR conditions.
 
 Callback data contract:
 - `fb|<run_id>|<action>|<job_short_id>` (v1, backward compatible)

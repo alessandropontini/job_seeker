@@ -73,7 +73,7 @@ Telegram command trigger on the same webhook:
 
 Interactive operator flow:
 1. Send `/jobscout`
-2. Reply with the profession/focus text
+2. Reply with the profession/focus text (`Data Architect, IT Solution Architect` is valid)
 3. Tap the search area (`Italia`, `Europa`, `USA`, `Mondo`)
 4. Tap the day-range button
 5. The worker dispatches GitHub with `profession` + `location_scope` + `since_days`

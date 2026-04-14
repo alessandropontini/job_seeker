@@ -395,6 +395,32 @@ def test_profession_query_accepts_matching_architect_role(base_config, region_da
     assert "profession_not_targeted" not in result.hard_reject_reasons
 
 
+def test_profession_query_accepts_when_one_of_multiple_roles_matches(
+    base_config, region_data
+):
+    base_config["runtime"][
+        "profession_query"
+    ] = "Data Governance Manager, IT Solution Architect"
+    posting = _posting(
+        title="Workday Solutions Architect",
+        location_text="Paris, France",
+        location_country="France",
+        description_snippet=(
+            "Own enterprise systems, application architecture and Workday "
+            "integrations across corporate IT."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "profession_not_targeted" not in result.hard_reject_reasons
+
+
 def test_location_rules_allow_anywhere_when_scope_is_world(base_config, region_data):
     base_config["location_rules"]["include_regions"] = []
     base_config["location_rules"]["include_countries"] = []

@@ -379,12 +379,12 @@ Simplest interactive flow:
 ```
 
 The bot now opens a guided menu:
-1. asks for the profession/focus to search (for example `Data Governance Manager` or `IT Solution Architect`)
+1. asks for the profession/focus to search (you can send one or more roles separated by commas, for example `Data Governance Manager, Data Architect`)
 2. asks where to search (`Italia`, `Europa`, `USA`, `Mondo`)
 3. shows day-range buttons (`7`, `14`, `30`, `60`)
 4. dispatches the GitHub workflow with that runtime profession focus and location scope
 
-That runtime profession is not just cosmetic: it is passed through the workflow/CLI into the matcher and scoring, so the manual digest is filtered and ranked against the requested profession instead of using only the static repo profile. The location choice is also real: it overrides the runtime location rules for that search without changing `config/config.yaml`.
+That runtime profession is not just cosmetic: it is passed through the workflow/CLI into the matcher and scoring, so the manual digest is filtered and ranked against the requested profession list instead of using only the static repo profile. Multiple professions are evaluated in OR, so `Data Architect, IT Solution Architect, Data Governance Manager` widens the search instead of forcing a single exact role. The location choice is also real: it overrides the runtime location rules for that search without changing `config/config.yaml`.
 
 Command syntax:
 ```text
@@ -396,7 +396,7 @@ Command syntax:
 - `mode=test`: Cloudflare fetches the configured public sources and replies on Telegram with counts.
 - `mode=github`: Cloudflare dispatches the configured workflow and replies with an acknowledgement.
 - `sources`: comma-separated list. `linkedin` is accepted only as a manual-only placeholder and is not crawled.
-- `profession`: optional explicit runtime focus for power-users using the full command syntax. Example: `/jobscout mode=github since_days=30 profession=IT_Solution_Architect`
+- `profession`: optional explicit runtime focus for power-users using the full command syntax. You can pass multiple roles separated by commas. Example: `/jobscout mode=github since_days=30 profession=Data_Architect,IT_Solution_Architect`
 - `location_scope`: optional runtime geography override for power-users using the full command syntax. Allowed values: `italy`, `europe`, `usa`, `world`.
 
 ## Telegram notifications (Phase 6 live)

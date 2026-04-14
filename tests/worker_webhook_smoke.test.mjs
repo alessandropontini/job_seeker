@@ -498,7 +498,7 @@ maybeTest("telegram webhook opens interactive profession prompt for bare /jobsco
     String(call.url).includes("/sendMessage")
   );
   const body = JSON.parse(telegramSend.options.body);
-  assert.match(body.text, /Dimmi che professione vuoi cercare/);
+  assert.match(body.text, /uno o più mestieri separati da virgola/);
   assert.equal(body.reply_markup.inline_keyboard[0][0].text, "❌ Annulla");
 });
 
@@ -523,19 +523,19 @@ maybeTest("telegram webhook stores profession reply and shows location menu", as
   const response = await worker.fetch(
     buildMessageRequest({
       secretHeader: "topsecret",
-      text: "IT Solution Architect",
+      text: "IT Solution Architect, Data Architect",
     }),
     env
   );
   assert.equal(response.status, 200);
   const session = await kv.get("command:123456:42", "json");
   assert.equal(session.state, "awaiting_scope");
-  assert.equal(session.profession, "IT Solution Architect");
+  assert.equal(session.profession, "IT Solution Architect, Data Architect");
   const telegramSend = fetchMock.calls.find((call) =>
     String(call.url).includes("/sendMessage")
   );
   const body = JSON.parse(telegramSend.options.body);
-  assert.match(body.text, /Professione: IT Solution Architect/);
+  assert.match(body.text, /Professione: IT Solution Architect, Data Architect/);
   assert.equal(body.reply_markup.inline_keyboard[0][0].text, "🇮🇹 Italia");
   assert.equal(body.reply_markup.inline_keyboard[2][0].text, "❌ Annulla");
 });

@@ -1714,7 +1714,21 @@ function buildLocationKeyboard() {
 }
 
 function normalizeProfessionInput(text) {
-  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const rawParts = String(text || "")
+    .split(/[,;|\n]+/)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const ordered = [];
+  const seen = new Set();
+  for (const part of rawParts) {
+    const lowered = part.toLowerCase();
+    if (seen.has(lowered)) {
+      continue;
+    }
+    ordered.push(part);
+    seen.add(lowered);
+  }
+  return ordered.join(", ").slice(0, 120);
 }
 
 function formatLocationScopeLabel(scope) {
@@ -1759,10 +1773,10 @@ async function startInteractiveJobScoutCommand({
     chatId,
     text: [
       "🧭 Dimmi che professione vuoi cercare.",
-      "💼 Scrivimi un titolo o un focus, per esempio:",
-      "• Data Governance Manager",
-      "• IT Solution Architect",
-      "• Data Architect",
+      "💼 Puoi scrivere uno o più mestieri separati da virgola, per esempio:",
+      "• Data Governance Manager, Data Architect",
+      "• IT Solution Architect, Enterprise Architect",
+      "• Data Architect, Solution Architect",
     ].join("\n"),
     replyToMessageId: messageId,
     messageThreadId,

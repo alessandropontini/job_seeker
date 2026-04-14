@@ -345,15 +345,37 @@ def normalize_profession_query(query: str | None) -> str:
     return re.sub(r"\s+", " ", str(query or "").strip().lower())
 
 
-def extract_profession_query_tokens(query: str | None) -> list[str]:
-    """Return profession query tokens without trivial stopwords."""
+def split_profession_queries(query: str | None) -> list[str]:
+    """Return normalized profession-focus entries split by comma/semicolon/pipe."""
 
     normalized = normalize_profession_query(query)
     if not normalized:
         return []
+    parts = [
+        re.sub(r"\s+", " ", part).strip()
+        for part in re.split(r"[,;|\n]+", normalized)
+    ]
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if not part or part in seen:
+            continue
+        ordered.append(part)
+        seen.add(part)
+    return ordered
+
+
+def extract_profession_query_tokens(query: str | None) -> list[str]:
+    """Return profession query tokens without trivial stopwords."""
+
+    phrases = split_profession_queries(query)
+    if not phrases:
+        normalized = normalize_profession_query(query)
+        phrases = [normalized] if normalized else []
     tokens = [
         token
-        for token in re.split(r"[^a-z0-9+#]+", normalized)
+        for phrase in phrases
+        for token in re.split(r"[^a-z0-9+#]+", phrase)
         if len(token) >= 3 and token not in PROFESSION_QUERY_STOPWORDS
     ]
     ordered: list[str] = []
@@ -370,23 +392,24 @@ def find_profession_query_matches(
 ) -> list[str]:
     """Return exact phrase or token matches for a runtime profession query."""
 
-    normalized = normalize_profession_query(query)
-    if not normalized:
+    phrases = split_profession_queries(query)
+    if not phrases:
         return []
 
     title_text = posting.title.lower()
     search_text = build_search_text(posting)
     matches: list[str] = []
-    if contains_phrase(title_text, normalized):
-        matches.append(f"title:{normalized}")
-    elif contains_phrase(search_text, normalized):
-        matches.append(normalized)
+    for phrase in phrases:
+        if contains_phrase(title_text, phrase):
+            matches.append(f"title:{phrase}")
+        elif contains_phrase(search_text, phrase):
+            matches.append(phrase)
 
-    for token in extract_profession_query_tokens(normalized):
-        if contains_phrase(title_text, token):
-            matches.append(f"title:{token}")
-        elif contains_phrase(search_text, token):
-            matches.append(token)
+        for token in extract_profession_query_tokens(phrase):
+            if contains_phrase(title_text, token):
+                matches.append(f"title:{token}")
+            elif contains_phrase(search_text, token):
+                matches.append(token)
 
     ordered: list[str] = []
     seen: set[str] = set()
@@ -399,6 +422,16 @@ def find_profession_query_matches(
 
 def matches_profession_query(posting: JobPosting, query: str | None) -> bool:
     """Return True when a posting aligns with the runtime profession focus."""
+
+    phrases = split_profession_queries(query)
+    if not phrases:
+        return True
+
+    return any(_matches_single_profession_query(posting, phrase) for phrase in phrases)
+
+
+def _matches_single_profession_query(posting: JobPosting, query: str) -> bool:
+    """Return True when a posting aligns with one normalized profession phrase."""
 
     normalized = normalize_profession_query(query)
     if not normalized:

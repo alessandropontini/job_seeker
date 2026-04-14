@@ -263,3 +263,31 @@ def test_profession_query_adds_scoring_bonus():
     assert any(
         bonus.startswith("profession_query:") for bonus in scored.score_bonuses
     )
+
+
+def test_multi_profession_query_adds_scoring_bonus_from_matching_role():
+    config = deepcopy(DEFAULT_CONFIG)
+    config["runtime"][
+        "profession_query"
+    ] = "Data Governance Manager, IT Solution Architect"
+    posting = _posting(
+        title="Workday Solutions Architect",
+        description_snippet=(
+            "Own enterprise applications, business systems architecture, "
+            "information systems and Workday integrations."
+        ),
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert scored.score is not None
+    assert any(
+        bonus.startswith("profession_query:") for bonus in scored.score_bonuses
+    )
