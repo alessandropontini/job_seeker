@@ -330,6 +330,11 @@ def main(argv: List[str] | None = None) -> int:
                             for key, value in result.counts.items()
                         ),
                     )
+            else:
+                feedback_fetch_reason = "missing_previous_run_id"
+                logging.getLogger(__name__).info(
+                    "Feedback fetch skipped: missing_previous_run_id."
+                )
             save_profile(preference_path, preference_profile)
         salary_rules = config.get("salary_rules", {})
         allow_missing_salary = salary_rules.get("allow_missing_salary")
@@ -453,6 +458,8 @@ def main(argv: List[str] | None = None) -> int:
                 "items_count": feedback_items_count,
                 "reason": feedback_fetch_reason,
             },
+            "fetch_feedback_count": feedback_items_count,
+            "fetch_feedback_reason": feedback_fetch_reason,
             "feedback_smoke_check": feedback_smoke,
         }
         if notification.selected_count == 0 and notification.reason_when_zero:

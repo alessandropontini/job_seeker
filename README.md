@@ -316,6 +316,7 @@ The pipeline writes reports to `out/`:
 - `out/last_notified.json` stores the last daily digest hash for anti-dup notifications.
 - `out/preferences.json` stores the preference profile and last feedback cache.
 - In GitHub live runs, the workflow restores the latest successful `last_run_live.json` and `preferences_live.json` artifact before executing, so feedback can be applied across separate Actions runs.
+- `run_summary.json` also exposes `fetch_feedback_count` and `fetch_feedback_reason` at top level for easier live debugging, in addition to the nested `fetch_feedback` object.
 - When `state.suffix` (or `--state-suffix`) is used, these state files are suffixed
   (for example `out/last_run_dummy_e2e.json`).
 - `out/telegram_payload.json` stores the dry-run Telegram payload when

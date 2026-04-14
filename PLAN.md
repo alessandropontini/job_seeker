@@ -291,3 +291,4 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - 2026-04-11: hardened `e2e-telegram-real` automatic mode so it validates feedback retrieval after callback replay, and refreshed Telegram feedback/button UX with clearer emoji labels.
 - 2026-04-11: hardened `run_id` generation for feedback sessions using second+millisecond precision plus digest stub, preventing cross-run feedback collisions during closely spaced manual triggers.
 - 2026-04-11: fixed live feedback carry-over in GitHub Actions by restoring previous `last_run_live.json` and `preferences_live.json` artifacts before each `live-daily-telegram` run, allowing clicked Telegram feedback to be applied in the next run.
+- 2026-04-14: hardened live feedback observability by restoring artifacts from both GitHub CLI extraction layouts and exposing `fetch_feedback_count` / `fetch_feedback_reason` directly in `run_summary.json`.

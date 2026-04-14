@@ -69,12 +69,16 @@ jobs:
             echo "No previous successful live run found."
             exit 0
           fi
+          echo "Using previous successful live run ${previous_run_id}."
           tmp_dir="$(mktemp -d)"
           if ! gh run download "${previous_run_id}" -n live-daily-telegram -D "${tmp_dir}" >/dev/null 2>&1; then
             echo "Unable to download previous live artifact from run ${previous_run_id}."
             exit 0
           fi
           artifact_dir="${tmp_dir}/live-daily-telegram"
+          if [[ ! -d "${artifact_dir}" ]]; then
+            artifact_dir="${tmp_dir}"
+          fi
           for name in last_run_live.json preferences_live.json feedback_summary_live.json last_notified_live.json; do
             if [[ -f "${artifact_dir}/${name}" ]]; then
               cp "${artifact_dir}/${name}" "out/${name}"
