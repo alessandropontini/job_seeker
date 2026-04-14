@@ -267,6 +267,7 @@ def main(argv: List[str] | None = None) -> int:
         feedback_fetch_reason = "not_requested"
         feedback_items_count = 0
         feedback_endpoint = "/feedback"
+        applied_feedback_counts = None
         preference_profile = None
         preference_path = None
         personalization = config.get("personalization", {})
@@ -316,6 +317,7 @@ def main(argv: List[str] | None = None) -> int:
                         job_lookup,
                         config,
                     )
+                    applied_feedback_counts = dict(result.counts)
                     preference_profile = result.updated_profile
                     write_feedback_summary(
                         args.output_dir, config, result.counts
@@ -363,6 +365,10 @@ def main(argv: List[str] | None = None) -> int:
             fetched_count=summary.fetched_count,
             selection_window_days=args.since_days if run_mode == "manual" else 1,
         )
+        if applied_feedback_counts:
+            record_feedback_in_last_run(
+                args.output_dir, config, applied_feedback_counts
+            )
         feedback_smoke = {"ok": False, "reason": "not_enabled"}
         if args.feedback_smoke_check or run_mode == "manual":
             feedback_smoke = _run_feedback_smoke_check(args.output_dir)
@@ -460,6 +466,7 @@ def main(argv: List[str] | None = None) -> int:
             },
             "fetch_feedback_count": feedback_items_count,
             "fetch_feedback_reason": feedback_fetch_reason,
+            "applied_feedback_counts": applied_feedback_counts,
             "feedback_smoke_check": feedback_smoke,
         }
         if notification.selected_count == 0 and notification.reason_when_zero:
