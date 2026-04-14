@@ -160,3 +160,106 @@ def test_solution_architect_with_data_stack_scores_as_technical_target():
     assert any(bonus.startswith("seniority_title:") for bonus in scored.score_bonuses)
     assert any(bonus.startswith("platform:") for bonus in scored.score_bonuses)
     assert scored.score >= 50
+
+
+def test_enterprise_architecture_signal_scores_architect_roles():
+    config = deepcopy(DEFAULT_CONFIG)
+    posting = _posting(
+        title="Workday Solutions Architect",
+        description_snippet=(
+            "Own enterprise applications, business systems architecture, "
+            "information systems and Workday integrations."
+        ),
+        tags=["corporate it", "enterprise applications"],
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert scored.score is not None
+    assert any(
+        bonus.startswith("architecture_domain:") for bonus in scored.score_bonuses
+    )
+    assert scored.score >= 35
+
+
+def test_client_facing_architect_roles_do_not_score():
+    config = deepcopy(DEFAULT_CONFIG)
+    posting = _posting(
+        title="Services Architect 3 - New York",
+        location_text="New York, NY",
+        location_country="US",
+        description_snippet=(
+            "Implementation Services team helping customers deploy the platform "
+            "in customer-facing engagements."
+        ),
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert "client_facing_architect" in match.hard_reject_reasons
+    assert scored.score is None
+
+
+def test_product_solutions_architect_roles_do_not_score():
+    config = deepcopy(DEFAULT_CONFIG)
+    posting = _posting(
+        title="Product Solutions Architect - Product Analytics and Experimentation",
+        location_text="New York, NY",
+        location_country="US",
+        description_snippet=(
+            "The Product Solutions Architecture team partners with Field teams on "
+            "complex customer use cases across pre- and post-sales engagements."
+        ),
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert "client_facing_architect" in match.hard_reject_reasons
+    assert scored.score is None
+
+
+def test_profession_query_adds_scoring_bonus():
+    config = deepcopy(DEFAULT_CONFIG)
+    config["runtime"]["profession_query"] = "IT Solution Architect"
+    posting = _posting(
+        title="Workday Solutions Architect",
+        description_snippet=(
+            "Own enterprise applications, business systems architecture, "
+            "information systems and Workday integrations."
+        ),
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert scored.score is not None
+    assert any(
+        bonus.startswith("profession_query:") for bonus in scored.score_bonuses
+    )

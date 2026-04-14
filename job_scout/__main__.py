@@ -113,6 +113,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate feedback button callback_data payloads in telegram_payload.json.",
     )
+    run_parser.add_argument(
+        "--profession",
+        help="Runtime profession focus used to filter and rank the digest.",
+    )
 
     sources_parser = subparsers.add_parser(
         "sources", help="Inspect available sources"
@@ -263,6 +267,14 @@ def main(argv: List[str] | None = None) -> int:
         if state_config:
             config["state"] = state_config
         run_mode = _resolve_run_mode(args, config)
+        runtime_config = config.get("runtime")
+        if not isinstance(runtime_config, dict):
+            runtime_config = {}
+        profession_query = (
+            args.profession or os.getenv("JOB_SCOUT_PROFESSION_QUERY", "")
+        ).strip()
+        runtime_config["profession_query"] = profession_query or None
+        config["runtime"] = runtime_config
         force_send = bool(args.force_send or run_mode == "manual")
         feedback_fetch_reason = "not_requested"
         feedback_items_count = 0
@@ -406,6 +418,7 @@ def main(argv: List[str] | None = None) -> int:
             "force_send": force_send,
             "source": selected_sources or config.get("sources", {}).get("enabled", []),
             "since_days": args.since_days,
+            "profession_query": profession_query or None,
             "window_start": notification.window_start,
             "window_end": notification.window_end,
             "timezone": summary_timezone,

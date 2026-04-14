@@ -102,6 +102,19 @@ def test_dual_channel_digest_includes_sections():
     assert "Why:" in digest
 
 
+def test_digest_header_includes_profession_focus():
+    header = notifications._format_digest_header(
+        digest_count=2,
+        window_hours=24,
+        digest_scope="manual_since_days",
+        digest_mode="TOP",
+        selection_window_days=30,
+        profession_query="IT Solution Architect",
+    )
+
+    assert "🎯 Focus: IT Solution Architect" in header
+
+
 def test_select_digest_items_adaptive_or_low_confidence():
     scored_jobs = [
         _make_row("alpha", 66, []),

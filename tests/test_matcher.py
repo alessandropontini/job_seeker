@@ -264,10 +264,135 @@ def test_accepts_manager_title_with_core_signal(base_config, region_data):
         allow_missing_salary=True,
     )
     assert result.decision == "accepted"
+
+
+def test_accepts_architecture_role_with_enterprise_system_signal(base_config, region_data):
+    posting = _posting(
+        title="Workday Solutions Architect",
+        location_text="Milan, Italy",
+        location_country="Italy",
+        description_snippet=(
+            "Evolve the enterprise information system and application landscape, "
+            "implementing Workday integrations and business systems architecture."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert result.domain_fit == "targeted"
+
+
+def test_accepts_head_of_application_services_with_internal_it_signal(base_config, region_data):
+    posting = _posting(
+        title="Head of Application Services",
+        location_text="Berlin, Germany",
+        location_country="Germany",
+        description_snippet=(
+            "Lead a complex IT landscape across enterprise applications, "
+            "corporate IT and application services."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert result.domain_fit == "targeted"
+
+
+def test_rejects_client_facing_services_architect(base_config, region_data):
+    posting = _posting(
+        title="Services Architect 3 - New York",
+        location_text="New York, NY",
+        location_country="US",
+        description_snippet=(
+            "Implementation Services team helping customers deploy the platform, "
+            "leading discovery, design and launch for customer-facing engagements."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "client_facing_architect" in result.hard_reject_reasons
     assert "title_not_targeted" not in result.hard_reject_reasons
     assert result.role_fit == "targeted"
-    assert result.domain_fit == "targeted"
-    assert "manager" in result.role_matches
+    assert result.domain_fit == "not_targeted"
+
+
+def test_rejects_product_solutions_architect_with_field_engagement_signal(
+    base_config, region_data
+):
+    posting = _posting(
+        title="Product Solutions Architect - Product Analytics and Experimentation",
+        location_text="New York, NY",
+        location_country="US",
+        description_snippet=(
+            "The Product Solutions Architecture team partners with Field teams on "
+            "complex customer use cases across pre- and post-sales engagements."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "client_facing_architect" in result.hard_reject_reasons
+    assert "solutions architect" in result.role_matches
+
+
+def test_profession_query_rejects_non_matching_role(base_config, region_data):
+    base_config["runtime"]["profession_query"] = "IT Solution Architect"
+    posting = _posting(
+        title="Head of Data Governance",
+        description_snippet="Own metadata, lineage and data quality strategy.",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "rejected"
+    assert "profession_not_targeted" in result.hard_reject_reasons
+
+
+def test_profession_query_accepts_matching_architect_role(base_config, region_data):
+    base_config["runtime"]["profession_query"] = "IT Solution Architect"
+    posting = _posting(
+        title="Workday Solutions Architect",
+        location_text="Paris, France",
+        location_country="France",
+        description_snippet=(
+            "Own enterprise systems, application architecture and Workday "
+            "integrations across corporate IT."
+        ),
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "profession_not_targeted" not in result.hard_reject_reasons
 
 
 def test_accepts_lead_title(base_config, region_data):

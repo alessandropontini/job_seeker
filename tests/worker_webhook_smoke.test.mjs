@@ -31,8 +31,15 @@ class MockKV {
     this.putCalls.push({ key, value });
   }
 
-  async list() {
-    return { keys: [] };
+  async delete(key) {
+    this.store.delete(key);
+  }
+
+  async list({ prefix } = {}) {
+    const keys = [...this.store.keys()]
+      .filter((key) => !prefix || key.startsWith(prefix))
+      .map((name) => ({ name }));
+    return { keys };
   }
 }
 
@@ -116,6 +123,26 @@ function buildMessageRequest({ secretHeader, text } = {}) {
       text: text ?? "/jobscout mode=test sources=remotive,wwr,arbeitnow since_days=7",
       from: { id: 42 },
       chat: { id: 123456 },
+    },
+  };
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (secretHeader) {
+    headers.set("X-Telegram-Bot-Api-Secret-Token", secretHeader);
+  }
+  return new Request("https://example.com/telegram/feedback", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+}
+
+function buildCommandCallbackRequest({ secretHeader, data } = {}) {
+  const payload = {
+    callback_query: {
+      id: "cb-cmd-1",
+      data: data ?? "cmd|days|30",
+      from: { id: 42 },
+      message: { message_id: 88, chat: { id: 123456 } },
     },
   };
   const headers = new Headers({ "Content-Type": "application/json" });
@@ -434,6 +461,126 @@ maybeTest("parseTelegramCommand parses sources and mode", async () => {
   assert.equal(parsed.value.forceSend, true);
 });
 
+maybeTest("parseTelegramCommand decodes explicit profession option", async () => {
+  const module = await loadWorkerModule();
+  const { parseTelegramCommand } = module;
+  const parsed = parseTelegramCommand(
+    "/jobscout mode=github since_days=14 profession=IT_Solution_Architect"
+  );
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.value.profession, "IT Solution Architect");
+});
+
+maybeTest("telegram webhook opens interactive profession prompt for bare /jobscout", async () => {
+  const fetchMock = createTelegramCommandFetchMock();
+  const module = await loadWorkerModule({
+    fetchOverride: fetchMock.fetch,
+  });
+  const worker = module.default;
+  const kv = new MockKV();
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    telegramToken: "token",
+  });
+  const response = await worker.fetch(
+    buildMessageRequest({
+      secretHeader: "topsecret",
+      text: "/jobscout",
+    }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const session = await kv.get("command:123456:42", "json");
+  assert.equal(session.state, "awaiting_profession");
+  const telegramSend = fetchMock.calls.find((call) =>
+    String(call.url).includes("/sendMessage")
+  );
+  const body = JSON.parse(telegramSend.options.body);
+  assert.match(body.text, /Dimmi che professione vuoi cercare/);
+  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "❌ Annulla");
+});
+
+maybeTest("telegram webhook stores profession reply and shows day menu", async () => {
+  const fetchMock = createTelegramCommandFetchMock();
+  const module = await loadWorkerModule({
+    fetchOverride: fetchMock.fetch,
+  });
+  const worker = module.default;
+  const kv = new MockKV({
+    "command:123456:42": JSON.stringify({
+      state: "awaiting_profession",
+      mode: "github",
+      sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
+    }),
+  });
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    telegramToken: "token",
+  });
+  const response = await worker.fetch(
+    buildMessageRequest({
+      secretHeader: "topsecret",
+      text: "IT Solution Architect",
+    }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const session = await kv.get("command:123456:42", "json");
+  assert.equal(session.state, "awaiting_days");
+  assert.equal(session.profession, "IT Solution Architect");
+  const telegramSend = fetchMock.calls.find((call) =>
+    String(call.url).includes("/sendMessage")
+  );
+  const body = JSON.parse(telegramSend.options.body);
+  assert.match(body.text, /Professione: IT Solution Architect/);
+  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "🗓 7 giorni");
+  assert.equal(body.reply_markup.inline_keyboard[2][0].text, "❌ Annulla");
+});
+
+maybeTest("telegram command callback dispatches github with profession input", async () => {
+  const fetchMock = createTelegramCommandFetchMock();
+  const module = await loadWorkerModule({
+    fetchOverride: fetchMock.fetch,
+  });
+  const worker = module.default;
+  const kv = new MockKV({
+    "command:123456:42": JSON.stringify({
+      state: "awaiting_days",
+      mode: "github",
+      sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
+      profession: "IT Solution Architect",
+    }),
+  });
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    telegramToken: "token",
+    githubOwner: "openai",
+    githubRepo: "job-seeker",
+    githubWorkflowId: "live-daily-telegram.yml",
+    githubToken: "ghs_token",
+    githubRef: "main",
+  });
+  const response = await worker.fetch(
+    buildCommandCallbackRequest({
+      secretHeader: "topsecret",
+      data: "cmd|days|30",
+    }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const githubDispatch = fetchMock.calls.find((call) =>
+    String(call.url).includes("/dispatches")
+  );
+  const dispatchPayload = JSON.parse(githubDispatch.options.body);
+  assert.equal(dispatchPayload.inputs.since_days, "30");
+  assert.equal(dispatchPayload.inputs.profession, "IT Solution Architect");
+  const session = await kv.get("command:123456:42");
+  assert.equal(session, null);
+});
+
 maybeTest("telegram webhook handles /jobscout message in test mode and replies on Telegram", async () => {
   const { consoleMock, logs } = createConsoleMock();
   const fetchMock = createTelegramCommandFetchMock();
@@ -496,6 +643,7 @@ maybeTest("telegram webhook handles /jobscout message in github mode and dispatc
   assert.equal(dispatchPayload.ref, "main");
   assert.equal(dispatchPayload.inputs.sources, "remotive,wwr");
   assert.equal(dispatchPayload.inputs.since_days, "3");
+  assert.equal(dispatchPayload.inputs.profession, "");
   const telegramSend = fetchMock.calls.find((call) =>
     String(call.url).includes("/sendMessage")
   );

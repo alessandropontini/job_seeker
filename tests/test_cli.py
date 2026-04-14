@@ -145,6 +145,51 @@ def test_cli_run_summary_contains_telegram_fields(tmp_path, monkeypatch):
     assert summary["source_counts"] == {"remotive": 2, "wwr": 1}
 
 
+def test_cli_run_summary_includes_profession_query(tmp_path, monkeypatch):
+    import json
+    from job_scout import __main__ as main_mod
+    from job_scout.pipeline import PipelineSummary
+    from job_scout.notifications import NotificationResult
+
+    output_dir = tmp_path / "out"
+    config_path = Path("config/config.yaml")
+
+    monkeypatch.setattr(
+        main_mod,
+        "run_pipeline",
+        lambda **_kwargs: ([], PipelineSummary(0, 0, 0, 0, {})),
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "maybe_notify",
+        lambda *args, **kwargs: NotificationResult(
+            notified_count=0,
+            notification_mode="daily_window",
+            notified=False,
+            digest_date_local="2024-02-10",
+            window_start="2024-02-09T00:00:00+00:00",
+            window_end="2024-02-10T00:00:00+00:00",
+            diagnostics={"timezone": "Europe/Rome"},
+        ),
+    )
+
+    exit_code = main([
+        "run",
+        "--since-days",
+        "7",
+        "--profession",
+        "IT Solution Architect",
+        "--output-dir",
+        str(output_dir),
+        "--config",
+        str(config_path),
+    ])
+
+    assert exit_code == 0
+    summary = json.loads((output_dir / "run_summary.json").read_text(encoding="utf-8"))
+    assert summary["profession_query"] == "IT Solution Architect"
+
+
 def test_cli_sources_all_forwards_to_pipeline(tmp_path, monkeypatch):
     from job_scout import __main__ as main_mod
     from job_scout.pipeline import PipelineSummary

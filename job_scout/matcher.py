@@ -15,7 +15,9 @@ from job_scout.normalize import (
 from job_scout.regions import RegionData, normalize_country
 from job_scout.targeting import (
     contains_phrase,
+    has_client_facing_architect_penalty,
     find_domain_keyword_matches,
+    matches_profession_query,
     find_role_keyword_matches,
     has_negative_domain_penalty,
 )
@@ -218,6 +220,7 @@ def evaluate_hard_constraints(
     location_rules = config.get("location_rules", {})
     role_rules = config.get("role_targeting", {})
     salary_rules = config.get("salary_rules", {})
+    runtime = config.get("runtime", {})
 
     include_regions = {
         region.lower() for region in location_rules.get("include_regions", [])
@@ -234,6 +237,11 @@ def evaluate_hard_constraints(
     include_titles = [
         title.lower() for title in role_rules.get("include_titles", [])
     ]
+    profession_query = None
+    if isinstance(runtime, Mapping):
+        raw_profession_query = runtime.get("profession_query")
+        if isinstance(raw_profession_query, str):
+            profession_query = raw_profession_query.strip()
     minimum_eur = int(salary_rules.get("minimum_eur", 52000))
     currency_rates = merge_currency_rates(
         salary_rules.get("currency_rates")
@@ -279,6 +287,10 @@ def evaluate_hard_constraints(
 
     if has_negative_domain_penalty(posting):
         hard_reject_reasons.append("negative_domain")
+    if has_client_facing_architect_penalty(posting):
+        hard_reject_reasons.append("client_facing_architect")
+    if profession_query and not matches_profession_query(posting, profession_query):
+        hard_reject_reasons.append("profession_not_targeted")
 
     role_matches = find_role_keyword_matches(posting.title, include_titles)
     if not role_matches:

@@ -1,8 +1,10 @@
 const REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs";
 const WWR_RSS_URL = "https://weworkremotely.com/remote-jobs.rss";
 const ARBEITNOW_API_URL = "https://www.arbeitnow.com/api/job-board-api";
+const DEFAULT_JOBSCOUT_SOURCES = "remotive,wwr,arbeitnow,greenhouse";
 const LIVE_RUN_TTL_SECONDS = 60 * 60 * 24 * 14;
 const MIN_SESSION_TTL_SECONDS = 60 * 60 * 24;
+const COMMAND_SESSION_TTL_SECONDS = 60 * 60 * 12;
 
 export default {
   async fetch(request, env, ctx) {
@@ -620,6 +622,17 @@ async function handleTelegramWebhook(request, env, ctx, baseLog) {
     });
   }
 
+  if (data.startsWith("cmd|")) {
+    return handleTelegramCommandCallback({
+      callback,
+      env,
+      ctx,
+      baseLog,
+      startedAt,
+      telegramUpdateType,
+    });
+  }
+
   const parsed = parseCallbackDataWithReason(data);
   if (!parsed.ok) {
     return feedbackExit({
@@ -799,6 +812,45 @@ async function handleTelegramCommand({
 }) {
   const message = payload?.message || {};
   const text = String(message.text || "").trim();
+  const chatId = message.chat?.id;
+  const userId = message.from?.id;
+  const messageThreadId = message.message_thread_id;
+
+  if (isBareJobScoutCommand(text)) {
+    return startInteractiveJobScoutCommand({
+      env,
+      ctx,
+      baseLog,
+      startedAt,
+      telegramUpdateType,
+      chatId,
+      userId,
+      messageId: message.message_id,
+      messageThreadId,
+    });
+  }
+
+  const commandSession = await loadCommandSession(env, chatId, userId);
+  if (
+    commandSession?.state === "awaiting_profession" &&
+    text &&
+    !text.startsWith("/")
+  ) {
+    return handleProfessionReply({
+      env,
+      ctx,
+      baseLog,
+      startedAt,
+      telegramUpdateType,
+      chatId,
+      userId,
+      messageId: message.message_id,
+      messageThreadId,
+      professionText: text,
+      session: commandSession,
+    });
+  }
+
   const parsed = parseTelegramCommand(text);
   if (!parsed.ok) {
     logInfo("telegram_message_ignored", {
@@ -815,7 +867,6 @@ async function handleTelegramCommand({
     };
   }
 
-  const chatId = message.chat?.id;
   if (!chatId) {
     return feedbackExit({
       baseLog,
@@ -858,7 +909,7 @@ async function handleTelegramCommand({
     chatId,
     text: commandResult.text,
     replyToMessageId: message.message_id,
-    messageThreadId: message.message_thread_id,
+    messageThreadId,
   }).catch((error) => {
     logError("telegram_command_reply_failed", {
       ...baseLog,
@@ -1040,7 +1091,7 @@ async function handleFeedback(request, env, baseLog) {
 }
 
 export function parseTelegramCommand(text) {
-  const normalized = String(text || "").trim();
+  const normalized = normalizeJobScoutCommandText(text);
   if (!normalized.startsWith("/jobscout")) {
     return { ok: false, reason: "message_not_jobscout_command" };
   }
@@ -1056,18 +1107,22 @@ export function parseTelegramCommand(text) {
     options[key] = value;
   }
   const mode = ["test", "github"].includes(options.mode) ? options.mode : "test";
-  const sourceValue = options.sources || options.source || "remotive,wwr,arbeitnow,greenhouse";
+  const sourceValue = options.sources || options.source || DEFAULT_JOBSCOUT_SOURCES;
   const sources = sourceValue
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
   const sinceDays = parsePositiveInt(options.since_days || options.since || "7", 7);
+  const profession = decodeTelegramOptionValue(
+    options.profession || options.role || options.query || ""
+  );
   return {
     ok: true,
     value: {
       mode,
       sources,
       sinceDays,
+      profession,
       forceSend: parseBooleanFlag(options.force_send || "false"),
       runMode: options.run_mode || "manual",
       raw: normalized,
@@ -1392,7 +1447,7 @@ async function answerCallback(env, callbackId, text) {
 
 async function sendTelegramMessage(
   env,
-  { chatId, text, replyToMessageId, messageThreadId }
+  { chatId, text, replyToMessageId, messageThreadId, replyMarkup }
 ) {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) {
@@ -1408,6 +1463,9 @@ async function sendTelegramMessage(
   }
   if (messageThreadId) {
     payload.message_thread_id = messageThreadId;
+  }
+  if (replyMarkup) {
+    payload.reply_markup = replyMarkup;
   }
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
@@ -1435,6 +1493,9 @@ async function runTelegramSearchTest(command) {
   lines.push(`⚙️ Mode: test`);
   lines.push(`🗂 Fonti: ${command.sources.join(",")}`);
   lines.push(`🕒 Finestra: ultimi ${command.sinceDays} giorni`);
+  if (command.profession) {
+    lines.push(`🎯 Professione: ${command.profession}`);
+  }
   lines.push("");
 
   const results = [];
@@ -1517,6 +1578,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
         inputs: {
           sources: command.sources.join(","),
           since_days: String(command.sinceDays),
+          profession: command.profession || "",
           run_mode: command.runMode || "manual",
           force_send: command.forceSend ? "true" : "false",
         },
@@ -1546,8 +1608,317 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       `🌿 Branch: ${ref}`,
       `🗂 Fonti: ${command.sources.join(", ")}`,
       `🕒 Finestra: ultimi ${command.sinceDays} giorni`,
+      ...(command.profession ? [`🎯 Professione: ${command.profession}`] : []),
       "📬 Ti aggiorno qui appena il run finisce.",
     ].join("\n"),
+  };
+}
+
+function normalizeJobScoutCommandText(text) {
+  return String(text || "").trim().replace(/^\/jobscout@\w+/i, "/jobscout");
+}
+
+function isBareJobScoutCommand(text) {
+  return /^\/jobscout(?:@\w+)?$/i.test(String(text || "").trim());
+}
+
+function decodeTelegramOptionValue(value) {
+  return String(value || "").replace(/[_+]/g, " ").trim();
+}
+
+function buildCommandSessionKey(chatId, userId) {
+  return `command:${chatId}:${userId}`;
+}
+
+async function loadCommandSession(env, chatId, userId) {
+  if (!chatId || !userId || !env.JOB_SCOUT_KV) {
+    return null;
+  }
+  return env.JOB_SCOUT_KV.get(buildCommandSessionKey(chatId, userId), "json");
+}
+
+async function saveCommandSession(env, chatId, userId, payload) {
+  if (!chatId || !userId || !env.JOB_SCOUT_KV) {
+    return;
+  }
+  await env.JOB_SCOUT_KV.put(
+    buildCommandSessionKey(chatId, userId),
+    JSON.stringify(payload),
+    { expirationTtl: COMMAND_SESSION_TTL_SECONDS }
+  );
+}
+
+async function clearCommandSession(env, chatId, userId) {
+  if (!chatId || !userId || !env.JOB_SCOUT_KV) {
+    return;
+  }
+  const key = buildCommandSessionKey(chatId, userId);
+  if (typeof env.JOB_SCOUT_KV.delete === "function") {
+    await env.JOB_SCOUT_KV.delete(key);
+    return;
+  }
+  await env.JOB_SCOUT_KV.put(key, JSON.stringify({ state: "closed" }), {
+    expirationTtl: 60,
+  });
+}
+
+function buildDaysKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "🗓 7 giorni", callback_data: "cmd|days|7" },
+        { text: "🗓 14 giorni", callback_data: "cmd|days|14" },
+      ],
+      [
+        { text: "🗓 30 giorni", callback_data: "cmd|days|30" },
+        { text: "🗓 60 giorni", callback_data: "cmd|days|60" },
+      ],
+      [{ text: "❌ Annulla", callback_data: "cmd|cancel" }],
+    ],
+  };
+}
+
+function buildCancelKeyboard() {
+  return {
+    inline_keyboard: [[{ text: "❌ Annulla", callback_data: "cmd|cancel" }]],
+  };
+}
+
+function normalizeProfessionInput(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+async function startInteractiveJobScoutCommand({
+  env,
+  ctx,
+  baseLog,
+  startedAt,
+  telegramUpdateType,
+  chatId,
+  userId,
+  messageId,
+  messageThreadId,
+}) {
+  if (!chatId || !userId) {
+    return {
+      response: textResponse("Missing chat id", 400, baseLog.request_id),
+      outcome: "invalid_callback",
+      reason: "missing_chat_or_user_id",
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  await saveCommandSession(env, chatId, userId, {
+    state: "awaiting_profession",
+    mode: "github",
+    sources: DEFAULT_JOBSCOUT_SOURCES.split(","),
+    message_thread_id: messageThreadId || null,
+    opened_at: new Date().toISOString(),
+  });
+
+  const replyPromise = sendTelegramMessage(env, {
+    chatId,
+    text: [
+      "🧭 Dimmi che professione vuoi cercare.",
+      "💼 Scrivimi un titolo o un focus, per esempio:",
+      "• Data Governance Manager",
+      "• IT Solution Architect",
+      "• Data Architect",
+    ].join("\n"),
+    replyToMessageId: messageId,
+    messageThreadId,
+    replyMarkup: buildCancelKeyboard(),
+  }).catch((error) => {
+    logError("telegram_command_reply_failed", {
+      ...baseLog,
+      error: serializeError(error),
+    });
+  });
+  if (ctx) {
+    ctx.waitUntil(replyPromise);
+  } else {
+    await replyPromise;
+  }
+
+  logInfo("telegram_command_handled", {
+    ...baseLog,
+    outcome: "ok",
+    reason: "interactive_profession_prompt",
+    telegram_update_type: telegramUpdateType,
+  });
+  return {
+    response: textResponse("OK", 200, baseLog.request_id),
+    outcome: "ok",
+    reason: "interactive_profession_prompt",
+    telegram_update_type: telegramUpdateType,
+  };
+}
+
+async function handleProfessionReply({
+  env,
+  ctx,
+  baseLog,
+  startedAt,
+  telegramUpdateType,
+  chatId,
+  userId,
+  messageId,
+  messageThreadId,
+  professionText,
+  session,
+}) {
+  const profession = normalizeProfessionInput(professionText);
+  if (!profession) {
+    return {
+      response: textResponse("OK", 200, baseLog.request_id),
+      outcome: "blocked",
+      reason: "empty_profession_reply",
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  await saveCommandSession(env, chatId, userId, {
+    ...session,
+    state: "awaiting_days",
+    profession,
+    message_thread_id: messageThreadId || session.message_thread_id || null,
+    updated_at: new Date().toISOString(),
+  });
+
+  const replyPromise = sendTelegramMessage(env, {
+    chatId,
+    text: [
+      "✅ Perfetto, ho salvato il focus.",
+      `🎯 Professione: ${profession}`,
+      "⏳ Ora scegli da quanti giorni indietro devo cercare.",
+    ].join("\n"),
+    replyToMessageId: messageId,
+    messageThreadId,
+    replyMarkup: buildDaysKeyboard(),
+  }).catch((error) => {
+    logError("telegram_command_reply_failed", {
+      ...baseLog,
+      error: serializeError(error),
+    });
+  });
+  if (ctx) {
+    ctx.waitUntil(replyPromise);
+  } else {
+    await replyPromise;
+  }
+
+  logInfo("telegram_command_handled", {
+    ...baseLog,
+    outcome: "ok",
+    reason: "interactive_days_prompt",
+    profession,
+    telegram_update_type: telegramUpdateType,
+  });
+  return {
+    response: textResponse("OK", 200, baseLog.request_id),
+    outcome: "ok",
+    reason: "interactive_days_prompt",
+    telegram_update_type: telegramUpdateType,
+  };
+}
+
+async function handleTelegramCommandCallback({
+  callback,
+  env,
+  ctx,
+  baseLog,
+  startedAt,
+  telegramUpdateType,
+}) {
+  const parts = String(callback.data || "").split("|");
+  const action = parts[1] || "";
+  const chatId = callback.message?.chat?.id;
+  const userId = callback.from?.id;
+  const messageThreadId = callback.message?.message_thread_id;
+
+  if (action === "cancel") {
+    await clearCommandSession(env, chatId, userId);
+    scheduleAnswer(env, ctx, callback.id, "❌ Ricerca annullata");
+    return {
+      response: textResponse("OK", 200, baseLog.request_id),
+      outcome: "ok",
+      reason: "interactive_cancelled",
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  if (action !== "days") {
+    scheduleAnswer(env, ctx, callback.id, "⚠️ Azione non valida");
+    return {
+      response: textResponse("Invalid callback data", 200, baseLog.request_id),
+      outcome: "invalid_callback",
+      reason: "unknown_command_callback",
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  const sinceDays = parsePositiveInt(parts[2] || "7", 7);
+  const session = await loadCommandSession(env, chatId, userId);
+  if (!session || session.state !== "awaiting_days" || !session.profession) {
+    scheduleAnswer(env, ctx, callback.id, "⏱ Sessione scaduta");
+    return {
+      response: textResponse("Session missing", 200, baseLog.request_id),
+      outcome: "session_missing",
+      reason: "interactive_session_missing",
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  scheduleAnswer(env, ctx, callback.id, "🚀 Avvio la ricerca");
+  const command = {
+    mode: session.mode || "github",
+    sources: Array.isArray(session.sources) && session.sources.length
+      ? session.sources
+      : DEFAULT_JOBSCOUT_SOURCES.split(","),
+    sinceDays,
+    profession: session.profession,
+    forceSend: false,
+    runMode: "manual",
+    raw: "/jobscout",
+  };
+  const commandResult =
+    command.mode === "github"
+      ? await dispatchGitHubWorkflowCommand(command, env)
+      : await runTelegramSearchTest(command);
+  await clearCommandSession(env, chatId, userId);
+
+  const replyPromise = sendTelegramMessage(env, {
+    chatId,
+    text: commandResult.text,
+    replyToMessageId: callback.message?.message_id,
+    messageThreadId: messageThreadId || session.message_thread_id,
+  }).catch((error) => {
+    logError("telegram_command_reply_failed", {
+      ...baseLog,
+      error: serializeError(error),
+    });
+  });
+  if (ctx) {
+    ctx.waitUntil(replyPromise);
+  } else {
+    await replyPromise;
+  }
+
+  logInfo("telegram_command_handled", {
+    ...baseLog,
+    outcome: commandResult.ok ? "ok" : "blocked",
+    reason: commandResult.reason,
+    command_mode: command.mode,
+    command_sources: command.sources,
+    since_days: command.sinceDays,
+    profession: command.profession,
+    telegram_update_type: telegramUpdateType,
+  });
+  return {
+    response: textResponse("OK", 200, baseLog.request_id),
+    outcome: commandResult.ok ? "ok" : "blocked",
+    reason: commandResult.reason,
+    telegram_update_type: telegramUpdateType,
   };
 }
 

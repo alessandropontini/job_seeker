@@ -271,6 +271,7 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
   - tightened role/domain targeting so management seniority is no longer inferred from generic domain words like `compliance`, and rebalanced scoring toward managerial data titles over non-managerial compliance-only roles
   - refined anti-zero selection so low-confidence digests prefer positive-score jobs and only fall back to score-0 rows when nothing else survives
   - extended the target profile toward technical architecture roles (`IT Solution Architect`, `Data Architect`, `Platform Architect`, `Cloud Architect`) and added explicit boosts for CV-aligned stack/tooling signals (`GCP`, `BigQuery`, `Dataflow`, `Dataproc`, `Databricks`, `Axon`, `Erwin`, `EDC`, `Power BI`, `Tableau`, `Superset`)
+  - narrowed the architecture corridor so internal enterprise/application architecture roles can pass, while client-facing `services/product/partner solutions architect` roles are hard-rejected to avoid post-sales noise from Greenhouse boards
 
 ### PR3.2 — Cloudflare observability schema alignment (complete)
 **Status:** ✅ Done
@@ -293,3 +294,4 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - 2026-04-11: fixed live feedback carry-over in GitHub Actions by restoring previous `last_run_live.json` and `preferences_live.json` artifacts before each `live-daily-telegram` run, allowing clicked Telegram feedback to be applied in the next run.
 - 2026-04-14: hardened live feedback observability by restoring artifacts from both GitHub CLI extraction layouts and exposing `fetch_feedback_count` / `fetch_feedback_reason` directly in `run_summary.json`.
 - 2026-04-14: preserved applied feedback counts in the current `last_run*.json` after notification writes, so live artifacts now reflect both retrieval and application of Telegram feedback.
+- 2026-04-14: added an interactive Telegram `/jobscout` flow backed by short-lived Worker KV command sessions: the bot now asks for profession first, then day range, and dispatches GitHub with a real runtime `profession` focus that is enforced by matcher/scoring during the manual run.

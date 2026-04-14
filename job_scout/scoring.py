@@ -10,11 +10,14 @@ from job_scout.models import JobPosting
 from job_scout.targeting import (
     CORE_KEYWORDS,
     SUPPORTING_DOMAIN_KEYWORDS,
+    ARCHITECTURE_DOMAIN_KEYWORDS,
     MANAGERIAL_TITLE_KEYWORDS,
     PLATFORM_KEYWORDS,
     ROLE_BONUS_KEYWORDS,
     contains_phrase,
+    find_profession_query_matches,
     find_managerial_keyword_matches,
+    has_client_facing_architect_penalty,
     has_negative_domain_penalty,
     has_negative_soft_penalty,
 )
@@ -28,7 +31,7 @@ def apply_scoring(
     """Return a MatchResult with score metadata applied."""
 
     score, score_penalties, score_bonuses, why = compute_score(
-        posting, match
+        posting, match, config
     )
     return replace(
         match,
@@ -42,6 +45,7 @@ def apply_scoring(
 def compute_score(
     posting: JobPosting,
     match: MatchResult,
+    config: dict[str, object] | object = None,
 ) -> tuple[int | None, list[str], list[str], list[str]]:
     """Compute deterministic score with wide recall and explainable penalties."""
 
@@ -59,9 +63,13 @@ def compute_score(
     title_core_matches = _find_keywords(title_text, CORE_KEYWORDS)
     description_core_matches = _find_keywords(description_text, CORE_KEYWORDS)
     supporting_matches = _find_keywords(search_text, SUPPORTING_DOMAIN_KEYWORDS)
+    architecture_matches = _find_keywords(search_text, ARCHITECTURE_DOMAIN_KEYWORDS)
     platform_matches = _find_keywords(search_text, PLATFORM_KEYWORDS)
     role_matches = _find_keywords(title_text, ROLE_BONUS_KEYWORDS)
     managerial_matches = find_managerial_keyword_matches(posting.title)
+    profession_matches = find_profession_query_matches(
+        posting, _resolve_profession_query(config)
+    )
 
     score += min(40, len(title_core_matches) * 12)
     if title_core_matches:
@@ -81,6 +89,12 @@ def compute_score(
             _format_keyword_bonus("supporting_domain", supporting_matches)
         )
 
+    score += min(16, len(architecture_matches) * 4)
+    if architecture_matches:
+        applied_bonuses.append(
+            _format_keyword_bonus("architecture_domain", architecture_matches)
+        )
+
     score += min(20, len(platform_matches) * 5)
     if platform_matches:
         applied_bonuses.append(
@@ -91,6 +105,11 @@ def compute_score(
         score += 10
         applied_bonuses.append(
             _format_keyword_bonus("target_role", role_matches)
+        )
+    if profession_matches:
+        score += min(18, len(profession_matches) * 6)
+        applied_bonuses.append(
+            _format_keyword_bonus("profession_query", profession_matches)
         )
 
     if managerial_matches:
@@ -134,6 +153,9 @@ def compute_score(
         if "negative_domain" not in applied_penalties:
             applied_penalties.append("negative_domain")
         score -= 40
+    if has_client_facing_architect_penalty(posting):
+        score -= 45
+        applied_penalties.append("client_facing_architect")
     if has_negative_soft_penalty(posting):
         score -= 30
         applied_penalties.append("negative_soft_penalty")
@@ -180,3 +202,16 @@ def _build_why(
     if penalties:
         reasons.append(f"penalty {penalties[0]}")
     return reasons[:3]
+
+
+def _resolve_profession_query(config: dict[str, object] | object) -> str | None:
+    if not isinstance(config, dict):
+        return None
+    runtime = config.get("runtime")
+    if not isinstance(runtime, dict):
+        return None
+    value = runtime.get("profession_query")
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None

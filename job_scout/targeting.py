@@ -48,6 +48,35 @@ CORE_KEYWORDS = [
     "google cloud",
 ]
 
+ARCHITECTURE_DOMAIN_KEYWORDS = [
+    "application architecture",
+    "applications architecture",
+    "solution architecture",
+    "solutions architecture",
+    "enterprise architecture",
+    "platform architecture",
+    "systems architecture",
+    "integration architecture",
+    "enterprise application",
+    "enterprise applications",
+    "enterprise systems",
+    "business systems",
+    "information system",
+    "information systems",
+    "corporate it",
+    "application services",
+    "application landscape",
+    "it landscape",
+    "technology landscape",
+    "device landscape",
+    "endpoint",
+    "device management",
+    "identity",
+    "access management",
+    "workday",
+    "integration",
+]
+
 SUPPORTING_DOMAIN_KEYWORDS = [
     "compliance",
     "gdpr",
@@ -133,6 +162,57 @@ NEGATIVE_SOFT_PENALTY_TITLES = [
     "trainee",
 ]
 
+CLIENT_FACING_ARCHITECT_KEYWORDS = [
+    "pre-sales",
+    "presales",
+    "post-sales",
+    "customer-facing",
+    "implementation services",
+    "services architect",
+    "product solutions architect",
+    "technical solutions team",
+    "technical solutions",
+    "partner with field teams",
+    "field teams",
+    "customer use cases",
+    "potential clients",
+    "existing customers",
+    "sales engineer",
+    "sales engineering",
+    "solutions consultant",
+    "professional services",
+    "partner solutions architect",
+    "field cto",
+    "client-facing",
+]
+
+PROFESSION_QUERY_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "for",
+    "in",
+    "of",
+    "the",
+    "to",
+}
+
+GENERIC_PROFESSION_TOKENS = {
+    "architect",
+    "consultant",
+    "director",
+    "engineer",
+    "head",
+    "lead",
+    "manager",
+    "officer",
+    "owner",
+    "principal",
+    "senior",
+    "specialist",
+    "staff",
+}
+
 
 def build_search_text(posting: JobPosting) -> str:
     """Return lowercased title+description text for keyword matching."""
@@ -209,7 +289,12 @@ def find_domain_keyword_matches(posting: JobPosting) -> list[str]:
     """Return unique domain keyword matches from title or description."""
 
     text = build_search_text(posting)
-    return find_matches(text, CORE_KEYWORDS)
+    core_matches = find_matches(text, CORE_KEYWORDS)
+    if core_matches:
+        return core_matches
+    if is_architecture_role_title(posting.title) and not has_client_facing_architect_penalty(posting):
+        return find_matches(text, ARCHITECTURE_DOMAIN_KEYWORDS)
+    return []
 
 
 def find_supporting_domain_keyword_matches(posting: JobPosting) -> list[str]:
@@ -229,6 +314,122 @@ def has_negative_domain_penalty(posting: JobPosting) -> bool:
     """Return True when title matches marketing/sales role families."""
 
     return has_any(posting.title.lower(), NEGATIVE_DOMAIN_KEYWORDS)
+
+
+def is_architecture_role_title(title: str) -> bool:
+    """Return True when the title clearly targets architecture-oriented roles."""
+
+    lowered = title.lower()
+    return has_any(
+        lowered,
+        [
+            "architect",
+            "architecture",
+            "application services",
+            "technology owner",
+            "data technology owner",
+        ],
+    )
+
+
+def has_client_facing_architect_penalty(posting: JobPosting) -> bool:
+    """Return True for customer-facing / pre-sales architecture roles."""
+
+    text = build_search_text(posting)
+    return has_any(text, CLIENT_FACING_ARCHITECT_KEYWORDS)
+
+
+def normalize_profession_query(query: str | None) -> str:
+    """Return a normalized runtime profession query string."""
+
+    return re.sub(r"\s+", " ", str(query or "").strip().lower())
+
+
+def extract_profession_query_tokens(query: str | None) -> list[str]:
+    """Return profession query tokens without trivial stopwords."""
+
+    normalized = normalize_profession_query(query)
+    if not normalized:
+        return []
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9+#]+", normalized)
+        if len(token) >= 3 and token not in PROFESSION_QUERY_STOPWORDS
+    ]
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        if token not in seen:
+            ordered.append(token)
+            seen.add(token)
+    return ordered
+
+
+def find_profession_query_matches(
+    posting: JobPosting, query: str | None
+) -> list[str]:
+    """Return exact phrase or token matches for a runtime profession query."""
+
+    normalized = normalize_profession_query(query)
+    if not normalized:
+        return []
+
+    title_text = posting.title.lower()
+    search_text = build_search_text(posting)
+    matches: list[str] = []
+    if contains_phrase(title_text, normalized):
+        matches.append(f"title:{normalized}")
+    elif contains_phrase(search_text, normalized):
+        matches.append(normalized)
+
+    for token in extract_profession_query_tokens(normalized):
+        if contains_phrase(title_text, token):
+            matches.append(f"title:{token}")
+        elif contains_phrase(search_text, token):
+            matches.append(token)
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for match in matches:
+        if match not in seen:
+            ordered.append(match)
+            seen.add(match)
+    return ordered
+
+
+def matches_profession_query(posting: JobPosting, query: str | None) -> bool:
+    """Return True when a posting aligns with the runtime profession focus."""
+
+    normalized = normalize_profession_query(query)
+    if not normalized:
+        return True
+
+    title_text = posting.title.lower()
+    search_text = build_search_text(posting)
+    if contains_phrase(title_text, normalized) or contains_phrase(search_text, normalized):
+        return True
+
+    tokens = extract_profession_query_tokens(normalized)
+    if not tokens:
+        return True
+
+    matched_tokens = [
+        token for token in tokens if contains_phrase(search_text, token)
+    ]
+    core_tokens = [
+        token for token in tokens if token not in GENERIC_PROFESSION_TOKENS
+    ]
+    matched_core_tokens = [
+        token for token in core_tokens if contains_phrase(search_text, token)
+    ]
+
+    if len(matched_core_tokens) >= 2:
+        return True
+    if len(matched_core_tokens) >= 1 and len(matched_tokens) >= max(2, min(len(tokens), 3)):
+        return True
+    if not core_tokens and len(matched_tokens) >= 2:
+        return True
+    return False
 
 
 def has_negative_soft_penalty(posting: JobPosting) -> bool:

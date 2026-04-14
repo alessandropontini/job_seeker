@@ -64,6 +64,7 @@ Key sections:
 - CV/domain gate: accepted jobs must also contain data-governance / metadata / compliance / privacy / lineage / platform signals in title or description; generic manager roles are no longer enough on their own.
 - Matching now tracks three explicit fit dimensions internally: `role_fit`, `domain_fit`, and `location_fit`. Reason codes such as `title_not_targeted` and `cv_domain_not_targeted` are still preserved for compatibility, but scoring explainability now reflects the underlying fit state instead of only reject labels.
 - Domain targeting is stricter and more data-centric: primary keywords now favor governance/metadata/lineage/reference-data/data-office/platform terms plus architecture signals (`data architecture`, `solution architecture`, `enterprise architecture`) and governance tooling such as `Collibra`, `Axon`, `Erwin`, `EDC`, `Purview`.
+- Architecture roles are split into two buckets: internal enterprise/application architecture can qualify, while customer-facing / pre-sales / post-sales solutioning roles (for example `services architect`, `product solutions architect`, `partner solutions architect`) are hard-rejected even if the title sounds senior.
 - Technical stack signals from the CV are also ranked explicitly through platform keywords such as `GCP`, `BigQuery`, `Dataflow`, `Dataproc`, `Databricks`, `SQL`, `Python`, `Power BI`, `Tableau`, and `Superset`.
 - `salary_rules.minimum_eur`: minimum salary threshold (converted to EUR).
 - `salary_rules.allow_missing_salary`: keep jobs missing salary (tagged as `missing_salary`).
@@ -366,6 +367,18 @@ Reviewed for future expansion:
 ## Telegram trigger
 The Cloudflare Worker can also accept a Telegram message command on the webhook and either run a source probe test or dispatch GitHub Actions.
 
+Simplest interactive flow:
+```text
+/jobscout
+```
+
+The bot now opens a guided menu:
+1. asks for the profession/focus to search (for example `Data Governance Manager` or `IT Solution Architect`)
+2. shows day-range buttons (`7`, `14`, `30`, `60`)
+3. dispatches the GitHub workflow with that runtime profession focus
+
+That runtime profession is not just cosmetic: it is passed through the workflow/CLI into the matcher and scoring, so the manual digest is filtered and ranked against the requested profession instead of using only the static repo profile.
+
 Command syntax:
 ```text
 /jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7
@@ -375,6 +388,7 @@ Command syntax:
 - `mode=test`: Cloudflare fetches the configured public sources and replies on Telegram with counts.
 - `mode=github`: Cloudflare dispatches the configured workflow and replies with an acknowledgement.
 - `sources`: comma-separated list. `linkedin` is accepted only as a manual-only placeholder and is not crawled.
+- `profession`: optional explicit runtime focus for power-users using the full command syntax. Example: `/jobscout mode=github since_days=30 profession=IT_Solution_Architect`
 
 ## Telegram notifications (Phase 6 live)
 - Telegram is always enabled by default (`notifications.telegram.enabled: true`).

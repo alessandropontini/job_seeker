@@ -15,6 +15,10 @@ on:
         description: "Fetch horizon in days (manual debug: 7/30)"
         required: false
         default: "1"
+      profession:
+        description: "Optional profession/query focus for this manual run"
+        required: false
+        default: ""
       force_send:
         description: "Force Telegram send even when zero matches"
         required: false
@@ -216,6 +220,7 @@ jobs:
           set -euo pipefail
           sources_value="${{ inputs.sources || inputs.source || 'remotive' }}"
           since_days="${{ inputs.since_days || '1' }}"
+          profession="${{ inputs.profession || '' }}"
           force_send="${{ inputs.force_send && '1' || '0' }}"
           run_mode="${{ inputs.run_mode || 'manual' }}"
           args=(
@@ -228,6 +233,9 @@ jobs:
             --run-mode "${run_mode}"
             --feedback-smoke-check
           )
+          if [[ -n "${profession}" ]]; then
+            args+=(--profession "${profession}")
+          fi
           if [[ "${force_send}" == "1" || "${run_mode}" == "manual" ]]; then
             args+=(--force-send)
           fi
