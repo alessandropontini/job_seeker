@@ -426,6 +426,11 @@ def _evaluate_location_fit(
             hard_reject_reasons=[],
         )
 
+    if not include_regions and not include_countries and not include_cities:
+        return LocationMatchResult(
+            True, False, "allowed_anywhere", ["runtime_scope:anywhere"], []
+        )
+
     if location_country in include_countries:
         return LocationMatchResult(
             True, False, "allowed_country", [location_country], []

@@ -146,6 +146,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "run_mode": "scheduled",
         "digest_timezone": "Europe/Rome",
         "profession_query": None,
+        "location_scope": None,
     },
     "digest": {
         "mode": "daily_window",

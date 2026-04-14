@@ -110,9 +110,11 @@ def test_digest_header_includes_profession_focus():
         digest_mode="TOP",
         selection_window_days=30,
         profession_query="IT Solution Architect",
+        location_scope="europe",
     )
 
     assert "🎯 Focus: IT Solution Architect" in header
+    assert "🌐 Area: 🇪🇺 Europa" in header
 
 
 def test_select_digest_items_adaptive_or_low_confidence():

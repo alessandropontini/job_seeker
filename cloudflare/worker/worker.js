@@ -1116,6 +1116,11 @@ export function parseTelegramCommand(text) {
   const profession = decodeTelegramOptionValue(
     options.profession || options.role || options.query || ""
   );
+  const locationScope = String(
+    options.location_scope || options.location || options.area || ""
+  )
+    .trim()
+    .toLowerCase();
   return {
     ok: true,
     value: {
@@ -1123,6 +1128,7 @@ export function parseTelegramCommand(text) {
       sources,
       sinceDays,
       profession,
+      locationScope,
       forceSend: parseBooleanFlag(options.force_send || "false"),
       runMode: options.run_mode || "manual",
       raw: normalized,
@@ -1496,6 +1502,9 @@ async function runTelegramSearchTest(command) {
   if (command.profession) {
     lines.push(`🎯 Professione: ${command.profession}`);
   }
+  if (command.locationScope) {
+    lines.push(`🌍 Area: ${formatLocationScopeLabel(command.locationScope)}`);
+  }
   lines.push("");
 
   const results = [];
@@ -1579,6 +1588,7 @@ async function dispatchGitHubWorkflowCommand(command, env) {
           sources: command.sources.join(","),
           since_days: String(command.sinceDays),
           profession: command.profession || "",
+          location_scope: command.locationScope || "",
           run_mode: command.runMode || "manual",
           force_send: command.forceSend ? "true" : "false",
         },
@@ -1609,6 +1619,9 @@ async function dispatchGitHubWorkflowCommand(command, env) {
       `🗂 Fonti: ${command.sources.join(", ")}`,
       `🕒 Finestra: ultimi ${command.sinceDays} giorni`,
       ...(command.profession ? [`🎯 Professione: ${command.profession}`] : []),
+      ...(command.locationScope
+        ? [`🌍 Area: ${formatLocationScopeLabel(command.locationScope)}`]
+        : []),
       "📬 Ti aggiorno qui appena il run finisce.",
     ].join("\n"),
   };
@@ -1684,8 +1697,34 @@ function buildCancelKeyboard() {
   };
 }
 
+function buildLocationKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "🇮🇹 Italia", callback_data: "cmd|scope|italy" },
+        { text: "🇪🇺 Europa", callback_data: "cmd|scope|europe" },
+      ],
+      [
+        { text: "🇺🇸 USA", callback_data: "cmd|scope|usa" },
+        { text: "🌍 Mondo", callback_data: "cmd|scope|world" },
+      ],
+      [{ text: "❌ Annulla", callback_data: "cmd|cancel" }],
+    ],
+  };
+}
+
 function normalizeProfessionInput(text) {
   return String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function formatLocationScopeLabel(scope) {
+  const labels = {
+    italy: "Italia",
+    europe: "Europa",
+    usa: "USA",
+    world: "Mondo",
+  };
+  return labels[String(scope || "").toLowerCase()] || scope || "default";
 }
 
 async function startInteractiveJobScoutCommand({
@@ -1779,7 +1818,7 @@ async function handleProfessionReply({
 
   await saveCommandSession(env, chatId, userId, {
     ...session,
-    state: "awaiting_days",
+    state: "awaiting_scope",
     profession,
     message_thread_id: messageThreadId || session.message_thread_id || null,
     updated_at: new Date().toISOString(),
@@ -1790,11 +1829,11 @@ async function handleProfessionReply({
     text: [
       "✅ Perfetto, ho salvato il focus.",
       `🎯 Professione: ${profession}`,
-      "⏳ Ora scegli da quanti giorni indietro devo cercare.",
+      "🌍 Ora scegli dove devo cercare.",
     ].join("\n"),
     replyToMessageId: messageId,
     messageThreadId,
-    replyMarkup: buildDaysKeyboard(),
+    replyMarkup: buildLocationKeyboard(),
   }).catch((error) => {
     logError("telegram_command_reply_failed", {
       ...baseLog,
@@ -1810,14 +1849,14 @@ async function handleProfessionReply({
   logInfo("telegram_command_handled", {
     ...baseLog,
     outcome: "ok",
-    reason: "interactive_days_prompt",
+    reason: "interactive_scope_prompt",
     profession,
     telegram_update_type: telegramUpdateType,
   });
   return {
     response: textResponse("OK", 200, baseLog.request_id),
     outcome: "ok",
-    reason: "interactive_days_prompt",
+    reason: "interactive_scope_prompt",
     telegram_update_type: telegramUpdateType,
   };
 }
@@ -1843,6 +1882,54 @@ async function handleTelegramCommandCallback({
       response: textResponse("OK", 200, baseLog.request_id),
       outcome: "ok",
       reason: "interactive_cancelled",
+      telegram_update_type: telegramUpdateType,
+    };
+  }
+
+  if (action === "scope") {
+    const locationScope = String(parts[2] || "").trim().toLowerCase();
+    const session = await loadCommandSession(env, chatId, userId);
+    if (!session || session.state !== "awaiting_scope" || !session.profession) {
+      scheduleAnswer(env, ctx, callback.id, "⏱ Sessione scaduta");
+      return {
+        response: textResponse("Session missing", 200, baseLog.request_id),
+        outcome: "session_missing",
+        reason: "interactive_session_missing",
+        telegram_update_type: telegramUpdateType,
+      };
+    }
+    await saveCommandSession(env, chatId, userId, {
+      ...session,
+      state: "awaiting_days",
+      location_scope: locationScope,
+      updated_at: new Date().toISOString(),
+    });
+    scheduleAnswer(env, ctx, callback.id, "✅ Area salvata");
+    const replyPromise = sendTelegramMessage(env, {
+      chatId,
+      text: [
+        `🎯 Professione: ${session.profession}`,
+        `🌍 Area: ${formatLocationScopeLabel(locationScope)}`,
+        "⏳ Ora scegli da quanti giorni indietro devo cercare.",
+      ].join("\n"),
+      replyToMessageId: callback.message?.message_id,
+      messageThreadId: messageThreadId || session.message_thread_id,
+      replyMarkup: buildDaysKeyboard(),
+    }).catch((error) => {
+      logError("telegram_command_reply_failed", {
+        ...baseLog,
+        error: serializeError(error),
+      });
+    });
+    if (ctx) {
+      ctx.waitUntil(replyPromise);
+    } else {
+      await replyPromise;
+    }
+    return {
+      response: textResponse("OK", 200, baseLog.request_id),
+      outcome: "ok",
+      reason: "interactive_days_prompt",
       telegram_update_type: telegramUpdateType,
     };
   }
@@ -1877,6 +1964,7 @@ async function handleTelegramCommandCallback({
       : DEFAULT_JOBSCOUT_SOURCES.split(","),
     sinceDays,
     profession: session.profession,
+    locationScope: session.location_scope || "",
     forceSend: false,
     runMode: "manual",
     raw: "/jobscout",

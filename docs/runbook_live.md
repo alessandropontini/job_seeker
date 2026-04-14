@@ -69,12 +69,14 @@ Telegram command trigger on the same webhook:
 - `/jobscout`
 - `/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
 - `/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7`
+- `/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=30 profession=IT_Solution_Architect location_scope=world`
 
 Interactive operator flow:
 1. Send `/jobscout`
 2. Reply with the profession/focus text
-3. Tap the day-range button
-4. The worker dispatches GitHub with `profession` + `since_days`
+3. Tap the search area (`Italia`, `Europa`, `USA`, `Mondo`)
+4. Tap the day-range button
+5. The worker dispatches GitHub with `profession` + `location_scope` + `since_days`
 
 Recommended rollout:
 1. Test loop first: Telegram -> Cloudflare -> source probe test -> Cloudflare -> Telegram

@@ -117,6 +117,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--profession",
         help="Runtime profession focus used to filter and rank the digest.",
     )
+    run_parser.add_argument(
+        "--location-scope",
+        choices=("italy", "europe", "usa", "world"),
+        help="Runtime location scope override for manual searches.",
+    )
 
     sources_parser = subparsers.add_parser(
         "sources", help="Inspect available sources"
@@ -176,6 +181,47 @@ def _resolve_run_mode(args: argparse.Namespace, config: dict[str, object]) -> st
 def _write_run_summary(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True, indent=2), encoding="utf-8")
+
+
+def _apply_runtime_location_scope(
+    config: dict[str, object], location_scope: str | None
+) -> None:
+    if not location_scope:
+        return
+    location_rules = config.get("location_rules")
+    if not isinstance(location_rules, dict):
+        location_rules = {}
+    presets = {
+        "italy": {
+            "include_regions": [],
+            "include_countries": ["Italy"],
+            "include_cities": [],
+        },
+        "europe": {
+            "include_regions": ["EU"],
+            "include_countries": [],
+            "include_cities": [],
+        },
+        "usa": {
+            "include_regions": [],
+            "include_countries": ["USA"],
+            "include_cities": [],
+        },
+        "world": {
+            "include_regions": [],
+            "include_countries": [],
+            "include_cities": [],
+        },
+    }
+    preset = presets.get(location_scope)
+    if not preset:
+        return
+    location_rules.update(preset)
+    exclude_countries = list(location_rules.get("exclude_countries", []))
+    if "UK" not in exclude_countries:
+        exclude_countries.append("UK")
+    location_rules["exclude_countries"] = exclude_countries
+    config["location_rules"] = location_rules
 
 
 def _runtime_clock_snapshot(timezone_name: str) -> tuple[str, str]:
@@ -273,8 +319,13 @@ def main(argv: List[str] | None = None) -> int:
         profession_query = (
             args.profession or os.getenv("JOB_SCOUT_PROFESSION_QUERY", "")
         ).strip()
+        location_scope = (
+            args.location_scope or os.getenv("JOB_SCOUT_LOCATION_SCOPE", "")
+        ).strip().lower()
         runtime_config["profession_query"] = profession_query or None
+        runtime_config["location_scope"] = location_scope or None
         config["runtime"] = runtime_config
+        _apply_runtime_location_scope(config, runtime_config["location_scope"])
         force_send = bool(args.force_send or run_mode == "manual")
         feedback_fetch_reason = "not_requested"
         feedback_items_count = 0
@@ -419,6 +470,7 @@ def main(argv: List[str] | None = None) -> int:
             "source": selected_sources or config.get("sources", {}).get("enabled", []),
             "since_days": args.since_days,
             "profession_query": profession_query or None,
+            "location_scope": location_scope or None,
             "window_start": notification.window_start,
             "window_end": notification.window_end,
             "timezone": summary_timezone,

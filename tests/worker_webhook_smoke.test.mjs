@@ -465,10 +465,11 @@ maybeTest("parseTelegramCommand decodes explicit profession option", async () =>
   const module = await loadWorkerModule();
   const { parseTelegramCommand } = module;
   const parsed = parseTelegramCommand(
-    "/jobscout mode=github since_days=14 profession=IT_Solution_Architect"
+    "/jobscout mode=github since_days=14 profession=IT_Solution_Architect location_scope=europe"
   );
   assert.equal(parsed.ok, true);
   assert.equal(parsed.value.profession, "IT Solution Architect");
+  assert.equal(parsed.value.locationScope, "europe");
 });
 
 maybeTest("telegram webhook opens interactive profession prompt for bare /jobscout", async () => {
@@ -501,7 +502,7 @@ maybeTest("telegram webhook opens interactive profession prompt for bare /jobsco
   assert.equal(body.reply_markup.inline_keyboard[0][0].text, "❌ Annulla");
 });
 
-maybeTest("telegram webhook stores profession reply and shows day menu", async () => {
+maybeTest("telegram webhook stores profession reply and shows location menu", async () => {
   const fetchMock = createTelegramCommandFetchMock();
   const module = await loadWorkerModule({
     fetchOverride: fetchMock.fetch,
@@ -528,18 +529,56 @@ maybeTest("telegram webhook stores profession reply and shows day menu", async (
   );
   assert.equal(response.status, 200);
   const session = await kv.get("command:123456:42", "json");
-  assert.equal(session.state, "awaiting_days");
+  assert.equal(session.state, "awaiting_scope");
   assert.equal(session.profession, "IT Solution Architect");
   const telegramSend = fetchMock.calls.find((call) =>
     String(call.url).includes("/sendMessage")
   );
   const body = JSON.parse(telegramSend.options.body);
   assert.match(body.text, /Professione: IT Solution Architect/);
-  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "🗓 7 giorni");
+  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "🇮🇹 Italia");
   assert.equal(body.reply_markup.inline_keyboard[2][0].text, "❌ Annulla");
 });
 
-maybeTest("telegram command callback dispatches github with profession input", async () => {
+maybeTest("telegram command callback stores location scope and shows day menu", async () => {
+  const fetchMock = createTelegramCommandFetchMock();
+  const module = await loadWorkerModule({
+    fetchOverride: fetchMock.fetch,
+  });
+  const worker = module.default;
+  const kv = new MockKV({
+    "command:123456:42": JSON.stringify({
+      state: "awaiting_scope",
+      mode: "github",
+      sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
+      profession: "IT Solution Architect",
+    }),
+  });
+  const env = buildEnv({
+    secret: "topsecret",
+    kv,
+    telegramToken: "token",
+  });
+  const response = await worker.fetch(
+    buildCommandCallbackRequest({
+      secretHeader: "topsecret",
+      data: "cmd|scope|europe",
+    }),
+    env
+  );
+  assert.equal(response.status, 200);
+  const session = await kv.get("command:123456:42", "json");
+  assert.equal(session.state, "awaiting_days");
+  assert.equal(session.location_scope, "europe");
+  const telegramSend = fetchMock.calls.find((call) =>
+    String(call.url).includes("/sendMessage")
+  );
+  const body = JSON.parse(telegramSend.options.body);
+  assert.match(body.text, /Area: Europa/);
+  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "🗓 7 giorni");
+});
+
+maybeTest("telegram command callback dispatches github with profession and location input", async () => {
   const fetchMock = createTelegramCommandFetchMock();
   const module = await loadWorkerModule({
     fetchOverride: fetchMock.fetch,
@@ -551,6 +590,7 @@ maybeTest("telegram command callback dispatches github with profession input", a
       mode: "github",
       sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
       profession: "IT Solution Architect",
+      location_scope: "europe",
     }),
   });
   const env = buildEnv({
@@ -577,6 +617,7 @@ maybeTest("telegram command callback dispatches github with profession input", a
   const dispatchPayload = JSON.parse(githubDispatch.options.body);
   assert.equal(dispatchPayload.inputs.since_days, "30");
   assert.equal(dispatchPayload.inputs.profession, "IT Solution Architect");
+  assert.equal(dispatchPayload.inputs.location_scope, "europe");
   const session = await kv.get("command:123456:42");
   assert.equal(session, null);
 });
@@ -644,6 +685,7 @@ maybeTest("telegram webhook handles /jobscout message in github mode and dispatc
   assert.equal(dispatchPayload.inputs.sources, "remotive,wwr");
   assert.equal(dispatchPayload.inputs.since_days, "3");
   assert.equal(dispatchPayload.inputs.profession, "");
+  assert.equal(dispatchPayload.inputs.location_scope, "");
   const telegramSend = fetchMock.calls.find((call) =>
     String(call.url).includes("/sendMessage")
   );

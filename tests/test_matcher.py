@@ -395,6 +395,26 @@ def test_profession_query_accepts_matching_architect_role(base_config, region_da
     assert "profession_not_targeted" not in result.hard_reject_reasons
 
 
+def test_location_rules_allow_anywhere_when_scope_is_world(base_config, region_data):
+    base_config["location_rules"]["include_regions"] = []
+    base_config["location_rules"]["include_countries"] = []
+    base_config["location_rules"]["include_cities"] = []
+    posting = _posting(
+        title="Head of Data Governance",
+        location_text="Toronto, Canada",
+        location_country="Canada",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert result.location_fit == "allowed_anywhere"
+
+
 def test_accepts_lead_title(base_config, region_data):
     posting = _posting(title="Data Lead")
     _, result = match_posting(

@@ -19,6 +19,10 @@ on:
         description: "Optional profession/query focus for this manual run"
         required: false
         default: ""
+      location_scope:
+        description: "Optional location scope override (italy/europe/usa/world)"
+        required: false
+        default: ""
       force_send:
         description: "Force Telegram send even when zero matches"
         required: false
@@ -221,6 +225,7 @@ jobs:
           sources_value="${{ inputs.sources || inputs.source || 'remotive' }}"
           since_days="${{ inputs.since_days || '1' }}"
           profession="${{ inputs.profession || '' }}"
+          location_scope="${{ inputs.location_scope || '' }}"
           force_send="${{ inputs.force_send && '1' || '0' }}"
           run_mode="${{ inputs.run_mode || 'manual' }}"
           args=(
@@ -235,6 +240,9 @@ jobs:
           )
           if [[ -n "${profession}" ]]; then
             args+=(--profession "${profession}")
+          fi
+          if [[ -n "${location_scope}" ]]; then
+            args+=(--location-scope "${location_scope}")
           fi
           if [[ "${force_send}" == "1" || "${run_mode}" == "manual" ]]; then
             args+=(--force-send)

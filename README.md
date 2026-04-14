@@ -103,6 +103,7 @@ Key sections:
 - `digest.selection.step`: decremento soglia ad ogni iterazione (default: 5).
 - Telegram command replies are intentionally short and operator-friendly: the Worker confirms when a GitHub run starts, zero-result runs explain the outcome in plain language, and the most important messages use light emoji markers for fast scanning while still pointing to `out/run_summary.json` for diagnostics.
 - In manual runs, `since_days` now affects both fetch and digest selection. Example: `/jobscout mode=github since_days=30` searches and selects across the last 30 days instead of keeping a 24h digest window with a fallback.
+- Manual runs also support a runtime geography override via `location_scope` / `--location-scope`, so Telegram or CLI searches can temporarily target `italy`, `europe`, `usa`, or `world` without editing the base config.
 
 ## Usage
 Run the pipeline (defaults to configured sources or `dummy`):
@@ -114,6 +115,11 @@ python -m job_scout run --since-days 7
 Run the pipeline with isolated state files:
 ```bash
 python -m job_scout run --state-suffix dummy_e2e
+```
+
+Run a manual search with runtime focus and geography override:
+```bash
+python -m job_scout run --sources remotive,wwr,arbeitnow,greenhouse --since-days 30 --profession "IT Solution Architect" --location-scope world --run-mode manual --force-send
 ```
 
 Run in strict mode (reject missing location data; salary gaps are still allowed):
@@ -374,21 +380,24 @@ Simplest interactive flow:
 
 The bot now opens a guided menu:
 1. asks for the profession/focus to search (for example `Data Governance Manager` or `IT Solution Architect`)
-2. shows day-range buttons (`7`, `14`, `30`, `60`)
-3. dispatches the GitHub workflow with that runtime profession focus
+2. asks where to search (`Italia`, `Europa`, `USA`, `Mondo`)
+3. shows day-range buttons (`7`, `14`, `30`, `60`)
+4. dispatches the GitHub workflow with that runtime profession focus and location scope
 
-That runtime profession is not just cosmetic: it is passed through the workflow/CLI into the matcher and scoring, so the manual digest is filtered and ranked against the requested profession instead of using only the static repo profile.
+That runtime profession is not just cosmetic: it is passed through the workflow/CLI into the matcher and scoring, so the manual digest is filtered and ranked against the requested profession instead of using only the static repo profile. The location choice is also real: it overrides the runtime location rules for that search without changing `config/config.yaml`.
 
 Command syntax:
 ```text
 /jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7
 /jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7
+/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=30 profession=IT_Solution_Architect location_scope=world
 ```
 
 - `mode=test`: Cloudflare fetches the configured public sources and replies on Telegram with counts.
 - `mode=github`: Cloudflare dispatches the configured workflow and replies with an acknowledgement.
 - `sources`: comma-separated list. `linkedin` is accepted only as a manual-only placeholder and is not crawled.
 - `profession`: optional explicit runtime focus for power-users using the full command syntax. Example: `/jobscout mode=github since_days=30 profession=IT_Solution_Architect`
+- `location_scope`: optional runtime geography override for power-users using the full command syntax. Allowed values: `italy`, `europe`, `usa`, `world`.
 
 ## Telegram notifications (Phase 6 live)
 - Telegram is always enabled by default (`notifications.telegram.enabled: true`).

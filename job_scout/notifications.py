@@ -191,6 +191,9 @@ def maybe_notify(
     profession_query = str(
         runtime_config.get("profession_query") or ""
     ).strip()
+    location_scope = str(
+        runtime_config.get("location_scope") or ""
+    ).strip()
     digest_tz = ZoneInfo(timezone_name)
     now_local = now.astimezone(digest_tz)
     target_date_local = (now_local - timedelta(days=1)).date()
@@ -534,6 +537,7 @@ def maybe_notify(
         run_mode=run_mode,
         force_send=force_send,
         profession_query=profession_query,
+        location_scope=location_scope,
         reason_when_zero=reason_when_zero,
     )
     _persist_payload(
@@ -1289,6 +1293,7 @@ def _build_message_payloads(
     run_mode: str,
     force_send: bool,
     profession_query: str = "",
+    location_scope: str = "",
     reason_when_zero: str | None = None,
 ) -> list[dict[str, object]]:
     if digest_count == 0:
@@ -1331,6 +1336,7 @@ def _build_message_payloads(
                 f"{headline}\n"
                 f"{detail}\n"
                 f"{_format_profession_focus_line(profession_query)}\n"
+                f"{_format_location_scope_line(location_scope)}\n"
                 f"{context_line}\n"
                 "📄 Se vuoi approfondire, controlla `out/run_summary.json`."
             )
@@ -1346,6 +1352,7 @@ def _build_message_payloads(
                     digest_mode=digest_mode,
                     selection_window_days=selection_window_days,
                     profession_query=profession_query,
+                    location_scope=location_scope,
                 )
             }
         )
@@ -1397,16 +1404,19 @@ def _format_digest_header(
     digest_mode: str,
     selection_window_days: int,
     profession_query: str = "",
+    location_scope: str = "",
 ) -> str:
     mode_label = digest_mode
     if digest_mode == "LOW_CONFIDENCE":
         mode_label = "LOW_CONFIDENCE (anti-zero)"
     focus_line = _format_profession_focus_line(profession_query)
+    location_line = _format_location_scope_line(location_scope)
     if digest_scope == "fallback_recent":
         return (
             "Job Scout — Daily Digest (fallback)\n"
             f"Total in digest: {digest_count}\n"
             f"{focus_line}\n"
+            f"{location_line}\n"
             f"Mode: {mode_label}"
         )
     if digest_scope == "manual_since_days":
@@ -1414,12 +1424,14 @@ def _format_digest_header(
             f"Job Scout — Manual Digest (last {selection_window_days}d)\n"
             f"Total in digest: {digest_count}\n"
             f"{focus_line}\n"
+            f"{location_line}\n"
             f"Mode: {mode_label}"
         )
     return (
         f"Job Scout — Daily Digest (last {window_hours}h)\n"
         f"Total in digest: {digest_count}\n"
         f"{focus_line}\n"
+        f"{location_line}\n"
         f"Mode: {mode_label}"
     )
 
@@ -1455,6 +1467,17 @@ def _format_profession_focus_line(profession_query: str) -> str:
     if not cleaned:
         return "🎯 Focus: profilo CV predefinito"
     return f"🎯 Focus: {cleaned}"
+
+
+def _format_location_scope_line(location_scope: str) -> str:
+    scope = str(location_scope or "").strip().lower()
+    labels = {
+        "italy": "🇮🇹 Italia",
+        "europe": "🇪🇺 Europa",
+        "usa": "🇺🇸 USA",
+        "world": "🌍 Mondo",
+    }
+    return f"🌐 Area: {labels.get(scope, 'profilo CV predefinito')}"
 
 
 def _build_feedback_job_map(
