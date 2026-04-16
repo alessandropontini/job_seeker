@@ -12,6 +12,18 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "sources": {
         "enabled": ["dummy"],
         "placeholders": [],
+        "ashby": {
+            "boards": [
+                "Ashby",
+                "Omnea",
+                "Pleo",
+                "Vanta",
+                "Writer",
+                "Airbyte",
+                "Astronomer",
+                "Linear",
+            ]
+        },
         "greenhouse": {
             "boards": [
                 "datadog",
@@ -24,7 +36,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                 "n26",
             ]
         },
-        "lever": {"companies": []},
+        "lever": {"companies": ["plaid", "wealthfront"]},
     },
     "regions_path": "config/regions.json",
     "location_rules": {

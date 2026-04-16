@@ -8,6 +8,16 @@ sources:
   enabled:
     - dummy
   placeholders: []
+  ashby:
+    boards:
+      - Ashby
+      - Omnea
+      - Pleo
+      - Vanta
+      - Writer
+      - Airbyte
+      - Astronomer
+      - Linear
   greenhouse:
     boards:
       - datadog
@@ -19,7 +29,9 @@ sources:
       - contentful
       - n26
   lever:
-    companies: []
+    companies:
+      - plaid
+      - wealthfront
 
 regions_path: config/regions.json
 

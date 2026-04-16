@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from typing import Callable
 
 from job_scout.normalize import SourceJob
+from job_scout.sources.ashby import (
+    ASHBY_BOARD_API_TEMPLATE,
+    ASHBY_DEFAULT_BOARDS,
+    fetch_ashby,
+)
 from job_scout.sources.arbeitnow import fetch_arbeitnow
 from job_scout.sources.dummy import fetch_dummy
 from job_scout.sources.greenhouse import (
@@ -66,6 +71,17 @@ SOURCE_CATALOG = {
         transport="api",
         attribution="Arbeitnow free public Job Board API",
         fetcher=fetch_arbeitnow,
+    ),
+    "ashby": SourceCatalogEntry(
+        name="ashby",
+        site_url="https://www.ashbyhq.com/",
+        access_url=ASHBY_BOARD_API_TEMPLATE.format(board="{board_name}"),
+        transport="api",
+        attribution=(
+            "Ashby public Posting API over curated public boards: "
+            + ", ".join(ASHBY_DEFAULT_BOARDS)
+        ),
+        fetcher=fetch_ashby,
     ),
     "greenhouse": SourceCatalogEntry(
         name="greenhouse",

@@ -14,7 +14,7 @@ import urllib.request
 from job_scout.normalize import SourceJob
 
 LEVER_POSTINGS_API_TEMPLATE = "https://api.lever.co/v0/postings/{company}?mode=json"
-LEVER_DEFAULT_COMPANIES: list[str] = []
+LEVER_DEFAULT_COMPANIES: list[str] = ["plaid", "wealthfront"]
 _WHITESPACE_RE = re.compile(r"\s+")
 
 

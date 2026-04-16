@@ -1,7 +1,7 @@
 const REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs";
 const WWR_RSS_URL = "https://weworkremotely.com/remote-jobs.rss";
 const ARBEITNOW_API_URL = "https://www.arbeitnow.com/api/job-board-api";
-const DEFAULT_JOBSCOUT_SOURCES = "remotive,wwr,arbeitnow,greenhouse";
+const DEFAULT_JOBSCOUT_SOURCES = "remotive,wwr,arbeitnow,greenhouse,ashby";
 const LIVE_RUN_TTL_SECONDS = 60 * 60 * 24 * 14;
 const MIN_SESSION_TTL_SECONDS = 60 * 60 * 24;
 const COMMAND_SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -1548,7 +1548,7 @@ async function runTelegramSearchTest(command) {
 
   lines.push("");
   lines.push(
-    "🚀 Per avviare GitHub: /jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7"
+    "🚀 Per avviare GitHub: /jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse,ashby since_days=7"
   );
   return {
     ok: results.some((item) => item.ok),

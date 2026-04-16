@@ -512,7 +512,7 @@ maybeTest("telegram webhook stores profession reply and shows location menu", as
     "command:123456:42": JSON.stringify({
       state: "awaiting_profession",
       mode: "github",
-      sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
+      sources: ["remotive", "wwr", "arbeitnow", "greenhouse", "ashby"],
     }),
   });
   const env = buildEnv({
@@ -550,7 +550,7 @@ maybeTest("telegram command callback stores location scope and shows day menu", 
     "command:123456:42": JSON.stringify({
       state: "awaiting_scope",
       mode: "github",
-      sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
+      sources: ["remotive", "wwr", "arbeitnow", "greenhouse", "ashby"],
       profession: "IT Solution Architect",
     }),
   });
@@ -588,7 +588,7 @@ maybeTest("telegram command callback dispatches github with profession and locat
     "command:123456:42": JSON.stringify({
       state: "awaiting_days",
       mode: "github",
-      sources: ["remotive", "wwr", "arbeitnow", "greenhouse"],
+      sources: ["remotive", "wwr", "arbeitnow", "greenhouse", "ashby"],
       profession: "IT Solution Architect",
       location_scope: "europe",
     }),

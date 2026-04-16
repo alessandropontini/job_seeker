@@ -53,10 +53,11 @@ bash tools/install_dev_deps.sh
 Edit `config/config.yaml` to adjust defaults. Missing fields fall back to defaults in `job_scout/config.py`.
 
 Key sections:
-- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`, `arbeitnow`, `greenhouse`, `lever`).
+- `sources.enabled`: list of source names to run (`dummy`, `remotive`, `wwr`, `arbeitnow`, `ashby`, `greenhouse`, `lever`).
 - `arbeitnow` normalization now infers `Germany` for city-only locations when the posting description explicitly references Germany, reducing false `location_not_allowed` rejects for German jobs such as `Munich` or `Berlin`.
+- `sources.ashby.boards`: curated Ashby public board names. The default set is tuned to add broad tech hiring volume from public Ashby-hosted boards (`Ashby`, `Omnea`, `Pleo`, `Vanta`, `Writer`, `Airbyte`, `Astronomer`, `Linear`).
 - `sources.greenhouse.boards`: curated Greenhouse public board tokens. The default set is tuned for companies with meaningful EU/data hiring volume (`datadog`, `mongodb`, `sumup`, `doctolib`, `elastic`, `monzo`, `contentful`, `n26`).
-- `sources.lever.companies`: optional Lever company slugs. Lever support is integrated, but you should curate these explicitly because generic Lever boards often skew toward sales/commercial roles.
+- `sources.lever.companies`: curated Lever company slugs. The defaults are intentionally conservative (`plaid`, `wealthfront`) because many public Lever boards skew toward sales/commercial roles.
 - `regions_path`: path to region/country mapping data (default: `config/regions.json`).
 - `location_rules`: include EU/Italy/New York only; `exclude_countries` must include `UK`.
 - `location_rules.allow_unknown_location`: keep jobs with unknown location (adds a penalty).
@@ -119,7 +120,7 @@ python -m job_scout run --state-suffix dummy_e2e
 
 Run a manual search with runtime focus and geography override:
 ```bash
-python -m job_scout run --sources remotive,wwr,arbeitnow,greenhouse --since-days 30 --profession "IT Solution Architect" --location-scope world --run-mode manual --force-send
+python -m job_scout run --sources remotive,wwr,arbeitnow,greenhouse,ashby --since-days 30 --profession "IT Solution Architect" --location-scope world --run-mode manual --force-send
 ```
 
 Run in strict mode (reject missing location data; salary gaps are still allowed):
@@ -388,9 +389,9 @@ That runtime profession is not just cosmetic: it is passed through the workflow/
 
 Command syntax:
 ```text
-/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse since_days=7
-/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=7
-/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse since_days=30 profession=IT_Solution_Architect location_scope=world
+/jobscout mode=test sources=remotive,wwr,arbeitnow,greenhouse,ashby since_days=7
+/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse,ashby since_days=7
+/jobscout mode=github sources=remotive,wwr,arbeitnow,greenhouse,ashby since_days=30 profession=IT_Solution_Architect location_scope=world
 ```
 
 - `mode=test`: Cloudflare fetches the configured public sources and replies on Telegram with counts.
