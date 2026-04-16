@@ -113,6 +113,25 @@ def compute_score(
             _format_keyword_bonus("profession_query", profession_matches)
         )
 
+    architecture_core_overlap = architecture_matches or [
+        keyword
+        for keyword in description_core_matches
+        if "architecture" in keyword.lower()
+    ]
+    if architecture_core_overlap and (role_matches or managerial_matches):
+        score += 8
+        applied_bonuses.append("multi_source_architecture_core")
+
+    if platform_matches and description_core_matches:
+        score += 6
+        applied_bonuses.append("platform_domain_overlap")
+
+    if posting.source in {"greenhouse", "ashby"} and (
+        architecture_core_overlap or title_core_matches or role_matches
+    ):
+        score += 4
+        applied_bonuses.append(f"source_signal:{posting.source}")
+
     if managerial_matches:
         score += 15
         applied_bonuses.append(

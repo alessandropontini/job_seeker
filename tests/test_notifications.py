@@ -131,6 +131,51 @@ def test_filter_rows_for_digest_scope_excludes_off_scope_rows():
     assert [row.posting.id for row in filtered] == ["alpha"]
 
 
+def test_channel_rows_prefers_source_company_diversity_early():
+    alpha = _make_row("alpha", 90, [])
+    alpha.posting.source = "greenhouse"
+    alpha.posting.company = "MongoDB"
+    beta = _make_row("beta", 88, [])
+    beta.posting.source = "greenhouse"
+    beta.posting.company = "MongoDB"
+    gamma = _make_row("gamma", 85, [])
+    gamma.posting.source = "ashby"
+    gamma.posting.company = "Vanta"
+
+    rows = notifications._channel_rows([alpha, beta, gamma], [])
+
+    assert [row.posting.id for _channel, row in rows][:2] == ["alpha", "gamma"]
+
+
+def test_low_confidence_fallback_interleaves_source_company_clusters():
+    alpha = _make_row("alpha", 18, [])
+    alpha.posting.source = "greenhouse"
+    alpha.posting.company = "MongoDB"
+    beta = _make_row("beta", 16, [])
+    beta.posting.source = "greenhouse"
+    beta.posting.company = "MongoDB"
+    gamma = _make_row("gamma", 14, [])
+    gamma.posting.source = "ashby"
+    gamma.posting.company = "Vanta"
+
+    selected, mode, anti_zero_triggered, _final_threshold, _selected_count = (
+        notifications.select_digest_items(
+            [alpha, beta, gamma],
+            fetched_count=3,
+            min_results=5,
+            high_threshold=70,
+            low_threshold=40,
+            step=5,
+            force_send=True,
+            run_mode="manual",
+        )
+    )
+
+    assert mode == "LOW_CONFIDENCE"
+    assert anti_zero_triggered is True
+    assert [row.posting.id for row in selected][:2] == ["alpha", "gamma"]
+
+
 def test_select_digest_items_adaptive_or_low_confidence():
     scored_jobs = [
         _make_row("alpha", 66, []),

@@ -265,6 +265,33 @@ def test_profession_query_adds_scoring_bonus():
     )
 
 
+def test_architecture_and_platform_overlap_gets_multi_source_bonus():
+    config = deepcopy(DEFAULT_CONFIG)
+    posting = _posting(
+        source="ashby",
+        title="Enterprise Data Architect",
+        description_snippet=(
+            "Lead data architecture, metadata and platform standards on "
+            "BigQuery and Databricks."
+        ),
+        tags=["data platform"],
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert scored.score is not None
+    assert "multi_source_architecture_core" in scored.score_bonuses
+    assert "platform_domain_overlap" in scored.score_bonuses
+    assert "source_signal:ashby" in scored.score_bonuses
+
+
 def test_multi_profession_query_adds_scoring_bonus_from_matching_role():
     config = deepcopy(DEFAULT_CONFIG)
     config["runtime"][

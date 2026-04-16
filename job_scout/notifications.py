@@ -122,7 +122,9 @@ def select_digest_items(
     if len(selected) < target_results and fetched_count > 0:
         anti_zero_triggered = True
         mode = "LOW_CONFIDENCE"
-        fallback_pool = positive_scored_jobs or sorted_jobs
+        fallback_pool = _diversify_digest_candidates(
+            positive_scored_jobs or sorted_jobs
+        )
         selected = fallback_pool[: min(target_results, len(fallback_pool))]
 
     if (
@@ -134,7 +136,9 @@ def select_digest_items(
     ):
         anti_zero_triggered = True
         mode = "LOW_CONFIDENCE"
-        fallback_pool = positive_scored_jobs or sorted_jobs
+        fallback_pool = _diversify_digest_candidates(
+            positive_scored_jobs or sorted_jobs
+        )
         selected = fallback_pool[:1]
 
     return selected, mode, anti_zero_triggered, threshold, len(selected)
@@ -1047,11 +1051,69 @@ def _channel_rows(
     data_only_rows: Sequence[ReportRow],
 ) -> list[tuple[str, ReportRow]]:
     channel_rows: list[tuple[str, ReportRow]] = []
-    for row in _unique_rows(list(top_rows)):
+    for row in _diversify_rows(_unique_rows(list(top_rows))):
         channel_rows.append(("top_matches", row))
-    for row in _unique_rows(list(data_only_rows)):
+    for row in _diversify_rows(_unique_rows(list(data_only_rows))):
         channel_rows.append(("data_only_best_picks", row))
     return channel_rows
+
+
+def _diversify_rows(rows: Sequence[ReportRow]) -> list[ReportRow]:
+    """Preserve order while limiting early clustering by source/company."""
+
+    if len(rows) <= 2:
+        return list(rows)
+
+    primary: list[ReportRow] = []
+    deferred: list[ReportRow] = []
+    seen_sources: set[str] = set()
+    seen_companies: set[str] = set()
+
+    for row in rows:
+        source = (row.posting.source or "").strip().lower()
+        company = (row.posting.company or "").strip().lower()
+        if source not in seen_sources and company not in seen_companies:
+            primary.append(row)
+            if source:
+                seen_sources.add(source)
+            if company:
+                seen_companies.add(company)
+        else:
+            deferred.append(row)
+
+    return primary + deferred
+
+
+def _diversify_digest_candidates(rows: Sequence[ReportRow]) -> list[ReportRow]:
+    """Interleave rows to reduce early clustering by source/company."""
+
+    if len(rows) <= 2:
+        return list(rows)
+
+    buckets: dict[tuple[str, str], list[ReportRow]] = {}
+    order: list[tuple[str, str]] = []
+    for row in rows:
+        key = (
+            (row.posting.source or "").strip().lower(),
+            (row.posting.company or "").strip().lower(),
+        )
+        if key not in buckets:
+            buckets[key] = []
+            order.append(key)
+        buckets[key].append(row)
+
+    diversified: list[ReportRow] = []
+    while order:
+        next_order: list[tuple[str, str]] = []
+        for key in order:
+            bucket = buckets[key]
+            if not bucket:
+                continue
+            diversified.append(bucket.pop(0))
+            if bucket:
+                next_order.append(key)
+        order = next_order
+    return diversified
 
 
 def _should_skip_digest(

@@ -400,6 +400,7 @@ Command syntax:
 - `profession`: optional explicit runtime focus for power-users using the full command syntax. You can pass multiple roles separated by commas. Example: `/jobscout mode=github since_days=30 profession=Data_Architect,IT_Solution_Architect`
 - `location_scope`: optional runtime geography override for power-users using the full command syntax. Allowed values: `italy`, `europe`, `usa`, `world`.
 - Accepted jobs now show `CV fit %` in report and Telegram digest output, so a generic profession search can still run while making your personal profile overlap visible.
+- Multi-source ranking now gives extra weight to jobs where architecture, data-domain, and platform signals overlap in the same posting, and the Telegram digest applies light source/company diversification so the first results are less likely to be clustered from a single board or employer.
 
 ## Telegram notifications (Phase 6 live)
 - Telegram is always enabled by default (`notifications.telegram.enabled: true`).
