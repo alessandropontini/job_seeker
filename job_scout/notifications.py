@@ -65,6 +65,9 @@ class NotificationResult:
     threshold_final: int = 70
     min_results: int = 5
     window_rows_count: int = 0
+    accepted_global_count: int = 0
+    accepted_in_scope_count: int = 0
+    accepted_out_of_scope_count: int = 0
     selection_pool_count: int = 0
     selected_count: int = 0
     digest_top_matches_count: int = 0
@@ -255,14 +258,19 @@ def maybe_notify(
     threshold_step = _parse_int(digest_settings.get("step", 5), 5)
     effective_fetched_count = fetched_count if fetched_count is not None else len(rows)
 
-    hard_filtered_candidates = [
+    accepted_global_rows = [
         row
         for row in rows
         if _is_candidate_after_hard_filters(row)
     ]
+    accepted_global_count = len(accepted_global_rows)
     hard_filtered_candidates = _filter_rows_for_digest_scope(
-        hard_filtered_candidates,
+        accepted_global_rows,
         location_scope=location_scope,
+    )
+    accepted_in_scope_count = len(hard_filtered_candidates)
+    accepted_out_of_scope_count = max(
+        0, accepted_global_count - accepted_in_scope_count
     )
     selection_pool = [
         row for row in daily_rows if _is_candidate_after_hard_filters(row)
@@ -430,6 +438,9 @@ def maybe_notify(
             digest_payload,
             summary=_build_run_summary(
                 window_rows_count=window_rows_count,
+                accepted_global_count=accepted_global_count,
+                accepted_in_scope_count=accepted_in_scope_count,
+                accepted_out_of_scope_count=accepted_out_of_scope_count,
                 selection_pool_count=selection_pool_count,
                 selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
@@ -464,6 +475,9 @@ def maybe_notify(
             threshold_final=final_threshold,
             min_results=min_results,
             window_rows_count=window_rows_count,
+            accepted_global_count=accepted_global_count,
+            accepted_in_scope_count=accepted_in_scope_count,
+            accepted_out_of_scope_count=accepted_out_of_scope_count,
             selection_pool_count=selection_pool_count,
             selected_count=selected_count,
             digest_top_matches_count=len(channel_selection.top_matches),
@@ -489,6 +503,9 @@ def maybe_notify(
             digest_payload,
             summary=_build_run_summary(
                 window_rows_count=window_rows_count,
+                accepted_global_count=accepted_global_count,
+                accepted_in_scope_count=accepted_in_scope_count,
+                accepted_out_of_scope_count=accepted_out_of_scope_count,
                 selection_pool_count=selection_pool_count,
                 selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
@@ -519,6 +536,9 @@ def maybe_notify(
             threshold_final=final_threshold,
             min_results=min_results,
             window_rows_count=window_rows_count,
+            accepted_global_count=accepted_global_count,
+            accepted_in_scope_count=accepted_in_scope_count,
+            accepted_out_of_scope_count=accepted_out_of_scope_count,
             selection_pool_count=selection_pool_count,
             selected_count=selected_count,
             digest_top_matches_count=len(channel_selection.top_matches),
@@ -555,6 +575,8 @@ def maybe_notify(
         profession_query=profession_query,
         location_scope=location_scope,
         reason_when_zero=reason_when_zero,
+        accepted_in_scope_count=accepted_in_scope_count,
+        accepted_out_of_scope_count=accepted_out_of_scope_count,
     )
     _persist_payload(
         output_dir=output_dir,
@@ -666,6 +688,9 @@ def maybe_notify(
             digest_payload,
             summary=_build_run_summary(
                 window_rows_count=window_rows_count,
+                accepted_global_count=accepted_global_count,
+                accepted_in_scope_count=accepted_in_scope_count,
+                accepted_out_of_scope_count=accepted_out_of_scope_count,
                 selection_pool_count=selection_pool_count,
                 selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
@@ -712,6 +737,9 @@ def maybe_notify(
             digest_payload,
             summary=_build_run_summary(
                 window_rows_count=window_rows_count,
+                accepted_global_count=accepted_global_count,
+                accepted_in_scope_count=accepted_in_scope_count,
+                accepted_out_of_scope_count=accepted_out_of_scope_count,
                 selection_pool_count=selection_pool_count,
                 selected_count=selected_count,
                 top_count=len(channel_selection.top_matches),
@@ -737,6 +765,9 @@ def maybe_notify(
         "run_mode": run_mode,
         "timezone": timezone_name,
         "window_rows_count": window_rows_count,
+        "accepted_global_count": accepted_global_count,
+        "accepted_in_scope_count": accepted_in_scope_count,
+        "accepted_out_of_scope_count": accepted_out_of_scope_count,
         "selection_pool_count": selection_pool_count,
         "selected_count": selected_count,
         "digest_count": digest_count,
@@ -770,6 +801,9 @@ def maybe_notify(
         threshold_final=final_threshold,
         min_results=min_results,
         window_rows_count=window_rows_count,
+        accepted_global_count=accepted_global_count,
+        accepted_in_scope_count=accepted_in_scope_count,
+        accepted_out_of_scope_count=accepted_out_of_scope_count,
         selection_pool_count=selection_pool_count,
         selected_count=selected_count,
         digest_top_matches_count=len(channel_selection.top_matches),
@@ -1304,6 +1338,9 @@ def _build_digest_payload(
 def _build_run_summary(
     *,
     window_rows_count: int,
+    accepted_global_count: int,
+    accepted_in_scope_count: int,
+    accepted_out_of_scope_count: int,
     selection_pool_count: int,
     selected_count: int,
     top_count: int,
@@ -1318,6 +1355,9 @@ def _build_run_summary(
 ) -> dict[str, int | bool | str]:
     summary: dict[str, int | bool | str] = {
         "window_rows_count": window_rows_count,
+        "accepted_global_count": accepted_global_count,
+        "accepted_in_scope_count": accepted_in_scope_count,
+        "accepted_out_of_scope_count": accepted_out_of_scope_count,
         "selection_pool_count": selection_pool_count,
         "selected_count": selected_count,
         "top_matches_count": top_count,
@@ -1369,6 +1409,8 @@ def _build_message_payloads(
     profession_query: str = "",
     location_scope: str = "",
     reason_when_zero: str | None = None,
+    accepted_in_scope_count: int = 0,
+    accepted_out_of_scope_count: int = 0,
 ) -> list[dict[str, object]]:
     if digest_count == 0:
         headline = "🔎 Oggi non ho trovato offerte davvero in linea."
@@ -1404,6 +1446,18 @@ def _build_message_payloads(
                 detail = (
                     "🧱 Le offerte viste ci sono state nella finestra richiesta, "
                     "ma nessuna ha passato i vincoli più importanti."
+                )
+        if accepted_out_of_scope_count > 0:
+            detail = (
+                f"🧭 Ho trovato {accepted_out_of_scope_count} offerte coerenti con la professione, "
+                "ma fuori dall'area scelta."
+            )
+            if accepted_in_scope_count == 0:
+                context_line = (
+                    f"Contesto: digest=0, in_area=0, fuori_area={accepted_out_of_scope_count}, "
+                    f"run_mode={run_mode}, "
+                    f"{'finestra=' + str(selection_window_days) + 'd, ' if run_mode == 'manual' and selection_window_days > 1 else ''}"
+                    f"force_send={str(force_send).lower()}"
                 )
         return [{
             "text": (

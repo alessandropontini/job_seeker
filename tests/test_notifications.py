@@ -80,6 +80,15 @@ def _make_rejected_row(job_id: str, reason: str) -> ReportRow:
     )
     return ReportRow(posting=posting, match=match)
 
+
+def _make_accepted_out_of_scope_row(
+    job_id: str, country: str, location_text: str
+) -> ReportRow:
+    row = _make_row(job_id, 55, [])
+    row.posting.location_country = country
+    row.posting.location_text = location_text
+    return row
+
 def test_dual_channel_digest_includes_sections():
     top_row = _make_row("alpha", 110, [])
     data_row = _make_row("beta", 90, ["prefer_full_remote"])
@@ -438,6 +447,8 @@ def test_manual_zero_result_message_uses_requested_window(tmp_path, monkeypatch)
 
     config = deepcopy(DEFAULT_CONFIG)
     config["notifications"]["telegram"]["send_mode"] = "fake"
+    config.setdefault("runtime", {})
+    config["runtime"]["location_scope"] = "italy"
 
     notifications.maybe_notify(
         [],
@@ -637,6 +648,50 @@ def test_manual_mode_reports_no_candidates_after_hard_filters(tmp_path):
     assert "Contesto: digest=0" in payload["messages"][0]["text"]
 
 
+def test_zero_result_message_explains_out_of_scope_matches(
+    tmp_path, monkeypatch
+):
+    fixed_now = datetime(2024, 2, 9, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["notifications"]["telegram"]["send_mode"] = "fake"
+    config.setdefault("runtime", {})
+    config["runtime"]["location_scope"] = "italy"
+
+    germany_row = _make_accepted_out_of_scope_row(
+        "gamma",
+        "Germany",
+        "Berlin, Germany",
+    )
+    germany_row.posting.posted_at = fixed_now - timedelta(hours=1)
+    germany_row.match.penalties.append("location_not_allowed")
+    germany_row.match.score_penalties.append("location_not_allowed")
+
+    result = notifications.maybe_notify(
+        [germany_row],
+        output_dir,
+        config,
+        run_mode="manual",
+        force_send=True,
+        fetched_count=1,
+    )
+
+    payload = json.loads(
+        (output_dir / "telegram_payload.json").read_text(encoding="utf-8")
+    )
+
+    assert result.digest_count == 0
+    assert result.accepted_global_count == 1
+    assert result.accepted_in_scope_count == 0
+    assert result.accepted_out_of_scope_count == 1
+    assert "fuori dall'area scelta" in payload["messages"][0]["text"]
+    assert "fuori_area=1" in payload["messages"][0]["text"]
+
+
 def test_last_run_summary_uses_explicit_digest_counters(tmp_path, monkeypatch):
     fixed_now = datetime(2024, 2, 9, 8, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(notifications, "_now", lambda: fixed_now)
@@ -664,12 +719,18 @@ def test_last_run_summary_uses_explicit_digest_counters(tmp_path, monkeypatch):
     summary = last_run["summary"]
 
     assert result.window_rows_count == 1
+    assert result.accepted_global_count == 1
+    assert result.accepted_in_scope_count == 1
+    assert result.accepted_out_of_scope_count == 0
     assert result.selection_pool_count == 1
     assert result.selected_count == 1
     assert result.digest_top_matches_count == 1
     assert result.digest_data_only_count == 0
     assert result.digest_count == 1
     assert summary["window_rows_count"] == 1
+    assert summary["accepted_global_count"] == 1
+    assert summary["accepted_in_scope_count"] == 1
+    assert summary["accepted_out_of_scope_count"] == 0
     assert summary["selection_pool_count"] == 1
     assert summary["selected_count"] == 1
     assert summary["top_matches_count"] == 1

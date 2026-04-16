@@ -218,6 +218,16 @@ Note: this is planned for a follow-up PR (not part of PR1-FIX implementation).
 - Set `JOB_SCOUT_RUN_MODE=scheduled` only in the `Run scheduled mode` step; manual step now relies exclusively on workflow input `run_mode`.
 - Added default-on Telegram ping for time-gate skips (`Scheduled run skipped (time gate)`) and persisted outcome in `out/run_summary.json`.
 - Added scheduled post-run fallback ping for `reason=no_matches` when `telegram_attempted=false` to guarantee visible schedule observability.
+
+### Observability hardening — scoped acceptance counters (current)
+**Status:** ✅ Done
+
+- Added digest observability counters that separate:
+  - accepted jobs found globally
+  - accepted jobs still valid inside the selected runtime area
+  - accepted jobs excluded only because they were outside the selected runtime area
+- Updated zero-result Telegram wording so a manual search can explicitly say when profession-matching jobs were found, but none were in the chosen area (for example `Italia`).
+- Persisted the new scoped counters in both `last_run*.json` and `out/run_summary.json` for easier Telegram/live triage.
 - Kept artifact guarantees (`out/run_summary.json` and `out/` upload on `always()`) without introducing new secrets or secret logging.
 - Added/kept test coverage for Rome 08:00 time gate and scheduled no-matches Telegram attempt semantics.
 - Next step (P4): increase source volume to reduce `no_matches` days while preserving strict location/role/salary filters.

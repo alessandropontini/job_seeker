@@ -340,6 +340,8 @@ def test_cli_run_summary_includes_reason_when_zero(tmp_path, monkeypatch):
     assert exit_code == 0
     summary = json.loads((output_dir / "run_summary.json").read_text(encoding="utf-8"))
     assert summary["reason_when_zero"] == "no_candidates_after_hard_filters"
+    assert summary["accepted_in_scope_count"] == 0
+    assert summary["accepted_out_of_scope_count"] == 0
 
 
 def test_cli_sources_list_details(capsys):

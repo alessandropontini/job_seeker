@@ -447,11 +447,13 @@ def main(argv: List[str] | None = None) -> int:
             (notification.diagnostics or {}).get("timezone", "Europe/Rome"),
         )
         logger.info(
-            "Run summary: fetched_count=%s normalized_count=%s candidates_count=%s accepted_count=%s strict_matches_count=%s digest_count=%s notified_count=%s notification_mode=%s reason=%s source_counts=%s",
+            "Run summary: fetched_count=%s normalized_count=%s candidates_count=%s accepted_count=%s accepted_in_scope_count=%s accepted_out_of_scope_count=%s strict_matches_count=%s digest_count=%s notified_count=%s notification_mode=%s reason=%s source_counts=%s",
             summary.fetched_count,
             summary.normalized_count,
             summary.candidates_count,
             summary.accepted_count,
+            notification.accepted_in_scope_count,
+            notification.accepted_out_of_scope_count,
             summary.strict_matches_count,
             notification.digest_count,
             notification.notified_count,
@@ -483,6 +485,8 @@ def main(argv: List[str] | None = None) -> int:
             "candidates_count": summary.candidates_count,
             "accepted_count": summary.accepted_count,
             "accepted_missing_salary_count": summary.accepted_missing_salary_count,
+            "accepted_in_scope_count": notification.accepted_in_scope_count,
+            "accepted_out_of_scope_count": notification.accepted_out_of_scope_count,
             "strict_matches_count": summary.strict_matches_count,
             "rejected_count": summary.rejected_count,
             "matches_count": summary.matches_count,
