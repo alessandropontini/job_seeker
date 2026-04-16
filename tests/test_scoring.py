@@ -291,3 +291,25 @@ def test_multi_profession_query_adds_scoring_bonus_from_matching_role():
     assert any(
         bonus.startswith("profession_query:") for bonus in scored.score_bonuses
     )
+
+
+def test_cv_coverage_pct_is_low_for_generic_profession_match():
+    config = deepcopy(DEFAULT_CONFIG)
+    config["runtime"]["run_mode"] = "manual"
+    config["runtime"]["profession_query"] = "Project Manager"
+    posting = _posting(
+        title="Project Manager",
+        description_snippet="Lead cross-functional delivery across product and engineering teams.",
+    )
+    region_data = load_region_data("config/regions.json")
+    _, match = match_posting(
+        posting,
+        config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    scored = apply_scoring(posting, match, config)
+
+    assert scored.score is not None
+    assert scored.cv_coverage_pct < 30

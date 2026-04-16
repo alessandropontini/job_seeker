@@ -220,9 +220,17 @@ def maybe_notify(
         digest_scope = (
             "manual_since_days" if selection_window_days > 1 else "daily_window"
         )
+    daily_rows = _filter_rows_for_digest_scope(
+        daily_rows,
+        location_scope=location_scope,
+    )
     window_rows_count = len(daily_rows)
     if not daily_rows:
         fallback_rows = _select_fallback_rows(rows, minimum_score=min_score)
+        fallback_rows = _filter_rows_for_digest_scope(
+            fallback_rows,
+            location_scope=location_scope,
+        )
         if fallback_rows:
             logger.info(
                 "Daily window empty; using %d fallback rows for digest.",
@@ -248,6 +256,10 @@ def maybe_notify(
         for row in rows
         if _is_candidate_after_hard_filters(row)
     ]
+    hard_filtered_candidates = _filter_rows_for_digest_scope(
+        hard_filtered_candidates,
+        location_scope=location_scope,
+    )
     selection_pool = [
         row for row in daily_rows if _is_candidate_after_hard_filters(row)
     ]
@@ -944,7 +956,7 @@ def _format_row_block(
     label = f"[{marker}] " if marker else ""
     line = f"{index}. {label}{posting.title} — {posting.company}"
     details = (
-        f"   Remote: {remote_level} | Location: {location} | Score: {score}"
+        f"   Remote: {remote_level} | Location: {location} | Score: {score} | CV fit: {row.match.cv_coverage_pct}%"
     )
     if previous_score is not None:
         details += f" (was {previous_score})"
@@ -1478,6 +1490,22 @@ def _format_location_scope_line(location_scope: str) -> str:
         "world": "🌍 Mondo",
     }
     return f"🌐 Area: {labels.get(scope, 'profilo CV predefinito')}"
+
+
+def _filter_rows_for_digest_scope(
+    rows: Sequence[ReportRow],
+    *,
+    location_scope: str,
+) -> list[ReportRow]:
+    scope = str(location_scope or "").strip().lower()
+    if scope in {"", "world", "worldwide", "global"}:
+        return list(rows)
+    return [
+        row
+        for row in rows
+        if "location_not_allowed" not in row.match.penalties
+        and "location_not_allowed" not in row.match.hard_reject_reasons
+    ]
 
 
 def _build_feedback_job_map(

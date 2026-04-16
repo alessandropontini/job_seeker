@@ -43,6 +43,11 @@ def select_channels(
     exclude_top_matches = bool(
         data_config.get("exclude_top_matches", True)
     )
+    runtime_config = _as_dict(config.get("runtime"))
+    profession_query = str(runtime_config.get("profession_query") or "").strip()
+    location_scope = str(
+        runtime_config.get("location_scope") or ""
+    ).strip().lower()
 
     exclude_ids = exclude_ids or set()
 
@@ -50,9 +55,14 @@ def select_channels(
         row
         for row in rows
         if row.match.decision == "accepted"
-        and passes_core_gate(row.posting)
+        and (profession_query or passes_core_gate(row.posting))
         and (row.match.score or 0) >= min(top_min_score, data_min_score)
         and _snapshot_key(row) not in exclude_ids
+    ]
+    accepted_rows = [
+        row
+        for row in accepted_rows
+        if _allowed_in_digest_scope(row, location_scope)
     ]
 
     top_candidates = [
@@ -169,3 +179,13 @@ def _parse_int(value: object, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _allowed_in_digest_scope(row: ReportRow, location_scope: str) -> bool:
+    if location_scope in {"", "world", "worldwide", "global"}:
+        return True
+    if "location_not_allowed" in row.match.penalties:
+        return False
+    if "location_not_allowed" in row.match.hard_reject_reasons:
+        return False
+    return True

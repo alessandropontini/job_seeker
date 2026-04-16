@@ -322,6 +322,7 @@ def main(argv: List[str] | None = None) -> int:
         location_scope = (
             args.location_scope or os.getenv("JOB_SCOUT_LOCATION_SCOPE", "")
         ).strip().lower()
+        runtime_config["run_mode"] = run_mode
         runtime_config["profession_query"] = profession_query or None
         runtime_config["location_scope"] = location_scope or None
         config["runtime"] = runtime_config

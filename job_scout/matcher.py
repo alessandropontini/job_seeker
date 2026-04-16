@@ -73,6 +73,7 @@ class MatchResult:
     score_penalties: list[str] = field(default_factory=list)
     score_bonuses: list[str] = field(default_factory=list)
     why: list[str] = field(default_factory=list)
+    cv_coverage_pct: int = 0
     role_fit: str = "unknown"
     domain_fit: str = "unknown"
     location_fit: str = "unknown"
@@ -238,6 +239,7 @@ def evaluate_hard_constraints(
         title.lower() for title in role_rules.get("include_titles", [])
     ]
     profession_query = None
+    profession_query_matched = False
     if isinstance(runtime, Mapping):
         raw_profession_query = runtime.get("profession_query")
         if isinstance(raw_profession_query, str):
@@ -289,8 +291,12 @@ def evaluate_hard_constraints(
         hard_reject_reasons.append("negative_domain")
     if has_client_facing_architect_penalty(posting):
         hard_reject_reasons.append("client_facing_architect")
-    if profession_query and not matches_profession_query(posting, profession_query):
-        hard_reject_reasons.append("profession_not_targeted")
+    if profession_query:
+        profession_query_matched = matches_profession_query(
+            posting, profession_query
+        )
+        if not profession_query_matched:
+            hard_reject_reasons.append("profession_not_targeted")
 
     role_matches = find_role_keyword_matches(posting.title, include_titles)
     if not role_matches:
@@ -306,7 +312,12 @@ def evaluate_hard_constraints(
         else:
             hard_reject_reasons.append("cv_domain_not_targeted")
 
-    if run_mode == "manual" and not role_matches and not domain_matches:
+    if (
+        run_mode == "manual"
+        and not role_matches
+        and not domain_matches
+        and not profession_query_matched
+    ):
         hard_reject_reasons.append("cv_alignment_missing")
 
     salary_min_eur = None

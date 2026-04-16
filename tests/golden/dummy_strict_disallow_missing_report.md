@@ -23,6 +23,7 @@ No postings found.
   - Tags: health-tech
   - Penalties: prefer_full_remote
   - Score: 16
+  - CV fit: 8%
   - Why: fit role_targeted; fit domain_targeted; fit location_allowed_city
   - Score adjustments: +core_description: data platform, +seniority_title: manager; -prefer_full_remote
   - Link: https://example.com/jobs/atlas-health-eng-manager
@@ -36,6 +37,7 @@ No postings found.
   - Remote level: full-remote
   - Tags: analytics
   - Score: 30
+  - CV fit: 8%
   - Why: fit role_targeted; fit domain_targeted; fit location_allowed_eu_country
   - Score adjustments: +core_description: data platform, +seniority_title: lead, +remote_full
   - Link: https://example.com/jobs/polar-analytics-data-lead

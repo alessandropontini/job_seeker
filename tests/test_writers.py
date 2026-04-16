@@ -64,10 +64,12 @@ def test_write_reports_creates_files(tmp_path):
     assert "unit-2" in csv_content
     assert "penalties_applied" in csv_content.splitlines()[0]
     assert "why" in csv_content.splitlines()[0]
+    assert "cv_coverage_pct" in csv_content.splitlines()[0]
     assert "Product Lead" in md_content
     assert "Salary: Missing" in md_content
     assert "Penalties: missing_salary" in md_content
     assert "Score: 95" in md_content
+    assert "CV fit: 0%" in md_content
     assert "Why:" in md_content
     assert "## TOP_MATCHES" in md_content
     assert "## DATA_ONLY_BEST_PICKS" in md_content

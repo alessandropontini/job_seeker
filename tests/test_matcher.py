@@ -421,6 +421,29 @@ def test_profession_query_accepts_when_one_of_multiple_roles_matches(
     assert "profession_not_targeted" not in result.hard_reject_reasons
 
 
+def test_manual_profession_query_allows_generic_project_manager_role(
+    base_config, region_data
+):
+    base_config["runtime"]["run_mode"] = "manual"
+    base_config["runtime"]["profession_query"] = "Project Manager"
+    posting = _posting(
+        title="Project Manager",
+        location_text="Madrid, Spain",
+        location_country="Spain",
+        description_snippet="Lead cross-functional delivery across product and engineering teams.",
+    )
+    _, result = match_posting(
+        posting,
+        base_config,
+        region_data,
+        strict=False,
+        allow_missing_salary=True,
+    )
+    assert result.decision == "accepted"
+    assert "profession_not_targeted" not in result.hard_reject_reasons
+    assert "cv_alignment_missing" not in result.hard_reject_reasons
+
+
 def test_location_rules_allow_anywhere_when_scope_is_world(base_config, region_data):
     base_config["location_rules"]["include_regions"] = []
     base_config["location_rules"]["include_countries"] = []

@@ -36,6 +36,7 @@ CSV_FIELDS = [
     "salary_min_eur",
     "salary_max_eur",
     "score",
+    "cv_coverage_pct",
     "score_penalties",
     "score_bonuses",
     "why",
@@ -75,6 +76,7 @@ def _serialize_for_csv(row: ReportRow) -> dict:
     data["salary_min_eur"] = row.match.salary_min_eur
     data["salary_max_eur"] = row.match.salary_max_eur
     data["score"] = row.match.score
+    data["cv_coverage_pct"] = row.match.cv_coverage_pct
     data["score_penalties"] = ";".join(row.match.score_penalties)
     data["score_bonuses"] = ";".join(row.match.score_bonuses)
     data["why"] = " | ".join(row.match.why)
@@ -171,6 +173,7 @@ def _write_section(
             )
         if row.match.score is not None and row.match.decision == "accepted":
             handle.write(f"  - Score: {row.match.score}\n")
+            handle.write(f"  - CV fit: {row.match.cv_coverage_pct}%\n")
             if row.match.why:
                 handle.write(f"  - Why: {'; '.join(row.match.why)}\n")
             adjustments = []

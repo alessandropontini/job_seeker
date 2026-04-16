@@ -40,6 +40,7 @@ def _make_row(job_id: str, score: int, penalties: list[str]) -> ReportRow:
         score_penalties=penalties,
         score_bonuses=["full_remote"],
         why=["match core_title", "match platform", "penalty prefer_full_remote"],
+        cv_coverage_pct=72,
     )
     return ReportRow(posting=posting, match=match)
 
@@ -75,6 +76,7 @@ def _make_rejected_row(job_id: str, reason: str) -> ReportRow:
         score=None,
         score_penalties=[],
         score_bonuses=[],
+        cv_coverage_pct=0,
     )
     return ReportRow(posting=posting, match=match)
 
@@ -115,6 +117,18 @@ def test_digest_header_includes_profession_focus():
 
     assert "🎯 Focus: IT Solution Architect" in header
     assert "🌐 Area: 🇪🇺 Europa" in header
+
+
+def test_filter_rows_for_digest_scope_excludes_off_scope_rows():
+    kept = _make_row("alpha", 50, [])
+    dropped = _make_row("beta", 60, ["location_not_allowed"])
+
+    filtered = notifications._filter_rows_for_digest_scope(
+        [kept, dropped],
+        location_scope="italy",
+    )
+
+    assert [row.posting.id for row in filtered] == ["alpha"]
 
 
 def test_select_digest_items_adaptive_or_low_confidence():

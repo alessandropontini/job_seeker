@@ -41,6 +41,14 @@ def _row(title: str, description: str, score: int) -> ReportRow:
     return ReportRow(posting=posting, match=match)
 
 
+def _row_with_penalties(
+    title: str, description: str, score: int, penalties: list[str]
+) -> ReportRow:
+    row = _row(title, description, score)
+    row.match.penalties.extend(penalties)
+    return row
+
+
 def test_brand_manager_not_in_top_matches():
     selection = select_channels(
         [
@@ -69,3 +77,29 @@ def test_quantitative_team_lead_not_in_top_matches_without_core_keywords():
 
     assert selection.top_matches == []
     assert selection.data_only_best_picks == []
+
+
+def test_manual_location_scope_filters_out_off_scope_rows_from_digest():
+    config = {
+        **DEFAULT_CONFIG,
+        "runtime": {
+            "run_mode": "manual",
+            "profession_query": "Project Manager",
+            "location_scope": "italy",
+        },
+    }
+    selection = select_channels(
+        [
+            _row("Project Manager", "General delivery work", 80),
+            _row_with_penalties(
+                "Project Manager",
+                "General delivery work",
+                82,
+                ["location_not_allowed"],
+            ),
+        ],
+        config,
+    )
+
+    assert len(selection.top_matches) == 1
+    assert selection.top_matches[0].match.penalties == []

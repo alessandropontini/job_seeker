@@ -30,7 +30,7 @@ def apply_scoring(
 ) -> MatchResult:
     """Return a MatchResult with score metadata applied."""
 
-    score, score_penalties, score_bonuses, why = compute_score(
+    score, score_penalties, score_bonuses, why, cv_coverage_pct = compute_score(
         posting, match, config
     )
     return replace(
@@ -39,6 +39,7 @@ def apply_scoring(
         score_penalties=score_penalties,
         score_bonuses=score_bonuses,
         why=why,
+        cv_coverage_pct=cv_coverage_pct,
     )
 
 
@@ -46,11 +47,11 @@ def compute_score(
     posting: JobPosting,
     match: MatchResult,
     config: dict[str, object] | object = None,
-) -> tuple[int | None, list[str], list[str], list[str]]:
+) -> tuple[int | None, list[str], list[str], list[str], int]:
     """Compute deterministic score with wide recall and explainable penalties."""
 
     if match.decision != "accepted":
-        return None, [], [], []
+        return None, [], [], [], 0
 
     title_text = posting.title.lower()
     description_text = posting.description_snippet.lower()
@@ -162,7 +163,20 @@ def compute_score(
 
     final_score = min(max(score, 0), 100)
     why = _build_why(match, applied_bonuses, applied_penalties)
-    return final_score, applied_penalties, applied_bonuses, why
+    cv_coverage_pct = _compute_cv_coverage_pct(
+        title_core_matches=title_core_matches,
+        description_core_matches=description_core_matches,
+        supporting_matches=supporting_matches,
+        architecture_matches=architecture_matches,
+        platform_matches=platform_matches,
+    )
+    return (
+        final_score,
+        applied_penalties,
+        applied_bonuses,
+        why,
+        cv_coverage_pct,
+    )
 
 
 def _build_search_text(posting: JobPosting) -> str:
@@ -202,6 +216,25 @@ def _build_why(
     if penalties:
         reasons.append(f"penalty {penalties[0]}")
     return reasons[:3]
+
+
+def _compute_cv_coverage_pct(
+    *,
+    title_core_matches: list[str],
+    description_core_matches: list[str],
+    supporting_matches: list[str],
+    architecture_matches: list[str],
+    platform_matches: list[str],
+) -> int:
+    """Estimate overlap between a job and the user's CV domain/stack."""
+
+    coverage = 0
+    coverage += min(40, len(title_core_matches) * 20)
+    coverage += min(25, len(description_core_matches) * 8)
+    coverage += min(15, len(architecture_matches) * 6)
+    coverage += min(15, len(platform_matches) * 5)
+    coverage += min(5, len(supporting_matches) * 2)
+    return min(max(coverage, 0), 100)
 
 
 def _resolve_profession_query(config: dict[str, object] | object) -> str | None:
